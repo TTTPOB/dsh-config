@@ -10,11 +10,10 @@
 home="${DSH_HOME:-$HOME/.dsh}"
 mkdir -p "$home/plugins" "$home/prompts"
 cp plugins/prompt-sections.mjs "$home/plugins/prompt-sections.mjs"
-cp prompts/extra.md "$home/prompts/extra.md"
-cp prompts/identity.md "$home/prompts/identity.md"
+cp prompts/DONT_READ_THIS_IF_YOU_ARE_AGENT*.md "$home/prompts/"
 ```
 
-共用文本保存在仓库的 [extra.md](../prompts/extra.md) 和 [identity.md](../prompts/identity.md)，随 Git 同步；本机运行副本保存在 Harness home。修改仓库文本后，在目标机器重新复制并挂载 preset。为本机参数配置绝对路径：
+共用文本保存在仓库的 [额外文本](../prompts/DONT_READ_THIS_IF_YOU_ARE_AGENT.extra.md) 和 [身份文本](../prompts/DONT_READ_THIS_IF_YOU_ARE_AGENT.identity.md)，随 Git 同步；本机运行副本保存在 Harness home。修改仓库文本后，在目标机器重新复制并挂载 preset。为本机参数配置绝对路径：
 
 ```yaml
 features:
@@ -23,8 +22,8 @@ features:
   legacySessionQuery: false
 promptSections:
   modulePath: /path/to/harness-home/plugins/prompt-sections.mjs
-  promptFile: /path/to/harness-home/prompts/extra.md
-  identityFile: /path/to/harness-home/prompts/identity.md
+  promptFile: /path/to/harness-home/prompts/DONT_READ_THIS_IF_YOU_ARE_AGENT.extra.md
+  identityFile: /path/to/harness-home/prompts/DONT_READ_THIS_IF_YOU_ARE_AGENT.identity.md
 ```
 
 渲染模板会把这些路径写入额外提示词 preset。模块加载时读取并 trim 文本；缺失或空文本会让该模块加载失败。模块导出 Cordis 支持的 Standard Schema，检查路径、顺序与开关，无额外 schema 包依赖。

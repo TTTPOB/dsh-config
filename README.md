@@ -28,8 +28,8 @@ examples/
 plugins/
   prompt-sections.mjs         无包依赖的提示词注册模块
 prompts/
-  extra.md                   共用额外提示词
-  identity.md                共用身份文本
+  DONT_READ_THIS_IF_YOU_ARE_AGENT.extra.md       共用额外提示词
+  DONT_READ_THIS_IF_YOU_ARE_AGENT.identity.md    共用身份文本
 local/                        Git 忽略，各机器自行保存
   local/machine.yaml          当前本地参数
   server/machine.yaml         当前服务器参数
