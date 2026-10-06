@@ -1,5 +1,5 @@
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
-import { resolve, join, basename } from 'node:path';
+import { resolve, join, basename, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
@@ -29,6 +29,11 @@ export function validateMachine(machine) {
   assert.ok(['local', 'server'].includes(machine.role), 'Invalid machine role');
   for (const key of ['sessionTools', 'promptOverlay', 'legacySessionQuery']) {
     assert.equal(typeof machine.features?.[key], 'boolean', `Missing feature: ${key}`);
+  }
+  if (machine.features.promptOverlay) {
+    for (const field of ['modulePath', 'promptFile', 'identityFile']) {
+      assert.ok(typeof machine.promptSections?.[field] === 'string' && isAbsolute(machine.promptSections[field]), `Missing absolute prompt path: ${field}`);
+    }
   }
   assert.ok(machine.overrides && typeof machine.overrides === 'object', 'Missing overrides');
   for (const key of ['homePrivate', 'webPrivate']) {

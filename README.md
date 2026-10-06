@@ -25,6 +25,8 @@ templates/
 examples/
   local-machine.yaml          可公开的本机示例
   server-machine.yaml         可公开的服务器示例
+plugins/
+  prompt-sections.mjs         无包依赖的私有提示词注册模块
 local/                        Git 忽略，各机器自行保存
   local/machine.yaml          当前本地参数
   server/machine.yaml         当前服务器参数
@@ -37,9 +39,10 @@ scripts/                      渲染、检查和来源清单
 
 ## 本机差异怎么保留
 
-`machine.yaml` 有三部分：
+`machine.yaml` 包含：
 
-- `features`：是否加载 session-tools、prompt-overlay，以及服务器现有的旧 session-query 工具。
+- `features`：session-tools、额外提示词 preset 和旧 session-query 工具的开关；`promptOverlay` 控制额外提示词 preset。
+- `promptSections`：启用额外提示词时，本机模块入口与两份私有文本的绝对路径，见[提示词模块](plugins/README.md)。
 - `overrides.defaultModel`：本机默认模型；省略时跟随 `config/shared.yaml`。
 - `homePrivate` / `webPrivate`：本机专属的原生 YAML 行，包括 MCP、provider、relay 和认证引用。
 
@@ -92,7 +95,7 @@ node scripts/dsh-config.mjs plan server
 ```sh
 pnpm test
 # Inspect intended public changes, then stage them.
-git add README.md AGENTS.md package.json pnpm-lock.yaml .gitignore .github config templates examples scripts tests
+git add README.md AGENTS.md package.json pnpm-lock.yaml .gitignore .github config templates examples plugins scripts tests
 git diff --cached --check
 ```
 

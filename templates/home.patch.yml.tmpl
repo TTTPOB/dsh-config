@@ -206,10 +206,10 @@
             disabled: true
 [[ if .overlay ]]
           - id: prompt-overlay
-            name: 'dsh-prompt-overlay'
+            name: [[ .promptSections.modulePath | quote ]]
             config:
-              promptFile: prompt.md
-              identityFile: identity.md
+              promptFile: [[ .promptSections.promptFile | quote ]]
+              identityFile: [[ .promptSections.identityFile | quote ]]
               order: 100
               shadowHarnessIdentity: true
 [[ end ]]
@@ -221,6 +221,6 @@
       name: dsh-session-tools
 [[ end ]]
 [[ if .machine.features.promptOverlay ]]
-[[ template "preset" (dict "entryId" "preset-standard-ptc-redteam" "presetId" "standard-ptc-redteam" "name" "标准+PTC（逆向模式）" "description" "与「标准+PTC」完全一致，仅额外挂载 dsh-prompt-overlay（自定义提示词内核 + 覆盖 Harness 身份槽位）。" "order" 6 "legacy" false "overlay" true) ]]
+[[ template "preset" (dict "entryId" "preset-standard-ptc-redteam" "presetId" "standard-ptc-redteam" "name" "标准+PTC（逆向模式）" "description" "与「标准+PTC」完全一致，仅额外挂载 dsh-prompt-overlay（自定义提示词内核 + 覆盖 Harness 身份槽位）。" "order" 6 "legacy" false "overlay" true "promptSections" .machine.promptSections) ]]
 [[ end ]]
 [[ .machine.homePrivate ]]

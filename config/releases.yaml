@@ -84,12 +84,9 @@ pending:
   - package: dsh-progressive-tools
     asset: dsh-progressive-tools-0.3.0.tgz
     reason: No exact asset found in inspected Release repositories
-  - package: dsh-prompt-overlay
-    asset: null
-    reason: Local directory, Git reference, or third-party registry source needs an exact Release
   - package: dsh-session-tools
-    asset: dsh-session-tools-0.1.1.tgz
-    reason: No exact asset found in inspected Release repositories
+    asset: dsh-session-tools-0.1.2.tgz
+    reason: Exact Release asset needs confirmation
   - package: dsh-workspace-envrc
     asset: dsh-workspace-envrc-0.2.0.tgz
     reason: No exact asset found in inspected Release repositories

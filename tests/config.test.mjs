@@ -60,6 +60,27 @@ for (const role of ['local', 'server']) {
   });
 }
 
+test('enabled prompt preset renders file paths without a package dependency', () => {
+  const machine = readYaml(example);
+  machine.features.promptOverlay = true;
+  assert.throws(() => validateMachine(machine));
+  machine.promptSections = {
+    modulePath: join(root, 'plugins/prompt-sections.mjs'),
+    promptFile: join(root, 'generated/example-prompts/extra.md'),
+    identityFile: join(root, 'generated/example-prompts/identity.md'),
+  };
+  const path = join(root, 'generated/test-input/prompt-machine.yaml');
+  mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
+  writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
+  const { rendered } = renderMachine(path, 'test-prompt-preset');
+  const preset = validatePatch(rendered.home).find(row => row.entry.id === 'preset-standard-ptc-redteam').entry;
+  const overlay = preset.config.plugins.find(row => row.id === 'prompt-overlay');
+  assert.equal(overlay.name, machine.promptSections.modulePath);
+  assert.equal(overlay.config.promptFile, machine.promptSections.promptFile);
+  assert.equal(overlay.config.identityFile, machine.promptSections.identityFile);
+  assert.ok(!rendered.home.includes("name: 'dsh-prompt-overlay'"));
+});
+
 test('credential-shaped references remain literal through rendering', () => {
   const machine = readYaml(example);
   machine.homePrivate = '- id: literal-test\n  config:\n    value: !!js (() => { throw new Error("render must not evaluate") })()\n';
