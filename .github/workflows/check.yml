@@ -1,0 +1,24 @@
+name: Check configuration templates
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile --ignore-workspace
+      - name: Install pinned chezmoi for rendering tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p local/tools
+          gh release download v2.73.0 --repo twpayne/chezmoi --pattern chezmoi_2.73.0_linux_amd64.tar.gz --dir local/tools
+          tar -xzf local/tools/chezmoi_2.73.0_linux_amd64.tar.gz -C local/tools chezmoi
+      - run: pnpm test

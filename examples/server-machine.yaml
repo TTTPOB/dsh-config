@@ -1,0 +1,29 @@
+schemaVersion: 1
+role: server
+features:
+  sessionTools: false
+  promptOverlay: false
+  legacySessionQuery: false
+overrides:
+  defaultModel:
+    provider: klaude-openai
+    model: gpt-6-astra
+    reasoningEffort: medium
+homePrivate: |
+  - insert:
+      - id: mcp-playwright
+        name: "@deepseek-ai/dsh-mcp-client"
+        config:
+          serverName: playwright
+          transport: stdio
+          command: playwright-mcp
+          args: ["--browser", "chromium"]
+webPrivate: |
+  - insert:
+      - id: mcp-ppt
+        name: "@deepseek-ai/dsh-mcp-client"
+        config:
+          serverName: ppt
+          transport: streamable-http
+          url: https://ppt.example.invalid/mcp
+          failOnStartupError: false

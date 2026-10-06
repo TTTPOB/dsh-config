@@ -1,0 +1,6 @@
+schemaVersion: 1
+defaults:
+  model:
+    provider: klaude-openai
+    model: gpt-6.1-sol
+    reasoningEffort: medium

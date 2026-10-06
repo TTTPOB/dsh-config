@@ -1,0 +1,25 @@
+schemaVersion: 1
+role: local
+features:
+  sessionTools: false
+  promptOverlay: false
+  legacySessionQuery: false
+overrides: {}
+homePrivate: |
+  - insert:
+      - id: mcp-playwright
+        name: "@deepseek-ai/dsh-mcp-client"
+        config:
+          serverName: playwright
+          transport: stdio
+          command: playwright-mcp
+          args: ["--browser", "chromium"]
+webPrivate: |
+  - insert:
+      - id: mcp-ppt
+        name: "@deepseek-ai/dsh-mcp-client"
+        config:
+          serverName: ppt
+          transport: streamable-http
+          url: http://127.0.0.1:18765/mcp
+          failOnStartupError: false

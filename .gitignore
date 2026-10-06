@@ -1,0 +1,7 @@
+# Machine parameters, snapshots, authentication references, and local tools.
+/local/
+/generated/
+/node_modules/
+.env
+.env.*
+*.log
