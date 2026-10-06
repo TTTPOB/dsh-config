@@ -18,7 +18,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p local/tools
-          gh release download v2.73.0 --repo twpayne/chezmoi --pattern chezmoi_2.73.0_linux_amd64.tar.gz --dir local/tools
-          tar -xzf local/tools/chezmoi_2.73.0_linux_amd64.tar.gz -C local/tools chezmoi
+          mkdir -p private/tools
+          gh release download v2.73.0 --repo twpayne/chezmoi --pattern chezmoi_2.73.0_linux_amd64.tar.gz --dir private/tools
+          tar -xzf private/tools/chezmoi_2.73.0_linux_amd64.tar.gz -C private/tools chezmoi
       - run: pnpm test

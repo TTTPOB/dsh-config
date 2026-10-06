@@ -2,9 +2,39 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, parseYaml, readYaml, validateMachine, validatePatch, canonicalPatch, renderMachine, compareSnapshot, buildSourcePlan } from '../scripts/lib.mjs';
+import { root, parseYaml, readYaml, validateMachine, validatePatch, canonicalPatch, renderMachine, compareSnapshot, buildSourcePlan, parseCommandArguments, resolveMachineArgument } from '../scripts/lib.mjs';
 
-const example = join(root, 'examples/local-machine.yaml');
+const example = join(root, 'examples/workstation-machine.yaml');
+
+test('machine selector resolves private directories and preserves file path input', () => {
+  for (const machine of ['workstation', 'server', 'research-box_2']) {
+    assert.deepEqual(parseCommandArguments(['render', '--machine', machine]), { command: 'render', machineArgument: machine });
+    assert.deepEqual(resolveMachineArgument(machine), { path: join(root, 'private/machines', machine, 'machine.yaml'), label: machine });
+  }
+  assert.deepEqual(parseCommandArguments(['check', example]), { command: 'check', machineArgument: example });
+  assert.equal(resolveMachineArgument(example).path, example);
+  assert.throws(() => parseCommandArguments(['render', '--machine', '../other']));
+  assert.throws(() => parseCommandArguments(['render', '--machine', 'workstation', 'extra']));
+});
+
+test('complete captured patches replace templates and retain exact text', () => {
+  const machine = {
+    schemaVersion: 1,
+    literalPatches: {
+      home: '- id: captured-home\n  config:\n    value: !!js (() => { throw new Error("must not run") })()\n    text: "[[ literal ]] {{cwd}}"\n',
+      web: '- id: captured-web\n  disabled: true\n',
+    },
+  };
+  assert.equal(validateMachine(machine), machine);
+  const path = join(root, 'generated/test-input/captured-machine.yaml');
+  mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
+  writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
+  const { output, rendered } = renderMachine(path, 'test-captured');
+  assert.deepEqual(rendered, machine.literalPatches);
+  for (const name of ['home', 'web']) assert.equal(readFileSync(join(output, `${name}.patch.yml`), 'utf8'), machine.literalPatches[name]);
+  assert.throws(() => validateMachine({ schemaVersion: 1, literalPatches: { home: '[]' } }));
+  assert.throws(() => validateMachine({ schemaVersion: 1, literalPatches: { home: '- id: x\n- id: x\n', web: '[]' } }));
+});
 
 test('parses !!js as expression data without evaluating it', () => {
   const text = '- id: canary\n  config:\n    value: !!js (() => { throw new Error("must not run") })()\n';
@@ -24,10 +54,15 @@ test('rejects incomplete machine config', () => {
   assert.throws(() => validateMachine(machine));
 });
 
-test('rejects accidental template syntax in literal machine rows', () => {
+test('keeps template-like text in literal machine rows without evaluating it', () => {
   const machine = readYaml(example);
   machine.homePrivate = '- id: x\n  config:\n    value: "[[ secret ]]"\n';
-  assert.throws(() => validateMachine(machine));
+  assert.equal(validateMachine(machine), machine);
+  const path = join(root, 'generated/test-input/literal-delimiters.yaml');
+  mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
+  writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
+  const { rendered } = renderMachine(path, 'test-literal-delimiters');
+  assert.ok(rendered.home.includes('[[ secret ]]'));
 });
 
 test('rejects duplicate ids and expressions in metadata', () => {
@@ -42,7 +77,7 @@ test('canonicalization preserves expressions and nested plugin order', () => {
   assert.notDeepEqual(canonicalPatch(a), canonicalPatch(b.replace('[1, 2]', '[2, 1]')));
 });
 
-for (const role of ['local', 'server']) {
+for (const role of ['workstation', 'server']) {
   test(`chezmoi renders sanitized ${role} example and keeps DSH placeholders`, () => {
     const { rendered } = renderMachine(join(root, `examples/${role}-machine.yaml`), `test-example-${role}`);
     assert.ok(rendered.home.includes('{{cwd}}'));
@@ -51,12 +86,12 @@ for (const role of ['local', 'server']) {
     assert.ok(!rendered.home.includes('chezmoi:template:'));
     assert.ok(!rendered.web.includes('[['));
     const model = validatePatch(rendered.web).find(row => row.entry.id === 'agent-default-model').entry.config.model;
-    assert.equal(model, role === 'local' ? 'gpt-6.1-sol' : 'gpt-6-astra');
+    assert.equal(model, role === 'workstation' ? 'gpt-6.1-sol' : 'gpt-6-astra');
   });
-  const machinePath = join(root, `local/${role}/machine.yaml`);
+  const machinePath = join(root, `private/machines/${role}/machine.yaml`);
   test(`private ${role} baseline preserves all captured row contents`, { skip: !existsSync(machinePath) }, () => {
     const { rendered } = renderMachine(machinePath, `test-${role}`);
-    compareSnapshot(rendered, join(root, `local/${role}/snapshot`));
+    compareSnapshot(rendered, join(root, `private/machines/${role}/snapshot`));
   });
 }
 
@@ -92,18 +127,18 @@ test('credential-shaped references remain literal through rendering', () => {
 });
 
 test('release catalog contains exact asset URLs and no local references', () => {
-  const release = readYaml(join(root, 'config/releases.yaml'));
+  const release = readYaml(join(root, 'shared/dependencies.yaml'));
   for (const entry of release.packages) {
     assert.match(entry.url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/);
     assert.equal(new URL(entry.url).pathname.split('/').pop(), entry.asset);
     assert.match(entry.version, /^\d+\.\d+\.\d+/);
     assert.equal(entry.asset, `${entry.package.replace(/^@/, '').replace('/', '-')}-${entry.version}.tgz`);
   }
-  assert.ok(!readFileSync(join(root, 'config/releases.yaml'), 'utf8').includes('file:'));
+  assert.ok(!readFileSync(join(root, 'shared/dependencies.yaml'), 'utf8').includes('file:'));
 });
 
-test('source planning does not guess missing Release assets', { skip: !existsSync(join(root, 'local/local/snapshot/web.package.json')) }, () => {
-  const plan = buildSourcePlan(join(root, 'local/local/snapshot'));
+test('source planning does not guess missing Release assets', { skip: !existsSync(join(root, 'private/machines/workstation/snapshot/web.package.json')) }, () => {
+  const plan = buildSourcePlan(join(root, 'private/machines/workstation/snapshot'));
   assert.ok(plan.some(row => row.status === 'blocked-needs-exact-release'));
   assert.ok(plan.some(row => row.status === 'verified-release'));
   assert.ok(!JSON.stringify(plan).includes('/home/'));

@@ -1,13 +1,10 @@
 #!/usr/bin/env node
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { root, renderMachine, resolveMachineArgument, compareSnapshot, buildSourcePlan, validatePatch } from './lib.mjs';
+import { root, renderMachine, resolveMachineArgument, parseCommandArguments, compareSnapshot, buildSourcePlan, validatePatch } from './lib.mjs';
 
-const [command, machineArgument, extra] = process.argv.slice(2);
 try {
-  if (extra || !['render', 'check', 'plan'].includes(command) || !machineArgument) {
-    throw new Error('Usage: node scripts/dsh-config.mjs <render|check|plan> <local|server|machine.yaml>');
-  }
+  const { command, machineArgument } = parseCommandArguments(process.argv.slice(2));
   const { path, label } = resolveMachineArgument(machineArgument);
   const snapshotDir = join(dirname(path), 'snapshot');
   if (command === 'render') {

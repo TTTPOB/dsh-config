@@ -26,7 +26,13 @@ export function readYaml(path) {
 
 export function validateMachine(machine) {
   assert.equal(machine.schemaVersion, 1, 'Unsupported machine schema');
-  assert.ok(['local', 'server'].includes(machine.role), 'Invalid machine role');
+  if (machine.literalPatches !== undefined) {
+    for (const name of ['home', 'web']) {
+      assert.equal(typeof machine.literalPatches?.[name], 'string', `Missing literal patch: ${name}`);
+      validatePatch(machine.literalPatches[name]);
+    }
+    return machine;
+  }
   for (const key of ['sessionTools', 'promptOverlay', 'legacySessionQuery']) {
     assert.equal(typeof machine.features?.[key], 'boolean', `Missing feature: ${key}`);
   }
@@ -39,8 +45,6 @@ export function validateMachine(machine) {
   for (const key of ['homePrivate', 'webPrivate']) {
     assert.equal(typeof machine[key], 'string', `Missing literal YAML: ${key}`);
     assert.ok(Array.isArray(parseYaml(machine[key])), `Expected patch array: ${key}`);
-    // Literal private rows must not accidentally become template instructions.
-    assert.ok(!machine[key].includes('[['), `Template delimiters in private YAML: ${key}`);
   }
   return machine;
 }
@@ -90,16 +94,25 @@ export function canonicalPatch(text) {
 export function renderMachine(machinePath, label) {
   assert.match(label, /^[a-zA-Z0-9_-]+$/, 'Invalid output label');
   const machine = validateMachine(readYaml(machinePath));
-  const shared = readYaml(join(root, 'config/shared.yaml'));
+  const output = join(root, 'generated', label);
+  if (machine.literalPatches !== undefined) {
+    // Captured patches replace templates entirely; expressions remain literal text.
+    mkdirSync(output, { recursive: true, mode: 0o700 });
+    const rendered = { home: machine.literalPatches.home, web: machine.literalPatches.web };
+    for (const [name, text] of Object.entries(rendered)) {
+      writeFileSync(join(output, `${name}.patch.yml`), text, { mode: 0o600 });
+    }
+    return { output, rendered };
+  }
+  const shared = readYaml(join(root, 'shared/defaults.yaml'));
   const defaultModel = machine.overrides.defaultModel ?? shared.defaults.model;
   for (const key of ['provider', 'model', 'reasoningEffort']) {
     assert.equal(typeof defaultModel[key], 'string', `Missing model field: ${key}`);
   }
-  const output = join(root, 'generated', label);
   mkdirSync(output, { recursive: true, mode: 0o700 });
   const dataPath = join(output, 'chezmoi.json');
   writeFileSync(dataPath, JSON.stringify({ data: { shared, machine, effective: { defaultModel } } }), { mode: 0o600 });
-  const privateTools = join(root, 'local/tools/chezmoi');
+  const privateTools = join(root, 'private/tools/chezmoi');
   const binary = process.env.CHEZMOI_BIN || (existsSync(privateTools) ? privateTools : 'chezmoi');
   const rendered = {};
   // Validate every output before writing either patch.
@@ -107,8 +120,8 @@ export function renderMachine(machinePath, label) {
     const child = spawnSync(binary, [
       '--config', dataPath, '--config-format', 'json',
       '--source', join(root, 'templates'), '--destination', output,
-      '--cache', join(root, 'local/chezmoi-cache'),
-      '--persistent-state', join(root, 'local/chezmoi-state.boltdb'),
+      '--cache', join(root, 'private/chezmoi-cache'),
+      '--persistent-state', join(root, 'private/chezmoi-state.boltdb'),
       'execute-template', '--left-delimiter', '[[', '--right-delimiter', ']]',
       '--file', join(root, `templates/${name}.patch.yml.tmpl`),
     ], { encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024 });
@@ -117,7 +130,6 @@ export function renderMachine(machinePath, label) {
       throw new Error(`chezmoi failed for ${name}; check tool installation and template syntax`);
     }
     validatePatch(child.stdout);
-    assert.ok(!child.stdout.includes('[['), 'Unexpanded template delimiter');
     rendered[name] = child.stdout;
   }
   for (const [name, text] of Object.entries(rendered)) {
@@ -134,7 +146,7 @@ export function compareSnapshot(rendered, snapshotDir) {
 }
 
 export function buildSourcePlan(snapshotDir) {
-  const inventory = readYaml(join(root, 'config/releases.yaml')).packages;
+  const inventory = readYaml(join(root, 'shared/dependencies.yaml')).packages;
   const profile = JSON.parse(readFileSync(join(snapshotDir, 'web.package.json'), 'utf8'));
   const globals = readYaml(join(snapshotDir, 'global-workspace.yaml'));
   const entries = [
@@ -161,7 +173,22 @@ export function buildSourcePlan(snapshotDir) {
   });
 }
 
+export function parseCommandArguments(args) {
+  const [command, selector, machine, ...extra] = args;
+  const usage = 'Usage: node scripts/dsh-config.mjs <render|check|plan> --machine <name> (or a machine.yaml path)';
+  if (!['render', 'check', 'plan'].includes(command)) throw new Error(usage);
+  if (selector === '--machine') {
+    if (typeof machine !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(machine) || extra.length) throw new Error(usage);
+    return { command, machineArgument: machine };
+  }
+  if (!selector || selector.startsWith('-') || machine !== undefined) throw new Error(usage);
+  return { command, machineArgument: selector };
+}
+
 export function resolveMachineArgument(arg) {
-  if (arg === 'local' || arg === 'server') return { path: join(root, 'local', arg, 'machine.yaml'), label: arg };
+  const label = arg;
+  if (/^[a-zA-Z0-9_-]+$/.test(label)) {
+    return { path: join(root, 'private/machines', label, 'machine.yaml'), label };
+  }
   return { path: resolve(arg), label: basename(arg).replace(/\.yaml$/, '').replace(/[^a-zA-Z0-9_-]/g, '-') };
 }
