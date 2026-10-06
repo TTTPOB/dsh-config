@@ -1,18 +1,20 @@
-# 私有提示词模块
+# 本机提示词模块
 
-[prompt-sections.mjs](prompt-sections.mjs) 把私有文本注册到挂载它的 preset 作用域。模块只依赖 Node 内置文件 API 和 Host 的 `systemPrompt` 服务，无需安装 npm 包。
+[prompt-sections.mjs](prompt-sections.mjs) 把文本注册到挂载它的 preset 作用域。模块只依赖 Node 内置文件 API 和 Host 的 `systemPrompt` 服务，无需安装 npm 包。
 
 ## 文件与配置
 
-在目标机器上复制模块代码：
+在目标机器上复制模块与仓库中的提示词：
 
 ```sh
 home="${DSH_HOME:-$HOME/.dsh}"
 mkdir -p "$home/plugins" "$home/prompts"
 cp plugins/prompt-sections.mjs "$home/plugins/prompt-sections.mjs"
+cp prompts/extra.md "$home/prompts/extra.md"
+cp prompts/identity.md "$home/prompts/identity.md"
 ```
 
-两份文本由用户在本机私有目录维护，不进入 Git。为本机参数配置绝对路径：
+共用文本保存在仓库的 [extra.md](../prompts/extra.md) 和 [identity.md](../prompts/identity.md)，随 Git 同步；本机运行副本保存在 Harness home。修改仓库文本后，在目标机器重新复制并挂载 preset。为本机参数配置绝对路径：
 
 ```yaml
 features:
