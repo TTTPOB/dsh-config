@@ -52,6 +52,7 @@ scripts/                      渲染、检查和来源清单
 - `promptSections`：启用额外提示词时，本机模块入口与两份文本运行副本的绝对路径，见[提示词模块](plugins/README.md)。
 - `overrides.defaultModel`：本机默认模型；省略时跟随 `shared/defaults.yaml`。
 - `homePrivate` / `webPrivate`：本机专属的原生 YAML 行，包括 MCP、provider、relay 和认证引用。
+- 可选 `installation.globalWorkspace` / `installation.webPackage`：选定的 pnpm 全局 workspace 与 Web profile manifest，随配置生成 `global-workspace.yaml` 和 `web.package.json` 暂存文件。保留机器自己的资产路径与专属依赖；文件生成不执行安装或授予版本豁免。
 
 初始化时保留完整的专属插件行，便于保持现状。以后可逐项提炼成地址、路径等小参数；提炼后应通过基线检查。模型 provider 定义目前也保留在私有行中，尚未统一成共用模型清单。
 
@@ -88,7 +89,7 @@ chezmoi 使用 `[[ ... ]]`。DSH 的 `{{cwd}}`、`{{model}}` 留在输出中。`
 
 `shared/dependencies.yaml` 记录通过 GitHub Release API 核对的资产地址。受管 fork 和个人插件的正式交付使用精确 Release URL；官方 DSH 包与普通库可使用精确 registry 版本。
 
-查看当前安装来源的迁移清单：
+查看依赖来源清单；声明了 `installation` 时使用选定目标，否则盘点捕获快照：
 
 ```sh
 node scripts/dsh-config.mjs plan --machine workstation

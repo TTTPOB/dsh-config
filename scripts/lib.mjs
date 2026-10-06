@@ -99,25 +99,37 @@ export function renderMachine(machinePath, label) {
   const privateTools = join(root, 'private/tools/chezmoi');
   const binary = process.env.CHEZMOI_BIN || (existsSync(privateTools) ? privateTools : 'chezmoi');
   const rendered = {};
-  // Validate every output before writing either patch.
-  for (const name of ['home', 'web']) {
+  const outputs = [
+    { key: 'home', file: 'home.patch.yml', patch: true },
+    { key: 'web', file: 'web.patch.yml', patch: true },
+  ];
+  if (machine.installation) outputs.push(
+    { key: 'globalWorkspace', file: 'global-workspace.yaml', patch: false },
+    { key: 'webPackage', file: 'web.package.json', patch: false },
+  );
+  // Validate all staged files before writing them.
+  for (const { key, file, patch } of outputs) {
     const child = spawnSync(binary, [
       '--config', dataPath, '--config-format', 'json',
       '--source', join(root, 'templates'), '--destination', output,
       '--cache', join(root, 'private/chezmoi-cache'),
       '--persistent-state', join(root, 'private/chezmoi-state.boltdb'),
       'execute-template', '--left-delimiter', '[[', '--right-delimiter', ']]',
-      '--file', join(root, `templates/${name}.patch.yml.tmpl`),
+      '--file', join(root, `templates/${file}.tmpl`),
     ], { encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024 });
     if (child.error || child.status !== 0) {
       // Do not forward template data or subprocess stderr into logs.
-      throw new Error(`chezmoi failed for ${name}; check tool installation and template syntax`);
+      throw new Error(`chezmoi failed for ${file}; check tool installation and template syntax`);
     }
-    validatePatch(child.stdout);
-    rendered[name] = child.stdout;
+    if (patch) validatePatch(child.stdout);
+    else {
+      const value = parseYaml(child.stdout);
+      assert.ok(value && typeof value === 'object' && !Array.isArray(value), `Missing installation object: ${key}`);
+    }
+    rendered[key] = child.stdout;
   }
-  for (const [name, text] of Object.entries(rendered)) {
-    writeFileSync(join(output, `${name}.patch.yml`), text, { mode: 0o600 });
+  for (const { key, file } of outputs) {
+    writeFileSync(join(output, file), rendered[key], { mode: 0o600 });
   }
   return { output, rendered };
 }
@@ -129,10 +141,10 @@ export function compareSnapshot(rendered, snapshotDir) {
   }
 }
 
-export function buildSourcePlan(snapshotDir) {
+export function buildSourcePlan(snapshotDir, installation) {
   const inventory = readYaml(join(root, 'shared/dependencies.yaml')).packages;
-  const profile = JSON.parse(readFileSync(join(snapshotDir, 'web.package.json'), 'utf8'));
-  const globals = readYaml(join(snapshotDir, 'global-workspace.yaml'));
+  const profile = installation?.webPackage ?? JSON.parse(readFileSync(join(snapshotDir, 'web.package.json'), 'utf8'));
+  const globals = installation?.globalWorkspace ?? readYaml(join(snapshotDir, 'global-workspace.yaml'));
   const entries = [
     ...Object.entries(profile.dependencies ?? {}).map(([name, source]) => ({ scope: 'profile', name, source })),
     ...Object.entries(globals.overrides ?? {}).map(([name, source]) => ({ scope: 'global-override', name, source })),

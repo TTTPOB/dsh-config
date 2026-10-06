@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { root, renderMachine, resolveMachineArgument, parseCommandArguments, compareSnapshot, buildSourcePlan, validatePatch } from './lib.mjs';
+import { root, renderMachine, resolveMachineArgument, parseCommandArguments, compareSnapshot, buildSourcePlan, validatePatch, readYaml } from './lib.mjs';
 
 try {
   const { command, machineArgument } = parseCommandArguments(process.argv.slice(2));
@@ -22,7 +22,7 @@ try {
       console.log(`${label}: static YAML checks passed; no captured baseline available`);
     }
   } else {
-    const plan = buildSourcePlan(snapshotDir);
+    const plan = buildSourcePlan(snapshotDir, readYaml(path).installation);
     const blocked = plan.filter(row => row.status.startsWith('blocked') || row.status === 'unverified-release');
     // No private source paths or configuration values are printed.
     console.log(JSON.stringify({ machine: label, installEnabled: false, entries: plan, blocked: blocked.length }, null, 2));

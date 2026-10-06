@@ -109,6 +109,23 @@ test('credential-shaped references remain literal through rendering', () => {
   assert.match(rendered.home, /render must not evaluate/);
 });
 
+test('declared installation files render beside shared patches and drive source planning', () => {
+  const machine = readYaml(example);
+  machine.installation = {
+    globalWorkspace: { packages: ['.'], overrides: { '@deepseek-ai/dsh-example': '0.1.7-rc.2' } },
+    webPackage: { private: true, dependencies: { 'example-plugin': '1.0.0' } },
+  };
+  const path = join(root, 'generated/test-input/installation-machine.yaml');
+  mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
+  writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
+  const { output, rendered } = renderMachine(path, 'test-installation');
+  assert.deepEqual(readYaml(join(output, 'global-workspace.yaml')), machine.installation.globalWorkspace);
+  assert.deepEqual(JSON.parse(readFileSync(join(output, 'web.package.json'), 'utf8')), machine.installation.webPackage);
+  assert.ok(validatePatch(rendered.home).some(row => row.entry.id === 'preset-standard-ptc'));
+  const plan = buildSourcePlan('unused-snapshot-directory', machine.installation);
+  assert.deepEqual(plan.map(row => row.name), ['example-plugin', '@deepseek-ai/dsh-example']);
+});
+
 test('release catalog contains exact asset URLs and no local references', () => {
   const release = readYaml(join(root, 'shared/dependencies.yaml'));
   for (const entry of release.packages) {
