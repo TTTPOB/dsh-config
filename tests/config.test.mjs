@@ -17,25 +17,6 @@ test('machine selector resolves private directories and preserves file path inpu
   assert.throws(() => parseCommandArguments(['render', '--machine', 'workstation', 'extra']));
 });
 
-test('complete captured patches replace templates and retain exact text', () => {
-  const machine = {
-    schemaVersion: 1,
-    literalPatches: {
-      home: '- id: captured-home\n  config:\n    value: !!js (() => { throw new Error("must not run") })()\n    text: "[[ literal ]] {{cwd}}"\n',
-      web: '- id: captured-web\n  disabled: true\n',
-    },
-  };
-  assert.equal(validateMachine(machine), machine);
-  const path = join(root, 'generated/test-input/captured-machine.yaml');
-  mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
-  writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
-  const { output, rendered } = renderMachine(path, 'test-captured');
-  assert.deepEqual(rendered, machine.literalPatches);
-  for (const name of ['home', 'web']) assert.equal(readFileSync(join(output, `${name}.patch.yml`), 'utf8'), machine.literalPatches[name]);
-  assert.throws(() => validateMachine({ schemaVersion: 1, literalPatches: { home: '[]' } }));
-  assert.throws(() => validateMachine({ schemaVersion: 1, literalPatches: { home: '- id: x\n- id: x\n', web: '[]' } }));
-});
-
 test('parses !!js as expression data without evaluating it', () => {
   const text = '- id: canary\n  config:\n    value: !!js (() => { throw new Error("must not run") })()\n';
   const value = parseYaml(text)[0].config.value;
@@ -113,6 +94,8 @@ test('enabled prompt preset renders file paths without a package dependency', ()
   assert.equal(overlay.name, machine.promptSections.modulePath);
   assert.equal(overlay.config.promptFile, machine.promptSections.promptFile);
   assert.equal(overlay.config.identityFile, machine.promptSections.identityFile);
+  const standard = validatePatch(rendered.home).find(row => row.entry.id === 'preset-standard-ptc').entry;
+  assert.deepEqual(preset.config.plugins.filter(row => row.id !== 'prompt-overlay'), standard.config.plugins);
   assert.ok(!rendered.home.includes("name: 'dsh-prompt-overlay'"));
 });
 

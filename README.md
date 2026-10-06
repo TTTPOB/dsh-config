@@ -46,7 +46,7 @@ scripts/                      渲染、检查和来源清单
 
 `--machine NAME` 选择 `private/machines/NAME/machine.yaml`；名称支持字母、数字、下划线和连字符。`workstation`、`server` 是示例标签，不会连接远程机器。也可以直接传入参数文件路径。
 
-模板模式的 `machine.yaml` 包含：
+`machine.yaml` 包含：
 
 - `features`：session-tools、额外提示词 preset 和旧 session-query 工具的开关；`promptOverlay` 控制额外提示词 preset。
 - `promptSections`：启用额外提示词时，本机模块入口与两份文本运行副本的绝对路径，见[提示词模块](plugins/README.md)。
@@ -76,22 +76,7 @@ pnpm check --machine server
 
 检查会比较捕获快照与生成结果的插件行内容，包含表达式源码及嵌套插件顺序；忽略顶层行顺序和 insert 分组。该检查是静态配置检查，Host 加载与运行行为需在部署时另行验收。
 
-## 完整配置捕获
-
-已有配置可保存在机器私有参数的 `literalPatches` 中：
-
-```yaml
-schemaVersion: 1
-literalPatches:
-  home: |
-    - id: example-home
-      disabled: true
-  web: |
-    - id: example-web
-      disabled: true
-```
-
-此模式直接生成两份完整 patch，保留原始文本和 `!!js`，不叠加共用模板，也不要求模板模式的字段。它用于准确捕获现用配置；共用内容提炼另行进行。`snapshot/` 保存用于比对的 `home.patch.yml`、`web.patch.yml`，来源盘点读取 `web.package.json` 和 `global-workspace.yaml`。其他原始依赖与 profile 文件可保留在该私有目录，不参与模板渲染。
+标准＋PTC 与逆向模式由同一份 preset 模板生成，逆向模式仅追加提示词插件；机器参数提供模块与文本文件的路径。已有日用配置的机器专属行保存在 `homePrivate` / `webPrivate`，共用行由模板生成。`snapshot/` 可保留首次迁移的比对基线和原始依赖文件。
 
 ## 模板与凭据
 

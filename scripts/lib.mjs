@@ -26,13 +26,6 @@ export function readYaml(path) {
 
 export function validateMachine(machine) {
   assert.equal(machine.schemaVersion, 1, 'Unsupported machine schema');
-  if (machine.literalPatches !== undefined) {
-    for (const name of ['home', 'web']) {
-      assert.equal(typeof machine.literalPatches?.[name], 'string', `Missing literal patch: ${name}`);
-      validatePatch(machine.literalPatches[name]);
-    }
-    return machine;
-  }
   for (const key of ['sessionTools', 'promptOverlay', 'legacySessionQuery']) {
     assert.equal(typeof machine.features?.[key], 'boolean', `Missing feature: ${key}`);
   }
@@ -95,15 +88,6 @@ export function renderMachine(machinePath, label) {
   assert.match(label, /^[a-zA-Z0-9_-]+$/, 'Invalid output label');
   const machine = validateMachine(readYaml(machinePath));
   const output = join(root, 'generated', label);
-  if (machine.literalPatches !== undefined) {
-    // Captured patches replace templates entirely; expressions remain literal text.
-    mkdirSync(output, { recursive: true, mode: 0o700 });
-    const rendered = { home: machine.literalPatches.home, web: machine.literalPatches.web };
-    for (const [name, text] of Object.entries(rendered)) {
-      writeFileSync(join(output, `${name}.patch.yml`), text, { mode: 0o600 });
-    }
-    return { output, rendered };
-  }
   const shared = readYaml(join(root, 'shared/defaults.yaml'));
   const defaultModel = machine.overrides.defaultModel ?? shared.defaults.model;
   for (const key of ['provider', 'model', 'reasoningEffort']) {
