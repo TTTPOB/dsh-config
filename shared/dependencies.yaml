@@ -52,6 +52,7 @@ packages:
     url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.5-rc.2-fork2/earendil-works-pi-ai-0.85.1-fork1.tgz
   - package: dsh-web-mobile
     scope: profile
+    profiles: [web]
     policy: release
     version: 3.1.0
     url: https://github.com/TTTPOB/dsh-mobile-workbench/releases/download/v3.1.0/dsh-web-mobile-3.1.0.tgz

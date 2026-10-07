@@ -46,7 +46,7 @@ deployment:
 
 `hostManifest` 提供当前安装 Host 的初始锚点，不指向源码工作树。全局更新后通过 pnpm 公开安装清单重新定位当前 Host，避免继续检查旧安装代际。需要全局安装时必须声明 `globalBinDir`；`globalDir` 可省略，按 workspace 目录的父目录推导。`pnpm root -g` 返回的版本化全局项目目录与 pnpm `global-dir` 基目录不同。全局 overrides 写入版本化项目的 workspace；包安装和 lockfile 由 pnpm 正规管理。使用用户级全局 store/default cache，关闭自动安装 peers 和 global virtual store，不手工修补 lockfile 或 node_modules。
 
-消费全局插件的其他 profile 必须先有完整的共用依赖布局，再显式纳入部署和验收；不能只让 Web 偶然可用。
+消费全局插件的其他 profile 必须先有完整的共用依赖布局，再显式纳入 `deployment.profiles` 和验收；其已声明的共用受管依赖使用同一选定版本。可用 `installation.profiles.<name>` 保存额外 profile 的安装输入；依赖清单中的 `profiles` 可限制真正 profile 特化的包，例如 mobile 仅用于 Web。不会因共用清单存在某个专属包就自动给其他机器或 profile 安装它。
 
 ## 3. 只读预览和诊断
 
