@@ -1,7 +1,7 @@
 schemaVersion: 2
 # Exact combinations validated by the existing built-package behavior checks.
 verifiedCompatibility:
-  'dsh-session-tools@0.1.3': ['0.1.7-rc.2']
+  'dsh-session-tools@0.1.4': ['0.1.7-rc.2']
   'dsh-workspace-overlay@0.2.0': ['0.1.7-rc.2']
   'dsh-workspace-envrc@0.2.0': ['0.1.7-rc.2']
   '@deepseek-ai/dsh-session-query-sqlite@0.1.7-rc.2-fork5': ['0.1.7-rc.2']
@@ -79,8 +79,8 @@ packages:
   - package: dsh-session-tools
     scope: profile
     policy: release
-    version: 0.1.3
-    url: https://github.com/TTTPOB/dsh-session-tools/releases/download/v0.1.3/dsh-session-tools-0.1.3.tgz
+    version: 0.1.4
+    url: https://github.com/TTTPOB/dsh-session-tools/releases/download/v0.1.4/dsh-session-tools-0.1.4.tgz
   - package: dsh-workspace-envrc
     scope: profile
     patchOnly: true
