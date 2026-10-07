@@ -2,6 +2,16 @@
 
 先在源码工作树验证改动，再检查打包成品，最后按[正式更新](install.md)安排日用切换。本地 tarball 只进入隔离副本；正式依赖目标保留 Release URL。
 
+## 配置路径的聚焦回归
+
+仅验证配置默认、覆盖、变量错误、离线预览与 apply 幂等时，运行：
+
+```sh
+node --test tests/deployment-paths.test.mjs tests/deployment.test.mjs tests/config.test.mjs
+```
+
+这些测试使用临时 fixture 和模拟安装步骤；不执行全局安装 suite。chezmoi 不在 PATH 时设置 `CHEZMOI_BIN`。两机私有快照可用 render/check 单独比对；输出保留在私有生成目录，不打印配置内容。
+
 ## 1. 聚焦源码验证与打包
 
 在独立功能分支和持久 worktree 中开发。固定目标 DSH 基线、Node/pnpm 版本及外部 fork 资产，保持 manifest、workspace overrides/patches 和 pnpm 生成的 lockfile 一致。已有 DSH [源码准备入口](../../deepseek-harness/scripts/daily-driver-source.mjs)可复用：

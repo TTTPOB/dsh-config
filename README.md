@@ -43,6 +43,8 @@ node scripts/dsh-config.mjs update --machine workstation
 
 可选 `installation.globalWorkspace`／`installation.webPackage` 提供安装输入；共用清单覆盖受管项，保留无关 overrides 和机器专属依赖。受管 fork／个人插件选择精确 Release URL，明确允许的官方包、普通库与第三方插件保留精确 registry pin。缺精确资产会阻塞正式更新，不自动换版本或回退本地来源。
 
+`deployment` 可省略；doctor、`update --live` 和 apply 使用执行机器的 DSH_HOME／用户主目录及 pnpm 公共信息推导部署路径，显式路径支持 `~/` 和已定义环境变量。默认 update 预览、render/check 只消费机器 installation 参数或快照，不引入执行机器的安装输入。具体默认和覆盖方式见[部署位置](docs/install.md#2-声明本机部署位置)。
+
 `check` 比较首次迁移快照中的插件内容，保留表达式源码和嵌套插件顺序，忽略顶层行顺序与 insert 分组。这是静态等价检查；Host 加载与功能由成品 smoke 和实际维护验收确认。
 
 ## 表达式与凭据

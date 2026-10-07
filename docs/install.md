@@ -28,22 +28,30 @@ pnpm check --machine workstation
 
 ## 2. 声明本机部署位置
 
-在私有机器参数里添加 `deployment`。以下路径为占位符，须换成目标机器已确认的绝对路径：
+`deployment` 可以完全省略。Doctor、`update --live` 和 `update --apply` 在执行命令的机器上解析默认位置：
+
+| 字段 | 默认值 |
+|---|---|
+| `home` | `DSH_HOME`，未定义时为 OS 用户主目录下的 `.dsh` |
+| `globalWorkspacePath` | `pnpm root -g` 返回目录下的 `pnpm-workspace.yaml` |
+| `globalBinDir` | `pnpm bin -g` |
+| `globalDir` | pnpm 公共 `global-dir` 配置，未设置时由全局 root 推导 |
+| `hostManifest` | `pnpm list -g --depth 0 --json` 中当前 `@deepseek-ai/dsh` 的 manifest |
+| `homePatchPath` | home 下的 `cordis.patch.yml` |
+| `profiles.web` | home 下 `profiles/web/package.json` 与 `cordis.patch.yml` |
+
+需要覆盖时只填写不同的字段，例如：
 
 ```yaml
 deployment:
-  home: /absolute/DSH_HOME
-  hostManifest: /absolute/installed-host/package.json
-  globalWorkspacePath: /absolute/pnpm-global/v11/pnpm-workspace.yaml
-  globalDir: /absolute/pnpm-global
-  globalBinDir: /absolute/pnpm-bin
+  home: '$HOME/custom-dsh'
   profiles:
-    web:
-      packagePath: /absolute/DSH_HOME/profiles/web/package.json
-      patchPath: /absolute/DSH_HOME/profiles/web/cordis.patch.yml
+    headless: {}
 ```
 
-`hostManifest` 提供当前安装 Host 的初始锚点，不指向源码工作树。全局更新后通过 pnpm 公开安装清单重新定位当前 Host，避免继续检查旧安装代际。需要全局安装时必须声明 `globalBinDir`；`globalDir` 可省略，按 workspace 目录的父目录推导。`pnpm root -g` 返回的版本化全局项目目录与 pnpm `global-dir` 基目录不同。全局 overrides 写入版本化项目的 workspace；包安装和 lockfile 由 pnpm 正规管理。使用用户级全局 store/default cache，关闭自动安装 peers 和 global virtual store，不手工修补 lockfile 或 node_modules。
+所有部署路径支持 `~/`、`$HOME`、`${HOME}`、`$DSH_HOME` 及其他已定义环境变量；未定义变量按字段和变量名报错。展开仅替换路径文本，不使用 shell/eval，不递归展开变量值。显式其他 profile 按 home 推导位置，不自动扫描 profile。无需填写 pnpm 哈希 slot。显式 workspace 的 globalDir 从该 workspace 推导，或单独覆盖，避免借用另一套本机配置。
+
+全局更新后通过 pnpm 公开安装清单重新定位当前 Host，避免继续检查旧安装代际。`pnpm root -g` 的版本化全局项目目录与 `global-dir` 基目录不同。使用用户级全局 store/default cache，关闭自动安装 peers 和 global virtual store，包安装和 lockfile 由 pnpm 正规管理。
 
 消费全局插件的其他 profile 必须先有完整的共用依赖布局，再显式纳入 `deployment.profiles` 和验收；其已声明的共用受管依赖使用同一选定版本。可用 `installation.profiles.<name>` 保存额外 profile 的安装输入；依赖清单中的 `profiles` 可限制真正 profile 特化的包，例如 mobile 仅用于 Web。不会因共用清单存在某个专属包就自动给其他机器或 profile 安装它。
 
@@ -51,8 +59,11 @@ deployment:
 
 ```sh
 node scripts/dsh-config.mjs update --machine workstation
+node scripts/dsh-config.mjs update --machine workstation --live
 node scripts/dsh-config.mjs doctor --machine workstation
 ```
+
+默认 update 预览使用机器 installation 参数或迁移快照，报告 `input: offline`；与 render/check 一样，不发现本机部署位置、不读取本机安装。可在工作机离线预览 server 参数。`--live` 预览使用执行机器的路径默认／覆盖和实际 manifest，报告 `input: live`；apply 始终使用 live 输入。两个预览均只读且不运行 doctor 或安装器。部署目标尚未准备时，live 诊断会指出缺失字段／profile，离线预览仍可使用。
 
 预览展示受管目标与阻塞。Doctor 使用安装 Host 的正式 profile resolver 和兼容检查，核对实际版本、来源与原始拒绝原因，不启动 Host、不授予豁免、不修改配置。Doctor 通过不表示运行中的旧 Host 已换版；目标来源缺资产仍须先解决。
 

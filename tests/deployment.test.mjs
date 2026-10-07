@@ -125,6 +125,28 @@ test('apply backs up manifests and lockfiles; a second aligned apply does no ins
   assert.equal(readYaml(machine.deployment.profiles.web.packagePath).dependencies['live-profile-plugin'], '4.0.0');
 });
 
+test('apply with omitted deployment discovers fixture targets and remains idempotent', async () => {
+  const { machine, machinePath, home, directory } = fixture();
+  const paths = machine.deployment;
+  delete machine.deployment;
+  writeJson(machinePath, machine);
+  let calls = 0;
+  const dependencies = { catalog, doctor: healthy, runStep: () => calls++, discovery: {
+    env: { DSH_HOME: home }, userHome: directory, query: args => {
+      if (args[0] === 'root') return join(directory, 'installation');
+      if (args[0] === 'bin') return paths.globalBinDir;
+      if (args[0] === 'config') return join(directory, 'installation');
+      return JSON.stringify([{ dependencies: { '@deepseek-ai/dsh': { path: join(directory, 'installation') } } }]);
+    },
+  } };
+  const label = basename(directory) + '-defaults';
+  await updateMachine(machinePath, label, true, dependencies);
+  const result = await updateMachine(machinePath, label, true, dependencies);
+  assert.equal(result.input, 'live');
+  assert.equal(result.noOp, true);
+  assert.equal(calls, 2);
+});
+
 test('matching manifests do not conceal missing actual packages', async () => {
   const { machinePath } = fixture();
   let installs = 0;
@@ -178,6 +200,34 @@ test('isolated entry copies local tarballs and passes exact argv to an existing 
   assert.equal(read(machinePath), before);
 });
 
+test('offline update ignores deployment paths and never invokes local discovery', async () => {
+  const { machine, machinePath } = fixture();
+  machine.deployment = { home: '$UNDEFINED_OFFLINE_VAR', globalWorkspacePath: '/missing/local/workspace' };
+  writeJson(machinePath, machine);
+  const result = await updateMachine(machinePath, 'test-offline-preview', false, {
+    catalog, discovery: { query: () => assert.fail('offline queried pnpm') },
+  });
+  assert.equal(result.input, 'offline');
+  assert.ok(!result.entries.some(row => row.name === 'live-unrelated'));
+  assert.ok(result.entries.some(row => row.name === 'declared-unrelated'));
+});
+
+test('explicit live preview reads targets but never invokes doctor or installation', async () => {
+  const { machinePath } = fixture();
+  const result = await updateMachine(machinePath, 'test-live-preview', false, {
+    catalog, live: true, doctor: () => assert.fail('live preview inspected'), runStep: () => assert.fail('live preview installed'),
+  });
+  assert.equal(result.input, 'live');
+  assert.ok(result.entries.some(row => row.name === 'live-unrelated'));
+});
+
+test('live preview reports a missing local target with field context', async () => {
+  const { machine, machinePath } = fixture();
+  machine.deployment.globalWorkspacePath = '/missing/deployment-target/pnpm-workspace.yaml';
+  writeJson(machinePath, machine);
+  await assert.rejects(updateMachine(machinePath, 'test-missing-target', false, { catalog, live: true }), /Missing local deployment.globalWorkspacePath target/);
+});
+
 test('CLI rejects plan without a compatibility alias', () => {
   assert.throws(() => parseCommandArguments(['plan', '--machine', 'server']), /Usage: dsh-config <render\|check\|doctor\|test\|update>/);
 });
@@ -185,6 +235,8 @@ test('CLI rejects plan without a compatibility alias', () => {
 test('CLI accepts apply only for update and local tarballs only for test', () => {
   assert.deepEqual(parseCommandArguments(['update', '--machine', 'server', '--apply']), { command: 'update', machineArgument: 'server', apply: true });
   assert.deepEqual(parseCommandArguments(['test', '--machine', 'server', '--tarball', 'plugin=/example/plugin.tgz']), { command: 'test', machineArgument: 'server', tarballs: ['plugin=/example/plugin.tgz'] });
+  assert.deepEqual(parseCommandArguments(['update', '--machine', 'server', '--live']), { command: 'update', machineArgument: 'server', live: true });
+  assert.throws(() => parseCommandArguments(['render', '--machine', 'server', '--live']));
   assert.throws(() => parseCommandArguments(['doctor', '--machine', 'server', '--apply']));
   assert.throws(() => parseCommandArguments(['update', '--machine', 'server', '--tarball', 'plugin=/example/plugin.tgz']));
 });

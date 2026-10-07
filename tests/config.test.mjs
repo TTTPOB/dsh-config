@@ -76,6 +76,16 @@ for (const role of ['workstation', 'server']) {
   });
 }
 
+test('offline render ignores unresolved deployment overrides', () => {
+  const machine = readYaml(example);
+  machine.deployment = { home: '$OFFLINE_UNDEFINED_ENV', globalWorkspacePath: '/missing/local/path' };
+  const path = join(root, 'generated/test-input/offline-deployment.yaml');
+  mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
+  writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
+  const { rendered } = renderMachine(path, 'test-offline-deployment');
+  assert.ok(rendered.home.includes('{{cwd}}'));
+});
+
 test('enabled prompt preset renders file paths without a package dependency', () => {
   const machine = readYaml(example);
   machine.features.promptOverlay = true;

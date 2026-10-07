@@ -8,6 +8,9 @@ import { isDeepStrictEqual } from 'node:util';
 import YAML from 'yaml';
 import { root, readYaml, parseYaml, readDependencyCatalog, resolveDependencyTargets, renderMachine, validatePatch } from './lib.mjs';
 
+import { normalizeDeployment } from './deployment-paths.mjs';
+export { normalizeDeployment } from './deployment-paths.mjs';
+
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
 
 export function resolveInstalledHost(deployment) {
@@ -53,12 +56,14 @@ export function deploymentTargets(machine, snapshotDir, catalog) {
   const deployment = machine.deployment;
   if (deployment?.globalWorkspacePath) {
     validateDeployment(deployment);
+    if (!existsSync(deployment.globalWorkspacePath)) throw new Error('Missing local deployment.globalWorkspacePath target; check pnpm global installation or provide an explicit override');
     const liveGlobal = readYaml(deployment.globalWorkspacePath);
     installation.globalWorkspace = { ...installation.globalWorkspace, ...liveGlobal,
       overrides: { ...installation.globalWorkspace?.overrides, ...liveGlobal.overrides } };
     installation.profiles ??= {};
     for (const [name, profile] of Object.entries(deployment.profiles)) {
       const declared = name === 'web' ? installation.webPackage : installation.profiles[name];
+      if (!existsSync(profile.packagePath)) throw new Error(`Missing local deployment.profiles.${name}.packagePath target; prepare this profile or provide an explicit override`);
       const live = json(profile.packagePath);
       const merged = { ...declared, ...live, dependencies: { ...declared?.dependencies, ...live.dependencies } };
       if (name === 'web') installation.webPackage = merged;
@@ -70,7 +75,7 @@ export function deploymentTargets(machine, snapshotDir, catalog) {
 
 // Only the installed Host's public resolution and compatibility policy are used.
 export async function doctor(machine, targets) {
-  const deployment = validateDeployment(machine.deployment);
+  const deployment = validateDeployment(normalizeDeployment(machine.deployment));
   const hostManifest = resolveInstalledHost(deployment);
   const require = createRequire(hostManifest);
   const boot = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-app-boot')).href);
@@ -132,9 +137,13 @@ export function runStep(argv, cwd, env = process.env) {
 
 export async function updateMachine(machinePath, label, apply = false, dependencies = {}) {
   const machine = readYaml(machinePath);
-  const targets = deploymentTargets(machine, join(dirname(machinePath), 'snapshot'), dependencies.catalog);
+  const live = apply || dependencies.live === true;
+  if (live) machine.deployment = normalizeDeployment(machine.deployment, dependencies.discovery);
+  const targets = live
+    ? deploymentTargets(machine, join(dirname(machinePath), 'snapshot'), dependencies.catalog)
+    : resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, dependencies.catalog);
   const blocked = targets.entries.filter(row => row.status.startsWith('blocked'));
-  const preview = { entries: targets.entries, blocked: blocked.length, apply: false, hostLifecycle: 'external-maintenance-window' };
+  const preview = { input: live ? 'live' : 'offline', entries: targets.entries, blocked: blocked.length, apply: false, hostLifecycle: 'external-maintenance-window' };
   if (!apply) return preview;
   if (blocked.length) throw new Error(`Apply blocked: ${blocked.length} exact Release assets are missing; no files changed.`);
   const deployment = validateDeployment(machine.deployment);

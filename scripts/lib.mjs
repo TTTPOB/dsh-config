@@ -210,7 +210,7 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
 export function parseCommandArguments(args) {
   args = [...args];
   const command = args.shift();
-  const usage = 'Usage: dsh-config <render|check|doctor|test|update> --machine <name> [--apply] [--tarball package=/absolute/file.tgz]';
+  const usage = 'Usage: dsh-config <render|check|doctor|test|update> --machine <name> [--apply|--live] [--tarball package=/absolute/file.tgz]';
   if (!['render', 'check', 'doctor', 'test', 'update'].includes(command)) throw new Error(usage);
   const selector = args.shift();
   const machineArgument = selector === '--machine' ? args.shift() : selector;
@@ -221,6 +221,7 @@ export function parseCommandArguments(args) {
   while (args.length) {
     const flag = args.shift();
     if (flag === '--apply' && command === 'update') options.apply = true;
+    else if (flag === '--live' && command === 'update') options.live = true;
     else if (flag === '--tarball' && command === 'test') (options.tarballs ??= []).push(args.shift());
     else throw new Error(usage);
   }
