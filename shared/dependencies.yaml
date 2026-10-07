@@ -122,3 +122,23 @@ packages:
     scope: profile
     policy: registry
     version: 0.6.19
+  - package: "@deepseek-ai/libreoffice-kit"
+    scope: global-override
+    policy: registry
+    version: 0.1.2
+  - package: "node-addon-require-builtin"
+    scope: global-override
+    policy: registry
+    version: 0.1.6
+  - package: "node-addon-native-custom-loader"
+    scope: global-override
+    policy: registry
+    version: 0.1.6
+  - package: "wsl-utils"
+    scope: global-override
+    policy: registry
+    version: 1.0.0
+  - package: "@smithy/core"
+    scope: global-override
+    policy: registry
+    version: 3.35.0
