@@ -14,7 +14,7 @@ node --test tests/deployment-paths.test.mjs tests/deployment.test.mjs tests/conf
 
 ## 1. 聚焦源码验证与打包
 
-在独立功能分支和持久 worktree 中开发。固定目标 DSH 基线、Node/pnpm 版本及外部 fork 资产，保持 manifest、workspace overrides/patches 和 pnpm 生成的 lockfile 一致。已有 DSH [源码准备入口](../../deepseek-harness/scripts/daily-driver-source.mjs)可复用：
+在独立功能分支和持久 worktree 中开发，不得直接在发布工作树开发——`deepseek-harness` 主检出所在的分支就是发布分支。选择固定基线发布路线时，把已验证的原子提交集成到对应发布分支。固定目标 DSH 基线、Node/pnpm 版本及外部 fork 资产，保持 manifest、workspace overrides/patches 和 pnpm 生成的 lockfile 一致。已有 DSH [源码准备入口](../../deepseek-harness/scripts/daily-driver-source.mjs)可复用：
 
 ```sh
 CI=true node scripts/daily-driver-source.mjs install packages/GROUP/PACKAGE
@@ -24,7 +24,7 @@ node scripts/daily-driver-source.mjs build packages/GROUP/PACKAGE
 
 替换示例中的包目录。需要 native system 的测试先按源码工具链构建 native；只准备目标 closure。后续源码命令关闭 `verify-deps-before-run`，避免自动安装整个 workspace。客户端包同时构建 Host／Client 两端；打包前清理失去源文件的旧入口，避免增量构建把历史产物带入 tarball。
 
-同一 DSH 基线内的小更新测试改动功能与必要配套包；跨基线 API 迁移才扩大到真实受影响调用链。新工具需要 query API 时，调用真实工具行为；已有行为 smoke 能暴露缺 API，不再补方法存在性清单。外部依赖故障按版本与资产、lockfile、下载、patch 和工具链分别定位，不以反复 install 或换回官方包兜底。
+同一 DSH 基线内的小更新测试改动功能与必要配套包；跨基线 API 迁移才扩大到真实受影响调用链。新工具需要 query API 时，调用真实工具行为；已有行为 smoke 能暴露缺 API，不再补方法存在性清单。外部依赖故障按版本与资产、lockfile、下载、patch 和工具链分别定位，不以反复 install 或换回官方包兜底。固定组合无法恢复时，报告具体阻塞与缺少的资产或配置；持久修复进入依赖配置或共用准备入口。
 
 ## 2. 选择已有成品 smoke
 
@@ -87,6 +87,8 @@ node scripts/dsh-config.mjs test --machine workstation \
 
 ## 5. 发布与收尾
 
-源码与成品通过后，原子提交并审查公开内容。经单独授权复用各仓库已有不可变 Release workflow：[DSH Release](../../deepseek-harness/.github/workflows/daily-driver-release.yml)与[源码验证](../../deepseek-harness/.github/workflows/daily-driver-verify.yml)。只构建并发布受影响包，不覆盖既有 tag 或资产。
+源码与成品通过后，原子提交并审查公开内容。只构建并发布受影响包，不覆盖既有 tag 或资产。
+
+发布分两条轨道。**核心 fork 子包**（`@deepseek-ai/dsh-*` 的 fork）在 `deepseek-harness` 内以 `daily-driver-v<上游版本>-forkN` tag 发布，由[DSH Release](../../deepseek-harness/.github/workflows/daily-driver-release.yml) 承担，触发条件是 `push: tags: daily-driver-v*-fork*`，并由[源码验证](../../deepseek-harness/.github/workflows/daily-driver-verify.yml)校验；**树外个人插件**分别在自身仓库用自己的 tag 与 Release workflow 发布，不经过 daily-driver。经单独授权才复用这些流程。
 
 将发布的精确 URL 写回依赖目标，运行两机 render／check／update 预览。测试完成只清理本次拥有的测试目录和进程；日用安装验收前保留功能 worktree 与必要回滚资料。维护报告分别写明源码测试、成品解析、Loader／行为验收与日用激活状态。
