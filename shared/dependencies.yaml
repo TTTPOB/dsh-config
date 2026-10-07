@@ -49,7 +49,7 @@ packages:
     scope: global-override
     policy: release
     version: 0.85.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.5-rc.2-fork2/earendil-works-pi-ai-0.85.1-fork1.tgz
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.5-rc.2-fork1/earendil-works-pi-ai-0.85.1-fork1.tgz
   - package: dsh-web-mobile
     scope: profile
     profiles: [web]
@@ -60,14 +60,12 @@ packages:
     scope: profile
     policy: release
     version: 0.1.0-fork1
-    reason: Exact current asset is absent from inspected GitHub Releases;
-      publication requires authorization.
+    url: https://github.com/TTTPOB/dsh-firecrawl/releases/download/v0.1.0-fork1/firecrawl-dsh-firecrawl-0.1.0-fork1.tgz
   - package: dsh-progressive-tools
     scope: profile
     policy: release
     version: 0.3.0
-    reason: Exact current asset is absent from inspected GitHub Releases;
-      publication requires authorization.
+    url: https://github.com/TTTPOB/dsh-progressive-tools/releases/download/v0.3.0/dsh-progressive-tools-0.3.0.tgz
   - package: dsh-session-tools
     scope: profile
     policy: release
@@ -100,9 +98,8 @@ packages:
   - package: "@deepseek-ai/dsh-subagent"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork1
-    reason: Exact current asset is absent from inspected GitHub Releases;
-      publication requires authorization.
+    version: 0.1.7-rc.2-fork2
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork2/deepseek-ai-dsh-subagent-0.1.7-rc.2-fork2.tgz
   - package: "@deepseek-ai/dsh-agent"
     scope: global-override
     policy: release
