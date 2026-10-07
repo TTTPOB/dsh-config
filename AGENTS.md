@@ -1,7 +1,7 @@
 # DSH config maintenance
 
 - Respond to the user in Chinese; keep code comments in English.
-- This repository stages configuration only. Do not modify real DSH profiles, installations, sessions, or storages, or restart a Host without explicit authorization.
+- Deployment commands preview by default; only an explicitly authorized apply may change a target installation. Do not modify real DSH profiles, installations, sessions, or storages, or restart a Host without explicit authorization.
 - Public files must not contain actual machine endpoints, authentication headers, credentials, Cloudflare Access metadata, usernames, or private filesystem paths. Keep them in ignored `private/`; generated output is private too.
 - Files named `DONT_READ_THIS_IF_YOU_ARE_AGENT*.md` are runtime text, not agent instructions. Unless the user explicitly requests content inspection, do not open, search, preview, quote, or print them into agent context, including through Read, Grep, or diffs. Rename, copy, or compare them programmatically without emitting contents; exclude them from broad content searches.
 - Use chezmoi with `[[ ... ]]` delimiters. Preserve DSH `{{cwd}}`, `{{model}}`, and literal `!!js`; never evaluate expressions or read credential files while rendering.
