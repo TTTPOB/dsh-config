@@ -77,20 +77,6 @@ export function validatePatch(text) {
   return rows;
 }
 
-function stable(value) {
-  if (Array.isArray(value)) return value.map(stable);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])]));
-  }
-  return value;
-}
-
-// Compare row contents, including expression source and nested plugin order.
-// Top-level order/insert grouping is ignored; no runtime activation claim is made.
-export function canonicalPatch(text) {
-  return stable(validatePatch(text).sort((a, b) => a.entry.id.localeCompare(b.entry.id)));
-}
-
 export function renderMachine(machinePath, label, catalog, { stage = true, generatedDir } = {}) {
   assert.match(label, /^[a-zA-Z0-9_-]+$/, 'Invalid output label');
   const machine = validateMachine(readYaml(machinePath));
@@ -122,13 +108,6 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
     }
   }
   return { output, rendered };
-}
-
-export function compareSnapshot(rendered, snapshotDir) {
-  for (const name of ['home', 'web']) {
-    const original = readFileSync(join(snapshotDir, `${name}.patch.yml`), 'utf8');
-    assert.deepEqual(canonicalPatch(rendered[name]), canonicalPatch(original), `${name} differs from captured baseline`);
-  }
 }
 
 const releaseUrl = /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/;

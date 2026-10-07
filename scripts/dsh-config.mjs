@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { renderMachine, resolveMachineArgument, parseCommandArguments, compareSnapshot, validatePatch, readYaml } from './lib.mjs';
+import { renderMachine, resolveMachineArgument, parseCommandArguments, validatePatch, readYaml } from './lib.mjs';
 import { deploymentTargets, doctor, isolatedTest, updateMachine, normalizeDeployment } from './deployment.mjs';
 
 try {
@@ -14,13 +14,8 @@ try {
     console.log(`Rendered ${label}: home=${validatePatch(rendered.home).length} rows, web=${validatePatch(rendered.web).length} rows`);
     console.log(`Private staging output: ${output}`);
   } else if (command === 'check') {
-    const { rendered } = renderMachine(path, label, undefined, { stage: false });
-    if (existsSync(join(snapshotDir, 'home.patch.yml'))) {
-      compareSnapshot(rendered, snapshotDir);
-      console.log(`${label}: patch row contents match captured baseline (including literal expressions)`);
-    } else {
-      console.log(`${label}: static YAML checks passed; no captured baseline available`);
-    }
+    renderMachine(path, label, undefined, { stage: false });
+    console.log(`${label}: current configuration checks passed`);
   } else if (command === 'update') {
     const report = await updateMachine(path, label, apply, { offline });
     console.log(JSON.stringify(report, null, 2));

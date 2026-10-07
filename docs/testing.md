@@ -39,7 +39,7 @@ node scripts/dsh-config.mjs test --machine workstation \
 node --test tests/deployment-paths.test.mjs tests/deployment.test.mjs tests/config.test.mjs
 ```
 
-这些测试使用独立临时 fixture 和模拟安装，不执行日用全局安装；每个测试登记结束清理，断言失败也会回收本次目录。完整 `pnpm test` 还包含使用独立安装根的真实 pnpm 安装测试，同样自动清理。测试日志不写维护日志。模板引擎随完整 pnpm 依赖安装，无需外部二进制。模板自动测试只检查输出结构、输入传递与字面表达式保留，不固定示例中的模型、插件清单或 preset 内容。配置语义由变更审查确认；需要比对两机基线时单独运行 check，无需预先 render。
+这些测试使用独立临时 fixture 和模拟安装，不执行日用全局安装；每个测试登记结束清理，断言失败也会回收本次目录。完整 `pnpm test` 还包含使用独立安装根的真实 pnpm 安装测试，同样自动清理。测试日志不写维护日志。模板引擎随完整 pnpm 依赖安装，无需外部二进制。模板自动测试只检查输出结构、输入传递与字面表达式保留，不固定示例中的模型、插件清单或 preset 内容。配置语义由变更审查确认；两机当前目标配置通过 check 检查，无需预先 render。
 
 ## 4. 定位失败
 

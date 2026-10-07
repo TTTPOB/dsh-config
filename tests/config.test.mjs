@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { root, parseYaml, readYaml, validateMachine, validatePatch, canonicalPatch, renderMachine, resolveDependencyTargets, parseCommandArguments, resolveMachineArgument } from '../scripts/lib.mjs';
+import { root, parseYaml, readYaml, validateMachine, validatePatch, renderMachine, resolveDependencyTargets, parseCommandArguments, resolveMachineArgument } from '../scripts/lib.mjs';
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-config-test-'));
@@ -60,13 +60,6 @@ test('keeps template-like text in literal machine rows without evaluating it', t
 test('rejects duplicate ids and expressions in metadata', () => {
   assert.throws(() => validatePatch('- id: x\n- insert:\n    - id: x\n'));
   assert.throws(() => validatePatch('- id: x\n  name: !!js "computed"\n'));
-});
-
-test('canonicalization preserves expressions and nested plugin order', () => {
-  const a = '- insert:\n    - id: b\n      disabled: !!js process.platform === "win32"\n- id: a\n  config:\n    value: [1, 2]\n';
-  const b = '- id: a\n  config:\n    value: [1, 2]\n- insert:\n    - id: b\n      disabled: !!js process.platform === "win32"\n';
-  assert.deepEqual(canonicalPatch(a), canonicalPatch(b));
-  assert.notDeepEqual(canonicalPatch(a), canonicalPatch(b.replace('[1, 2]', '[2, 1]')));
 });
 
 for (const role of ['workstation', 'server']) {
@@ -169,6 +162,12 @@ test('check renders current input without requiring or creating staged patches',
   writeFileSync(path, JSON.stringify(machine));
   const run = () => spawnSync(process.execPath, [join(root, 'scripts/dsh-config.mjs'), 'check', path], { encoding: 'utf8' });
   assert.equal(run().status, 0);
+  const snapshot = join(directory, 'snapshot');
+  mkdirSync(snapshot);
+  for (const name of ['home', 'web']) writeFileSync(join(snapshot, `${name}.patch.yml`), '- id: obsolete-configuration\n');
+  const current = run();
+  assert.equal(current.status, 0);
+  assert.match(current.stdout, /current configuration checks passed/);
   const generatedDir = join(directory, 'output');
   renderMachine(path, 'current-input', undefined, { stage: false, generatedDir });
   assert.ok(!existsSync(generatedDir));

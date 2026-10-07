@@ -33,7 +33,7 @@ node scripts/dsh-config.mjs update --machine workstation
 | [shared/dependencies.yaml](shared/dependencies.yaml) | 唯一选定版本、来源策略、安装归属和缺资产原因 |
 | `templates/` | home/Web patch 文本模板；安装声明由脚本直接序列化 |
 | `private/machines/<name>/machine.yaml` | 各机私有差异与部署位置 |
-| `private/machines/<name>/snapshot/` | 首次迁移配置与依赖基线 |
+| `private/machines/<name>/snapshot/` | 未显式声明 installation 时使用的安装依赖输入 |
 | `generated/` | 渲染、隔离测试与维护暂存 |
 | `scripts/` | 命令入口与复用的诊断／部署逻辑 |
 
@@ -45,7 +45,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 `deployment` 可省略；doctor、update 默认预览和 apply 使用执行机器的 DSH_HOME／用户主目录及 pnpm 公共信息推导部署路径，显式路径支持 `~/` 和已定义环境变量。`update --offline`、render/check 只消费机器 installation 参数或快照，不引入执行机器的安装输入。具体默认和覆盖方式见[部署位置](docs/install.md#2-声明本机部署位置)。
 
-`check` 根据当前机器参数和模板重新渲染，在内存中校验并与首次迁移快照比较，无需先运行 render，也不读取已有生成结果。比较保留表达式源码和嵌套插件顺序，忽略顶层行顺序与 insert 分组。这是静态等价检查；Host 加载与功能由成品 smoke 和实际维护验收确认。
+`check` 根据当前机器参数和模板重新渲染，在内存中校验配置结构，无需先运行 render，也不读取已有生成结果。当前模板与机器参数决定目标配置；Host 加载与功能由成品 smoke 和实际维护验收确认。
 
 ## 生成文件与清理
 
@@ -54,7 +54,7 @@ node scripts/dsh-config.mjs update --machine workstation
 - **维护日志：** `generated/*-install.log` 供更新过程即时排障，操作结束后按诊断需要保留或删除。
 - **更新备份：** `generated/<name>-backup-*` 保存更新前的真实文件，不能靠 render 重建。维护验收并确认不再需要回滚后，才删除对应备份。不要整体清空 generated 来代替分类清理。
 
-`private/machines/<name>/snapshot/` 是持久基线，不参与上述清理。配置比较使用其中的 home/Web patch；依赖解析可使用 global workspace 和 Web manifest。某台机器额外捕获的 profile、lockfile 等文件保留其历史参考用途，不要求所有机器的快照文件数一致。
+`private/machines/<name>/snapshot/` 仅保留依赖解析仍使用的 `global-workspace.yaml` 与 `web.package.json`。旧配置 patch、profile 副本和 lockfile 不作为当前配置标准；真实更新的回滚文件保存在本次维护备份中。
 
 ## 表达式与凭据
 
@@ -62,7 +62,7 @@ Nunjucks 使用 `[[ ... ]]` 插值和 `[% ... %]` 控制块；关闭 HTML 转义
 
 ## 提交与交付
 
-本仓库在本地运行 `pnpm test` 验证改动；需要真实双机比对时，在持有私有参数的机器上运行 check。涉及已安装 DSH 的集成检查，使用本机准备好的 runtime。提交前检查暂存差异和 `git diff --cached --check`，不将私有参数或生成文件加入 Git。
+本仓库在本地运行 `pnpm test` 验证改动；需要检查两机当前目标配置时，在持有私有参数的机器上运行 check。涉及已安装 DSH 的集成检查，使用本机准备好的 runtime。提交前检查暂存差异和 `git diff --cached --check`，不将私有参数或生成文件加入 Git。
 
 源码仓库拥有功能、构建、成品 smoke 和不可变 Release workflow；本仓库维护个人两机安装与测试指南。发布、真实安装与 Host 切换分别授权。update 默认预览，只有显式 `--apply` 才执行变更，不启停 Host。
 
