@@ -58,6 +58,14 @@ test('shared selections replace duplicate versions, preserve selectors and do no
   assert.ok(!JSON.stringify(target.entries).includes('/private/'));
 });
 
+test('patch-only plugins keep dependencies but remove duplicate bundle activation', () => {
+  const selected = { packages: [{ ...catalog.packages[1], patchOnly: true }] };
+  const target = resolveDependencyTargets('unused', { webPackage: { dependencies: { 'managed-plugin': 'file:old.tgz' },
+    dsh: { profile: { bundles: ['official-base', 'managed-plugin', 'client-only-bundle'] } } } }, selected);
+  assert.equal(target.profiles.web.dependencies['managed-plugin'], url);
+  assert.deepEqual(target.profiles.web.dsh.profile.bundles, ['official-base', 'client-only-bundle']);
+});
+
 test('explicit consuming profiles share managed versions without installing absent plugins', () => {
   const target = resolveDependencyTargets('unused', {
     webPackage: { dependencies: { 'managed-plugin': 'file:old.tgz' } },

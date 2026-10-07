@@ -203,7 +203,13 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
     }
   };
   merge(globalWorkspace, 'overrides', 'global-override');
-  for (const [profile, manifest] of Object.entries(profiles)) merge(manifest, 'dependencies', 'profile', profile);
+  for (const [profile, manifest] of Object.entries(profiles)) {
+    merge(manifest, 'dependencies', 'profile', profile);
+    const patchOnly = new Set(catalog.packages.filter(item => item.scope === 'profile' && item.patchOnly
+      && (!item.profiles || item.profiles.includes(profile))).map(item => item.package));
+    const bundles = manifest.dsh?.profile?.bundles;
+    if (bundles) manifest.dsh.profile.bundles = bundles.filter(name => !patchOnly.has(name));
+  }
   return { globalWorkspace, profiles, entries };
 }
 
