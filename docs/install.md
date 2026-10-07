@@ -115,7 +115,13 @@ Apply 在 stderr 即时报告 pre-install doctor、global install、profile inst
 - **公开版本状态有边界：** `ctx.modules.manifest` 是最新解析的 Host graph，不是已成功应用版本；`entries.state` 只公开 syncing/failures，成功 revision 表是私有实现。不得把 SSE 首帧或当前 manifest 伪装成页面已应用版本，也不得读取／包装私有表来补接口。精确更新横幅需公开 applied/settled 契约；现有失败状态可用于诚实的手动重载恢复提示。
 - **PWA 更新提示不是 Host 热升级。** 当前安装前端／mobile 未实现 SW waiting 更新流程；SW skipWaiting／controllerchange 只作用于浏览器 Service Worker。提示按钮重载页面，不重启服务器；仅服务器实际发布了新资源，刷新才可能取得新版。不要为更新提示缓存私有会话／API，也不要重复实现现有模块替换控制器。
 
-本节边界来自一次针对特定 DSH 版本的实测。出现「已安装但未激活」时的各层调用链和完整反例见[更新链调查](../../artifacts/mobile-workbench-3.0.3-fork4/UPDATE-INVESTIGATION.md)；不能把其中的内部行为推广为永久契约，升级 DSH 后需重新核对。
+本节实现细节以 DSH 0.1.7-rc.2 的实测为依据；升级 DSH 后重新核对管理器的激活要求和客户端更新接口。
+
+### WSL 服务启动排查
+
+systemd user service 若需要启动 Windows stdio MCP，检查它是否继承当前 WSL 登录会话的有效 `WSL_INTEROP`。受控实验中，缺少该变量会阻塞 Windows 子进程；仅补入有效值后握手恢复。需要保留这类 MCP 时，从有效登录 shell 执行 `systemctl --user import-environment WSL_INTEROP WSL_DISTRO_NAME`，再按授权安排服务重启；不要硬编码 interop socket 路径，socket 存在也不代表可用。
+
+DSH 0.1.7-rc.2 的 MCP 启动会等待连接和初始工具列表；`toolCallTimeoutMs` 不约束这段握手。HTTP 已可响应不代表全部插件就绪，应同时检查最终启动日志。上述现象不能单独证明某个真实 MCP 就是故障源。
 
 ## 5. 首次迁移与恢复
 
