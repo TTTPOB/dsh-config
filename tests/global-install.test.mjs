@@ -1,0 +1,68 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, renameSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { root, readYaml } from '../scripts/lib.mjs';
+import { globalInstallArguments, resolveInstalledHost, doctor } from '../scripts/deployment.mjs';
+
+// Local test tarballs are consumed only by this independent pnpm global root.
+test('pnpm 11 global add consumes the selected workspace and rediscovery follows the current slot', async () => {
+  const directory = mkdtempSync(join(root, 'generated', 'pnpm-global-test-'));
+  const globalDir = join(directory, 'global');
+  const bin = join(directory, 'bin');
+  const globalRoot = join(globalDir, 'v11');
+  mkdirSync(globalRoot, { recursive: true });
+  mkdirSync(bin);
+  const packageDirectory = join(directory, 'package');
+  mkdirSync(packageDirectory);
+  writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-base', version: '0.1.7-rc.2', type: 'module', exports: { './package.json': './package.json' }, bin: { 'dsh-test-fixture': 'index.js' }, files: ['index.js'] }));
+  const pack = marker => {
+    writeFileSync(join(packageDirectory, 'index.js'), '#!/usr/bin/env node\nconsole.log(' + JSON.stringify(marker) + ')\n');
+    const target = join(directory, marker);
+    mkdirSync(target);
+    execFileSync('pnpm', ['pack', '--pack-destination', target], { cwd: packageDirectory, stdio: 'pipe' });
+    return join(target, 'deepseek-ai-dsh-base-0.1.7-rc.2.tgz');
+  };
+  const first = pack('first');
+  const second = pack('second');
+  const workspace = join(globalRoot, 'pnpm-workspace.yaml');
+  writeFileSync(workspace, JSON.stringify({ overrides: { '@deepseek-ai/dsh-base': 'file:' + first } }));
+  const env = { ...process.env, PATH: bin + ':' + process.env.PATH };
+  const argv = ['--config.enable-global-virtual-store=false', `--config.global-dir=${globalDir}`, `--config.global-bin-dir=${bin}`, 'add', '--global', '@deepseek-ai/dsh@0.1.7-rc.2'];
+  execFileSync('pnpm', argv, { cwd: globalRoot, env, stdio: 'pipe', timeout: 120000 });
+  const deployment = { globalWorkspacePath: workspace, globalDir, globalBinDir: bin, hostManifest: join(directory, 'stale-host.json') };
+  const oldAnchor = resolveInstalledHost(deployment);
+  assert.ok(readFileSync(join(dirname(createRequire(oldAnchor).resolve('@deepseek-ai/dsh-base/package.json')), 'index.js'), 'utf8').includes('first'));
+  writeFileSync(workspace, JSON.stringify({ overrides: { '@deepseek-ai/dsh-base': 'file:' + second, unrelated: '1.0.0' } }));
+  const command = globalInstallArguments(deployment);
+  assert.equal(command.at(-1), '@deepseek-ai/dsh@0.1.7-rc.2');
+  execFileSync(command[0], command.slice(1), { cwd: globalRoot, env, stdio: 'pipe', timeout: 120000 });
+  const current = resolveInstalledHost({ ...deployment, hostManifest: oldAnchor });
+  assert.ok(readFileSync(join(dirname(createRequire(current).resolve('@deepseek-ai/dsh-base/package.json')), 'index.js'), 'utf8').includes('second'));
+  assert.ok(readYaml(workspace).overrides.unrelated);
+
+  const home = join(directory, 'home');
+  const profile = join(home, 'profiles/web');
+  const plugin = join(profile, 'node_modules/dsh-fixture-plugin');
+  mkdirSync(plugin, { recursive: true });
+  const pluginManifest = { name: 'dsh-fixture-plugin', version: '1.0.0', type: 'module', exports: { '.': { import: './index.js' } } };
+  writeFileSync(join(plugin, 'package.json'), JSON.stringify(pluginManifest));
+  writeFileSync(join(plugin, 'index.js'), 'throw new Error("doctor must not import plugins")\n');
+  const packagePath = join(profile, 'package.json');
+  writeFileSync(packagePath, JSON.stringify({ private: true, dependencies: { 'dsh-fixture-plugin': '1.0.0' }, dsh: { profile: { bundles: [] } } }));
+  const machine = { deployment: { ...deployment, home, hostManifest: current, profiles: { web: { packagePath } } } };
+  const targets = { entries: [{ name: 'dsh-fixture-plugin', scope: 'profile', profile: 'web', version: '1.0.0', target: '1.0.0' }] };
+  const healthy = await doctor(machine, targets);
+  assert.deepEqual(healthy.issues, [], 'ordinary profile package with import-only exports resolves through the formal Host resolver');
+  const changed = await doctor(machine, { entries: [{ ...targets.entries[0], version: '2.0.0' }] });
+  assert.equal(changed.issues[0].status, 'installed-version-mismatch');
+  renameSync(join(plugin, 'index.js'), join(plugin, 'missing.js'));
+  const missing = await doctor(machine, targets);
+  assert.ok(missing.issues.some(issue => issue.status === 'invalid-built-entry'));
+  renameSync(join(plugin, 'missing.js'), join(plugin, 'index.js'));
+  writeFileSync(join(plugin, 'package.json'), JSON.stringify({ ...pluginManifest, peerDependencies: { '@deepseek-ai/dsh-tools': '0.1.7-rc.2-fork999' } }));
+  const denied = await doctor(machine, targets);
+  assert.ok(denied.issues.some(issue => issue.status === 'compatibility-blocked' && issue.reason.includes('0.1.7-rc.2-fork999')));
+});

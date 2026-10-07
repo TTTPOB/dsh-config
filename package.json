@@ -7,6 +7,10 @@
   "scripts": {
     "render": "node scripts/dsh-config.mjs render",
     "check": "node scripts/dsh-config.mjs check",
+    "plan": "node scripts/dsh-config.mjs plan",
+    "doctor": "node scripts/dsh-config.mjs doctor",
+    "update": "node scripts/dsh-config.mjs update",
+    "test:installation": "node scripts/dsh-config.mjs test",
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {

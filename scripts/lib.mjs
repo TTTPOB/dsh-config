@@ -1,5 +1,5 @@
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
-import { resolve, join, basename, isAbsolute } from 'node:path';
+import { resolve, join, basename, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
@@ -84,18 +84,24 @@ export function canonicalPatch(text) {
   return stable(validatePatch(text).sort((a, b) => a.entry.id.localeCompare(b.entry.id)));
 }
 
-export function renderMachine(machinePath, label) {
+export function renderMachine(machinePath, label, catalog, { stage = true } = {}) {
   assert.match(label, /^[a-zA-Z0-9_-]+$/, 'Invalid output label');
   const machine = validateMachine(readYaml(machinePath));
+  const targets = resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog);
+  machine.installation = { globalWorkspace: targets.globalWorkspace, webPackage: targets.profiles.web };
   const output = join(root, 'generated', label);
   const shared = readYaml(join(root, 'shared/defaults.yaml'));
   const defaultModel = machine.overrides.defaultModel ?? shared.defaults.model;
   for (const key of ['provider', 'model', 'reasoningEffort']) {
     assert.equal(typeof defaultModel[key], 'string', `Missing model field: ${key}`);
   }
-  mkdirSync(output, { recursive: true, mode: 0o700 });
+  const templateData = { shared, machine, effective: { defaultModel } };
+  const data = JSON.stringify({ data: templateData });
   const dataPath = join(output, 'chezmoi.json');
-  writeFileSync(dataPath, JSON.stringify({ data: { shared, machine, effective: { defaultModel } } }), { mode: 0o600 });
+  if (stage) {
+    mkdirSync(output, { recursive: true, mode: 0o700 });
+    writeFileSync(dataPath, data, { mode: 0o600 });
+  }
   const privateTools = join(root, 'private/tools/chezmoi');
   const binary = process.env.CHEZMOI_BIN || (existsSync(privateTools) ? privateTools : 'chezmoi');
   const rendered = {};
@@ -110,7 +116,8 @@ export function renderMachine(machinePath, label) {
   // Validate all staged files before writing them.
   for (const { key, file, patch } of outputs) {
     const child = spawnSync(binary, [
-      '--config', dataPath, '--config-format', 'json',
+      ...(stage ? ['--config', dataPath, '--config-format', 'json']
+        : ['--config', '/dev/null', '--config-format', 'yaml', '--override-data', JSON.stringify(templateData)]),
       '--source', join(root, 'templates'), '--destination', output,
       '--cache', join(root, 'private/chezmoi-cache'),
       '--persistent-state', join(root, 'private/chezmoi-state.boltdb'),
@@ -128,8 +135,8 @@ export function renderMachine(machinePath, label) {
     }
     rendered[key] = child.stdout;
   }
-  for (const { key, file } of outputs) {
-    writeFileSync(join(output, file), rendered[key], { mode: 0o600 });
+  if (stage) {
+    for (const { key, file } of outputs) writeFileSync(join(output, file), rendered[key], { mode: 0o600 });
   }
   return { output, rendered };
 }
@@ -141,44 +148,88 @@ export function compareSnapshot(rendered, snapshotDir) {
   }
 }
 
-export function buildSourcePlan(snapshotDir, installation) {
-  const inventory = readYaml(join(root, 'shared/dependencies.yaml')).packages;
-  const profile = installation?.webPackage ?? JSON.parse(readFileSync(join(snapshotDir, 'web.package.json'), 'utf8'));
-  const globals = installation?.globalWorkspace ?? readYaml(join(snapshotDir, 'global-workspace.yaml'));
-  const entries = [
-    ...Object.entries(profile.dependencies ?? {}).map(([name, source]) => ({ scope: 'profile', name, source })),
-    ...Object.entries(globals.overrides ?? {}).map(([name, source]) => ({ scope: 'global-override', name, source })),
-  ];
-  return entries.map(({ scope, name, source }) => {
-    if (/^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/.test(source)) {
-      const known = inventory.find(item => item.url === source);
-      return { scope, name, status: known ? 'verified-release' : 'unverified-release', target: source };
+const releaseUrl = /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/;
+const exactVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+export function readDependencyCatalog() {
+  const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
+  assert.equal(catalog.schemaVersion, 2, 'Dependency catalog requires schemaVersion: 2');
+  const keys = new Set();
+  for (const item of catalog.packages) {
+    assert.ok(['global-override', 'profile'].includes(item.scope), 'Invalid dependency scope');
+    assert.ok(['release', 'registry'].includes(item.policy), 'Invalid dependency policy');
+    assert.match(item.version, exactVersion, 'Dependency version must be exact');
+    assert.equal(typeof item.package, 'string', 'Missing package name');
+    const key = item.scope + ':' + item.package;
+    assert.ok(!keys.has(key), 'Duplicate managed dependency');
+    keys.add(key);
+    if (item.policy === 'release' && item.url !== undefined) assert.match(item.url, releaseUrl, 'Invalid Release URL');
+    if (item.policy === 'release' && !item.url) assert.equal(typeof item.reason, 'string', 'Missing asset reason required');
+    if (item.profiles !== undefined) assert.ok(Array.isArray(item.profiles) && item.profiles.every(p => /^[a-zA-Z0-9_-]+$/.test(p)), 'Invalid profiles');
+  }
+  return catalog;
+}
+
+export function resolveDependencyTargets(snapshotDir, installation, catalog = readDependencyCatalog()) {
+  const snapshot = (file, fallback) => existsSync(join(snapshotDir, file)) ? readYaml(join(snapshotDir, file)) : fallback;
+  const globalWorkspace = structuredClone(installation?.globalWorkspace ?? snapshot('global-workspace.yaml', { packages: ['.'] }));
+  const profiles = structuredClone({ web: installation?.webPackage ?? snapshot('web.package.json', { private: true }), ...installation?.profiles });
+  const entries = [];
+  const merge = (container, field, scope, profile) => {
+    container[field] ??= {};
+    for (const item of catalog.packages.filter(item => item.scope === scope)) {
+      if (scope === 'profile' && ((item.profiles && !item.profiles.includes(profile)) || !(item.package in container[field]))) continue;
+      const matchingKeys = scope === 'global-override'
+        ? Object.keys(container[field]).filter(key => key === item.package || key.startsWith(item.package + '@'))
+        : [item.package];
+      const keys = matchingKeys.length ? matchingKeys : [item.package];
+      const current = container[field][keys[0]];
+      const target = item.policy === 'registry' ? item.version : item.url;
+      for (const key of keys) {
+        if (target) container[field][key] = target;
+        else delete container[field][key];
+      }
+      entries.push({ scope, ...(profile ? { profile } : {}), name: item.package, version: item.version,
+        status: target ? (item.policy === 'release' ? 'verified-release' : item.package.startsWith('@deepseek-ai/') ? 'official-registry' : 'registry-pin') : 'blocked-missing-release',
+        ...(target ? { target } : { reason: item.reason }),
+        changed: current !== target });
     }
-    const asset = source.startsWith('file:') && source.endsWith('.tgz') ? basename(source.slice(5)) : undefined;
-    const packageName = name.startsWith('@') ? name.split('@').slice(0, 2).join('@') : name;
-    const candidates = asset ? inventory.filter(item => item.asset === asset && item.package === packageName) : [];
-    if (candidates.length === 1) return { scope, name, status: 'release-migration-candidate', target: candidates[0].url };
-    if (candidates.length > 1) return { scope, name, status: 'blocked-release-choice-needed', candidates: candidates.map(item => item.url) };
-    if (name.startsWith('@deepseek-ai/') && /^\d+\.\d+\.\d+/.test(source)) {
-      return { scope, name, status: 'official-registry', target: source };
+    const managed = new Set(entries.filter(row => row.scope === scope && row.profile === profile).map(row => row.name));
+    for (const [name, source] of Object.entries(container[field])) {
+      if ([...managed].some(item => name === item || (scope === 'global-override' && name.startsWith(item + '@')))) continue;
+      const status = exactVersion.test(source) ? 'unmanaged-registry-pin' : releaseUrl.test(source) ? 'unmanaged-release' : 'unmanaged-local-or-range';
+      // Unmanaged values remain private and are never proposed as managed targets.
+      entries.push({ scope, ...(profile ? { profile } : {}), name, status });
     }
-    if (/^\d+\.\d+\.\d+/.test(source) && !name.startsWith('dsh-')) {
-      return { scope, name, status: 'registry-pin', target: source };
-    }
-    return { scope, name, status: 'blocked-needs-exact-release', asset: asset ?? null };
-  });
+  };
+  merge(globalWorkspace, 'overrides', 'global-override');
+  for (const [profile, manifest] of Object.entries(profiles)) merge(manifest, 'dependencies', 'profile', profile);
+  return { globalWorkspace, profiles, entries };
+}
+
+export function buildSourcePlan(snapshotDir, installation, catalog) {
+  return resolveDependencyTargets(snapshotDir, installation, catalog).entries;
 }
 
 export function parseCommandArguments(args) {
-  const [command, selector, machine, ...extra] = args;
-  const usage = 'Usage: node scripts/dsh-config.mjs <render|check|plan> --machine <name> (or a machine.yaml path)';
-  if (!['render', 'check', 'plan'].includes(command)) throw new Error(usage);
-  if (selector === '--machine') {
-    if (typeof machine !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(machine) || extra.length) throw new Error(usage);
-    return { command, machineArgument: machine };
+  args = [...args];
+  const command = args.shift();
+  const usage = 'Usage: dsh-config <render|check|plan|doctor|test|update> --machine <name> [--apply] [--tarball package=/absolute/file.tgz]';
+  if (!['render', 'check', 'plan', 'doctor', 'test', 'update'].includes(command)) throw new Error(usage);
+  const selector = args.shift();
+  const machineArgument = selector === '--machine' ? args.shift() : selector;
+  if (selector === '--machine' && !/^[a-zA-Z0-9_-]+$/.test(machineArgument ?? '')) throw new Error(usage);
+  // File-path selectors are supported alongside named private machines.
+  if (!machineArgument || machineArgument.startsWith('-')) throw new Error(usage);
+  const options = {};
+  while (args.length) {
+    const flag = args.shift();
+    if (flag === '--apply' && command === 'update') options.apply = true;
+    else if (flag === '--tarball' && command === 'test') (options.tarballs ??= []).push(args.shift());
+    else throw new Error(usage);
   }
-  if (!selector || selector.startsWith('-') || machine !== undefined) throw new Error(usage);
-  return { command, machineArgument: selector };
+  if (machineArgument.includes('..') && !isAbsolute(machineArgument)) throw new Error(usage);
+  return { command, machineArgument, ...options };
 }
 
 export function resolveMachineArgument(arg) {

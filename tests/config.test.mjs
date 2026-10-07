@@ -119,27 +119,28 @@ test('declared installation files render beside shared patches and drive source 
   mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
   writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
   const { output, rendered } = renderMachine(path, 'test-installation');
-  assert.deepEqual(readYaml(join(output, 'global-workspace.yaml')), machine.installation.globalWorkspace);
+  assert.equal(readYaml(join(output, 'global-workspace.yaml')).overrides['@deepseek-ai/dsh-example'], '0.1.7-rc.2');
   assert.deepEqual(JSON.parse(readFileSync(join(output, 'web.package.json'), 'utf8')), machine.installation.webPackage);
   assert.ok(validatePatch(rendered.home).some(row => row.entry.id === 'preset-standard-ptc'));
   const plan = buildSourcePlan('unused-snapshot-directory', machine.installation);
-  assert.deepEqual(plan.map(row => row.name), ['example-plugin', '@deepseek-ai/dsh-example']);
+  assert.ok(plan.some(row => row.name === 'example-plugin' && row.status === 'unmanaged-registry-pin'));
+  assert.ok(plan.some(row => row.name === '@deepseek-ai/dsh-example'));
 });
 
-test('release catalog contains exact asset URLs and no local references', () => {
-  const release = readYaml(join(root, 'shared/dependencies.yaml'));
-  for (const entry of release.packages) {
-    assert.match(entry.url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/);
-    assert.equal(new URL(entry.url).pathname.split('/').pop(), entry.asset);
+test('release catalog distinguishes selected URLs, explicit registry pins and missing assets', () => {
+  const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
+  assert.equal(catalog.schemaVersion, 2);
+  for (const entry of catalog.packages) {
     assert.match(entry.version, /^\d+\.\d+\.\d+/);
-    assert.equal(entry.asset, `${entry.package.replace(/^@/, '').replace('/', '-')}-${entry.version}.tgz`);
+    if (entry.policy === 'release' && entry.url) assert.match(entry.url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/);
+    else if (entry.policy === 'release') assert.equal(typeof entry.reason, 'string');
   }
   assert.ok(!readFileSync(join(root, 'shared/dependencies.yaml'), 'utf8').includes('file:'));
 });
 
 test('source planning does not guess missing Release assets', { skip: !existsSync(join(root, 'private/machines/workstation/snapshot/web.package.json')) }, () => {
   const plan = buildSourcePlan(join(root, 'private/machines/workstation/snapshot'));
-  assert.ok(plan.some(row => row.status === 'blocked-needs-exact-release'));
+  assert.ok(plan.some(row => row.status === 'blocked-missing-release'));
   assert.ok(plan.some(row => row.status === 'verified-release'));
   assert.ok(!JSON.stringify(plan).includes('/home/'));
 });
