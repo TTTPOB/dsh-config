@@ -10,7 +10,6 @@
 pnpm install --frozen-lockfile --ignore-workspace
 pnpm render --machine workstation
 pnpm check --machine workstation
-node scripts/dsh-config.mjs plan --machine workstation
 ```
 
 另一台机器使用自己的 `--machine server` 参数。通过私有通道保存各机 `private/machines/<name>/machine.yaml`；保留各机 MCP、relay、模型、认证引用、浏览器路径和专属插件。服务器不因共用配置更新而增加工作机的逆向 preset、session-tools 或 mobile。不要同步 credentials、sessions、storages、数据库或附件。

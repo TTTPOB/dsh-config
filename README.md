@@ -17,7 +17,6 @@ pnpm test
 ```sh
 pnpm render --machine workstation
 pnpm check --machine workstation
-node scripts/dsh-config.mjs plan --machine workstation
 node scripts/dsh-config.mjs update --machine workstation
 ```
 

@@ -92,7 +92,8 @@ test('preview and blocked apply cannot call installers or touch target files', a
   const { machine, machinePath } = fixture();
   const before = read(machine.deployment.globalWorkspacePath);
   const dependencies = { catalog, runStep: () => assert.fail('preview installed'), doctor: () => assert.fail('preview inspected installation') };
-  const preview = await updateMachine(machinePath, 'test-preview', false, dependencies);
+  const { apply } = parseCommandArguments(['update', '--machine', 'server']);
+  const preview = await updateMachine(machinePath, 'test-preview', apply, dependencies);
   assert.equal(preview.apply, false);
   const missing = { packages: [{ ...catalog.packages[0], policy: 'release', reason: 'missing' }] };
   await assert.rejects(updateMachine(machinePath, 'test-preview', true, { ...dependencies, catalog: missing }), /Apply blocked/);
@@ -177,8 +178,13 @@ test('isolated entry copies local tarballs and passes exact argv to an existing 
   assert.equal(read(machinePath), before);
 });
 
+test('CLI rejects plan without a compatibility alias', () => {
+  assert.throws(() => parseCommandArguments(['plan', '--machine', 'server']), /Usage: dsh-config <render\|check\|doctor\|test\|update>/);
+});
+
 test('CLI accepts apply only for update and local tarballs only for test', () => {
   assert.deepEqual(parseCommandArguments(['update', '--machine', 'server', '--apply']), { command: 'update', machineArgument: 'server', apply: true });
   assert.deepEqual(parseCommandArguments(['test', '--machine', 'server', '--tarball', 'plugin=/example/plugin.tgz']), { command: 'test', machineArgument: 'server', tarballs: ['plugin=/example/plugin.tgz'] });
-  assert.throws(() => parseCommandArguments(['plan', '--machine', 'server', '--apply']));
+  assert.throws(() => parseCommandArguments(['doctor', '--machine', 'server', '--apply']));
+  assert.throws(() => parseCommandArguments(['update', '--machine', 'server', '--tarball', 'plugin=/example/plugin.tgz']));
 });

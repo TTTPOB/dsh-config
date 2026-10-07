@@ -78,4 +78,4 @@ node scripts/dsh-config.mjs test --machine workstation \
 
 源码与成品通过后，原子提交并审查公开内容。经单独授权复用各仓库已有不可变 Release workflow：[DSH Release](../../deepseek-harness/.github/workflows/daily-driver-release.yml)与[源码验证](../../deepseek-harness/.github/workflows/daily-driver-verify.yml)。只构建并发布受影响包，不覆盖既有 tag 或资产。
 
-将发布的精确 URL 写回依赖目标，运行两机 render／check／plan。测试完成只清理本次拥有的测试目录和进程；日用安装验收前保留功能 worktree 与必要回滚资料。维护报告分别写明源码测试、成品解析、Loader／行为验收与日用激活状态。
+将发布的精确 URL 写回依赖目标，运行两机 render／check／update 预览。测试完成只清理本次拥有的测试目录和进程；日用安装验收前保留功能 worktree 与必要回滚资料。维护报告分别写明源码测试、成品解析、Loader／行为验收与日用激活状态。

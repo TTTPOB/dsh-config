@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, parseYaml, readYaml, validateMachine, validatePatch, canonicalPatch, renderMachine, compareSnapshot, buildSourcePlan, parseCommandArguments, resolveMachineArgument } from '../scripts/lib.mjs';
+import { root, parseYaml, readYaml, validateMachine, validatePatch, canonicalPatch, renderMachine, compareSnapshot, resolveDependencyTargets, parseCommandArguments, resolveMachineArgument } from '../scripts/lib.mjs';
 
 const example = join(root, 'examples/workstation-machine.yaml');
 
@@ -122,7 +122,7 @@ test('declared installation files render beside shared patches and drive source 
   assert.equal(readYaml(join(output, 'global-workspace.yaml')).overrides['@deepseek-ai/dsh-example'], '0.1.7-rc.2');
   assert.deepEqual(JSON.parse(readFileSync(join(output, 'web.package.json'), 'utf8')), machine.installation.webPackage);
   assert.ok(validatePatch(rendered.home).some(row => row.entry.id === 'preset-standard-ptc'));
-  const plan = buildSourcePlan('unused-snapshot-directory', machine.installation);
+  const plan = resolveDependencyTargets('unused-snapshot-directory', machine.installation).entries;
   assert.ok(plan.some(row => row.name === 'example-plugin' && row.status === 'unmanaged-registry-pin'));
   assert.ok(plan.some(row => row.name === '@deepseek-ai/dsh-example'));
 });
@@ -139,7 +139,7 @@ test('release catalog distinguishes selected URLs, explicit registry pins and mi
 });
 
 test('source planning does not guess missing Release assets', { skip: !existsSync(join(root, 'private/machines/workstation/snapshot/web.package.json')) }, () => {
-  const plan = buildSourcePlan(join(root, 'private/machines/workstation/snapshot'));
+  const plan = resolveDependencyTargets(join(root, 'private/machines/workstation/snapshot')).entries;
   assert.ok(plan.some(row => row.status === 'blocked-missing-release'));
   assert.ok(plan.some(row => row.status === 'verified-release'));
   assert.ok(!JSON.stringify(plan).includes('/home/'));

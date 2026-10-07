@@ -207,15 +207,11 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
   return { globalWorkspace, profiles, entries };
 }
 
-export function buildSourcePlan(snapshotDir, installation, catalog) {
-  return resolveDependencyTargets(snapshotDir, installation, catalog).entries;
-}
-
 export function parseCommandArguments(args) {
   args = [...args];
   const command = args.shift();
-  const usage = 'Usage: dsh-config <render|check|plan|doctor|test|update> --machine <name> [--apply] [--tarball package=/absolute/file.tgz]';
-  if (!['render', 'check', 'plan', 'doctor', 'test', 'update'].includes(command)) throw new Error(usage);
+  const usage = 'Usage: dsh-config <render|check|doctor|test|update> --machine <name> [--apply] [--tarball package=/absolute/file.tgz]';
+  if (!['render', 'check', 'doctor', 'test', 'update'].includes(command)) throw new Error(usage);
   const selector = args.shift();
   const machineArgument = selector === '--machine' ? args.shift() : selector;
   if (selector === '--machine' && !/^[a-zA-Z0-9_-]+$/.test(machineArgument ?? '')) throw new Error(usage);

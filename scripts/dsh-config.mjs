@@ -34,12 +34,6 @@ try {
     const report = await doctor(machine, targets);
     console.log(JSON.stringify({ ...report, unresolvedAssets: targets.entries.filter(row => row.status.startsWith('blocked')) }, null, 2));
     if (report.blocked || targets.entries.some(row => row.status.startsWith('blocked'))) process.exitCode = 2;
-  } else {
-    const plan = deploymentTargets(readYaml(path), snapshotDir).entries;
-    const blocked = plan.filter(row => row.status.startsWith('blocked'));
-    // No private source paths or configuration values are printed.
-    console.log(JSON.stringify({ machine: label, installEnabled: false, entries: plan, blocked: blocked.length }, null, 2));
-    if (blocked.length) process.exitCode = 2;
   }
 } catch (error) {
   // Assertion details can contain full config objects; never forward them.
