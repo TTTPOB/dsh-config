@@ -158,6 +158,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   if (!needsInstall && before.blocked) return { ...preview, issues: before.issues, blocked: before.blocked, next: before.next };
   if (!needsInstall && !patchesChanged) return { ...preview, apply: true, noOp: true, activation: 'No target changes; Host activation was not checked.' };
   const installArguments = needsInstall ? globalInstallArguments(deployment) : undefined;
+  mkdirSync(join(root, 'generated'), { recursive: true, mode: 0o700 });
   const backup = mkdtempSync(join(root, 'generated', `${label}-backup-`));
   const files = [...manifests, ...patches];
   const backupFiles = [...new Set([...files.map(([path]) => path),
