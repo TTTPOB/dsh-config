@@ -167,6 +167,13 @@ export function readDependencyCatalog() {
     if (item.policy === 'release' && !item.url) assert.equal(typeof item.reason, 'string', 'Missing asset reason required');
     if (item.profiles !== undefined) assert.ok(Array.isArray(item.profiles) && item.profiles.every(p => /^[a-zA-Z0-9_-]+$/.test(p)), 'Invalid profiles');
   }
+  for (const [identity, runtimes] of Object.entries(catalog.verifiedCompatibility ?? {})) {
+    const separator = identity.lastIndexOf('@');
+    const name = identity.slice(0, separator), version = identity.slice(separator + 1);
+    assert.ok(separator > 0 && catalog.packages.some(item => item.package === name && item.version === version), 'Verified compatibility must name a managed exact package version');
+    assert.match(version, exactVersion, 'Verified package version must be exact');
+    assert.ok(Array.isArray(runtimes) && runtimes.length && runtimes.every(runtime => typeof runtime === 'string' && exactVersion.test(runtime)), 'Verified runtime versions must be exact');
+  }
   return catalog;
 }
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, statSync, readdirSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { root, readYaml, resolveDependencyTargets, parseCommandArguments, renderMachine } from '../scripts/lib.mjs';
-import { deploymentTargets, updateMachine, isolatedTest } from '../scripts/deployment.mjs';
+import { deploymentTargets, updateMachine, isolatedTest, runStep, grantVerifiedCompatibility } from '../scripts/deployment.mjs';
 
 const url = 'https://github.com/example/plugin/releases/download/v2.0.0/plugin-2.0.0.tgz';
 const catalog = { schemaVersion: 2, packages: [
@@ -43,6 +43,57 @@ function fixture() {
 }
 
 const healthy = async () => ({ issues: [], blocked: 0 });
+
+const verifiedCatalog = { ...catalog, verifiedCompatibility: { 'managed-plugin@2.0.0': ['0.1.7-rc.2'] } };
+const denied = { runtimeVersion: '0.1.7-rc.2', blocked: 1, issues: [
+  { profile: 'web', name: 'managed-plugin', version: '2.0.0', status: 'compatibility-blocked' },
+] };
+
+test('apply grants a recorded installed exact pair, rechecks doctor and then converges without more writes', async () => {
+  const { machinePath, directory, home } = fixture();
+  let accepted = false, installs = 0, grants = 0, inspections = 0;
+  const dependencies = { catalog: verifiedCatalog, runStep: () => installs++,
+    doctor: async () => { inspections++; return accepted ? healthy() : denied; },
+    grantExemption: async (profile, identity, runtime, enabled, acceptRisk) => {
+      assert.equal(profile, join(home, 'profiles/web'));
+      assert.equal(identity, 'managed-plugin@2.0.0');
+      assert.equal(runtime, '0.1.7-rc.2');
+      assert.equal(enabled, true); assert.equal(acceptRisk, true);
+      grants++; accepted = true;
+    },
+  };
+  const label = basename(directory) + '-verified';
+  await updateMachine(machinePath, label, false, dependencies);
+  assert.equal(inspections + installs + grants, 0, 'preview stays read-only');
+  const first = await updateMachine(machinePath, label, true, dependencies);
+  assert.equal(first.apply, true); assert.equal(first.granted.length, 1);
+  assert.equal(inspections, 3); assert.equal(installs, 2); assert.equal(grants, 1);
+  const mtime = statSync(join(home, 'cordis.patch.yml')).mtimeMs;
+  const second = await updateMachine(machinePath, label, true, dependencies);
+  assert.equal(second.noOp, true); assert.equal(installs, 2); assert.equal(grants, 1);
+  assert.equal(statSync(join(home, 'cordis.patch.yml')).mtimeMs, mtime);
+});
+
+test('unknown installed version, runtime or source finding cannot acquire a recorded exemption', async () => {
+  const { machine, machinePath } = fixture();
+  const targets = deploymentTargets(machine, 'unused', verifiedCatalog);
+  const grant = () => assert.fail('unverified pair was granted');
+  await assert.rejects(updateMachine(machinePath, 'test-unknown-pair', true, {
+    catalog, doctor: async () => denied, runStep: () => {}, grantExemption: grant,
+  }), /doctor blocked/);
+  const newer = { ...denied, issues: [{ ...denied.issues[0], version: '2.0.1' }] };
+  assert.deepEqual(await grantVerifiedCompatibility(machine, targets, newer, verifiedCatalog, grant), []);
+  assert.deepEqual(await grantVerifiedCompatibility(machine, targets, { ...denied, runtimeVersion: '0.1.7-rc.3' }, verifiedCatalog, grant), []);
+  assert.deepEqual(await grantVerifiedCompatibility(machine, targets, { ...denied, issues: [...denied.issues, { status: 'declared-source-mismatch' }] }, verifiedCatalog, grant), []);
+});
+
+test('installer output is already visible in the private log before the command exits unsuccessfully', () => {
+  const log = join(root, 'generated/profile-install.log');
+  const program = 'console.log("installation-progress"); const fs=require("node:fs"); if (!fs.readFileSync(process.argv[1],"utf8").includes("installation-progress")) process.exit(99); console.error("installation-failed"); process.exit(7);';
+  assert.throws(() => runStep([process.execPath, '-e', program, log], root), /profile-install, 7/);
+  assert.match(read(log), /installation-progress/);
+  assert.match(read(log), /installation-failed/);
+});
 
 test('shared selections replace duplicate versions, preserve selectors and do not activate absent exclusive plugins', () => {
   const target = resolveDependencyTargets('unused', {

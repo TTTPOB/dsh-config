@@ -75,7 +75,9 @@ Cordis／DSH 服务包核对共享身份；Schemastery 普通库允许同版本�
 
 ### 精确兼容豁免
 
-实际 override 已生效但插件被禁用时，读取 compatibility preflight 的原始原因。官方 checker 可能把 fork 的精确 peer 与官方 runtime 基线比较；确认真实配套行为后，再由用户接受精确组合的风险：
+已完成成品行为验证的精确组合记录在共用清单的 `verifiedCompatibility` 中，格式为 `package@exactVersion: [exactRuntimeVersion]`。授权 `update --apply` 时，入口先核对安装的目标版本、来源及 built entry；仅当剩余问题全部是已记录组合的兼容拒绝，才通过官方公开 API 写入对应 profile 的精确豁免，再运行 doctor 后应用配置。默认 preview 和 doctor 仍只读，未知组合或安装问题仍阻塞，不自动接受其他 fork／版本。
+
+官方 checker 可能把 fork 的精确 peer 与官方 runtime 基线比较。未记录组合须读取原始拒绝原因、完成相关行为验证，再记录已确认的精确组合；官方 CLI 仅作为外部诊断与授权出口：
 
 ```sh
 dsh plugin --profile web allow-version PACKAGE@VERSION \
@@ -94,7 +96,9 @@ node scripts/dsh-config.mjs update --machine workstation --apply
 
 入口合并受管安装目标，通过 pnpm 安装并核对解析／兼容结果，再应用配置；不启停 Host。同一目标重复 apply 会收敛到同一状态；目标声明、配置与实际解析已一致时，报告无需更新，不重复备份、安装或改写文件。
 
-需要变更时先保留本次文件备份。若包安装成功但兼容检查阻塞，保留已安装状态和备份，暂不应用配置；外部授权已验证的精确豁免后，可重试同一 apply 完成配置应用。失败时按报告的具体步骤处理。通过后仍是“已安装，待原 Host 启动验收”。
+需要变更时先保留本次文件备份。安装后若只剩清单已记录的精确兼容拒绝，一次 apply 会写入所需豁免并重新检查，无需维护脚本逐项执行 allow-version 或第二次 apply。未知组合仍保留已安装状态和备份，不应用配置。失败时按报告的具体步骤处理。通过后仍是“已安装，待原 Host 启动验收”。
+
+Apply 在 stderr 即时报告 pre-install doctor、global install、profile install、post-install doctor 与精确豁免后的 doctor。安装器 stdout/stderr 直接写入私有 `generated/global-install.log` 和 `generated/profile-install.log`，运行期间即可查看，不等命令结束。每个安装步骤沿用 600 秒上限，超时强制结束直接子进程。外部维护流程应为整次 apply 设明确边界，超时结束其独立进程组，并在 finally 恢复目标服务；不要用同步缓冲的外层调用让日志和恢复一直等待。恢复服务不等于回滚安装，失败的备份继续保留。
 
 由用户按原方式启动原 Host，核对最终组合及受影响功能。`--dump-config` 可能展开凭据，应私下检查，避免把完整输出发布到日志或对话。UI 包更新还需核对原 Host 发布的 graph、实际服务脚本和认证页面加载，再在目标浏览器／手机验收。另起测试服务器、磁盘版本或最新 manifest 都不能证明日用页面已应用新版。
 

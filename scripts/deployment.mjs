@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync, openSync, closeSync } from 'node:fs';
 import { dirname, join, isAbsolute, delimiter } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -81,6 +81,7 @@ export async function doctor(machine, targets) {
   const boot = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-app-boot')).href);
   const { Context } = await import(pathToFileURL(require.resolve('@deepseek-ai/cordis')).href);
   const { ModuleLoader } = await import(pathToFileURL(require.resolve('@deepseek-ai/cordis-plugin-loader')).href);
+  const runtimeVersion = boot.getDshRuntimeVersion();
   const loader = ModuleLoader.fromInternal();
   if (!loader) throw new Error('Installed Host module resolver is unavailable; use the supported Node/Host runtime');
   const issues = [];
@@ -117,22 +118,49 @@ export async function doctor(machine, targets) {
         }
         const manifest = json(installed.manifestPath);
         const conflict = boot.evaluatePluginCompatibility(manifest, exemptions);
-        if (conflict && !conflict.exempted) issues.push({ profile: name, name: target.name, status: 'compatibility-blocked', reason: boot.pluginCompatibilityWarning(conflict) });
+        if (conflict && !conflict.exempted) issues.push({ profile: name, name: target.name, version: installed.version, status: 'compatibility-blocked', reason: boot.pluginCompatibilityWarning(conflict) });
       }
     } finally { await ctx.fiber.dispose(); }
   }
-  return { issues, blocked: issues.length, next: issues.length ? 'Inspect the original compatibility reason; authorize only the exact supported package/runtime combination with the official dsh profile CLI, then rerun doctor.' : 'Resolution and public compatibility checks passed; no Host was started.' };
+  return { issues, runtimeVersion, blocked: issues.length, next: issues.length ? 'Inspect the original compatibility reason; update --apply can grant catalog-verified exact pairs. Unrecorded combinations require external validation and explicit authorization.' : 'Resolution and public compatibility checks passed; no Host was started.' };
 }
 
 export function runStep(argv, cwd, env = process.env) {
-  const child = spawnSync(argv[0], argv.slice(1), { cwd, env, encoding: 'utf8', timeout: 600000, maxBuffer: 8 * 1024 * 1024 });
-  // Tool output may contain private configuration. Keep it in a private step log.
-  if (child.error || child.status !== 0) {
-    const log = join(root, 'generated', 'last-step.log');
-    mkdirSync(dirname(log), { recursive: true, mode: 0o700 });
-    writeFileSync(log, (child.stdout ?? '') + (child.stderr ?? ''), { mode: 0o600 });
-    throw new Error(`Step failed (${argv[0]}, exit ${child.status ?? child.error?.code}); private log: ${log}`);
+  const kind = argv.includes('--global') ? 'global-install' : 'profile-install';
+  const log = join(root, 'generated', `${kind}.log`);
+  mkdirSync(dirname(log), { recursive: true, mode: 0o700 });
+  // File descriptors expose output immediately and do not wait on descendant pipe EOF.
+  const fd = openSync(log, 'w', 0o600);
+  console.error(`[apply] ${kind} started; private live log: ${log}`);
+  let child;
+  try {
+    child = spawnSync(argv[0], argv.slice(1), { cwd, env, stdio: ['ignore', fd, fd], timeout: 600000, killSignal: 'SIGKILL' });
+  } finally { closeSync(fd); }
+  console.error(`[apply] ${kind} finished: ${child.error?.code ?? child.status ?? child.signal}`);
+  if (child.error || child.status !== 0) throw new Error(`Step failed (${kind}, ${child.error?.code ?? child.status ?? child.signal}); private log: ${log}`);
+}
+
+export async function grantVerifiedCompatibility(machine, targets, report, catalog, grant) {
+  if (!report.blocked || !report.runtimeVersion) return [];
+  const records = catalog.verifiedCompatibility ?? {};
+  const pairs = report.issues.map(issue => ({ issue, identity: `${issue.name}@${issue.version}` }));
+  // Existing doctor findings already establish installed version, source and built entry.
+  // Do not grant anything while another installation issue or an unknown pair remains.
+  if (pairs.some(({ issue, identity }) => issue.status !== 'compatibility-blocked'
+    || !records[identity]?.includes(report.runtimeVersion)
+    || !targets.entries.some(target => target.name === issue.name && target.version === issue.version
+      && target.target && (target.scope === 'global-override' || target.profile === issue.profile)))) return [];
+  if (!grant) {
+    const require = createRequire(resolveInstalledHost(machine.deployment));
+    const boot = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-app-boot')).href);
+    grant = boot.setProfileVersionExemption;
   }
+  const granted = [];
+  for (const { issue, identity } of pairs) {
+    await grant(dirname(machine.deployment.profiles[issue.profile].packagePath), identity, report.runtimeVersion, true, true);
+    granted.push({ profile: issue.profile, packageVersion: identity, runtimeVersion: report.runtimeVersion });
+  }
+  return granted;
 }
 
 export async function updateMachine(machinePath, label, apply = false, dependencies = {}) {
@@ -161,12 +189,15 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
     [deployment.profiles.web.patchPath ?? join(dirname(deployment.profiles.web.packagePath), 'cordis.patch.yml'), rendered.web],
   ];
   const inspect = dependencies.doctor ?? doctor;
+  console.error('[apply] pre-install doctor started');
   const before = await inspect(machine, targets);
+  console.error(`[apply] pre-install doctor finished: blocked=${before.blocked}`);
   const manifestChanged = manifests.some(([path, contents]) => !existsSync(path) || !isDeepStrictEqual(readYaml(path), parseYaml(contents)));
   const patchesChanged = patches.some(([path, contents]) => !existsSync(path) || readFileSync(path, 'utf8') !== contents);
   const needsInstall = manifestChanged || before.issues.some(issue => ['missing-installed-package', 'installed-version-mismatch', 'declared-source-mismatch', 'missing-built-entry', 'invalid-built-entry'].includes(issue.status));
-  if (!needsInstall && before.blocked) return { ...preview, issues: before.issues, blocked: before.blocked, next: before.next };
-  if (!needsInstall && !patchesChanged) return { ...preview, apply: true, noOp: true, activation: 'No target changes; Host activation was not checked.' };
+  const catalog = dependencies.catalog ?? readDependencyCatalog();
+  let granted = [];
+  if (!needsInstall && !patchesChanged && !before.blocked) return { ...preview, apply: true, noOp: true, granted, activation: 'No target changes; Host activation was not checked.' };
   const installArguments = needsInstall ? globalInstallArguments(deployment) : undefined;
   mkdirSync(join(root, 'generated'), { recursive: true, mode: 0o700 });
   const backup = mkdtempSync(join(root, 'generated', `${label}-backup-`));
@@ -181,10 +212,20 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   try {
     if (needsInstall) {
       for (const [path, contents] of manifests) writeFileSync(path, contents, { mode: 0o600 });
-      execute(installArguments, dirname(deployment.globalWorkspacePath), { ...process.env, PATH: deployment.globalBinDir + delimiter + process.env.PATH });
-      for (const profile of Object.values(deployment.profiles)) execute(['pnpm', 'install', '--no-frozen-lockfile', '--ignore-workspace', '--config.auto-install-peers=false', '--config.enable-global-virtual-store=false'], dirname(profile.packagePath));
+      await execute(installArguments, dirname(deployment.globalWorkspacePath), { ...process.env, PATH: deployment.globalBinDir + delimiter + process.env.PATH });
+      for (const profile of Object.values(deployment.profiles)) await execute(['pnpm', 'install', '--no-frozen-lockfile', '--ignore-workspace', '--config.auto-install-peers=false', '--config.enable-global-virtual-store=false'], dirname(profile.packagePath));
     }
-    const report = needsInstall ? await inspect(machine, targets) : before;
+    console.error('[apply] post-install doctor started');
+    let report = needsInstall ? await inspect(machine, targets) : before;
+    console.error(`[apply] post-install doctor finished: blocked=${report.blocked}`);
+    if (report.blocked) {
+      granted = await grantVerifiedCompatibility(machine, targets, report, catalog, dependencies.grantExemption);
+      if (granted.length) {
+        console.error(`[apply] granted ${granted.length} verified exact pairs; fresh doctor started`);
+        report = await inspect(machine, targets);
+        console.error(`[apply] fresh doctor finished: blocked=${report.blocked}`);
+      }
+    }
     if (report.blocked) {
       writeFileSync(join(backup, 'doctor.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
       throw new Error('Post-install doctor blocked configuration application; inspect doctor.json in the backup and authorize the exact supported combination externally');
@@ -193,7 +234,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   } catch (error) {
     throw new Error(`${error.message}; backup retained: ${backup}. Installation may have changed; Host was not started or stopped.`);
   }
-  return { ...preview, apply: true, backup, activation: 'installed-not-activated; external Host restart and behavior verification required' };
+  return { ...preview, apply: true, backup, granted, activation: 'installed-not-activated; external Host restart and behavior verification required' };
 }
 
 export function isolatedTest(machinePath, label, tarballs = [], execute = runStep) {
