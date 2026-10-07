@@ -87,14 +87,12 @@ packages:
     scope: global-override
     policy: release
     version: 0.1.7-rc.2-fork1
-    reason: Exact current asset is absent from inspected GitHub Releases;
-      publication requires authorization.
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork13/deepseek-ai-dsh-llm-pi-ai-0.1.7-rc.2-fork1.tgz
   - package: "@deepseek-ai/dsh-mcp-client"
     scope: global-override
     policy: release
     version: 0.1.7-rc.2-fork1
-    reason: Exact current asset is absent from inspected GitHub Releases;
-      publication requires authorization.
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork13/deepseek-ai-dsh-mcp-client-0.1.7-rc.2-fork1.tgz
   - package: "@deepseek-ai/dsh-subagent"
     scope: global-override
     policy: release
@@ -104,14 +102,12 @@ packages:
     scope: global-override
     policy: release
     version: 0.1.7-rc.2-fork1
-    reason: Exact current asset is absent from inspected GitHub Releases;
-      publication requires authorization.
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork13/deepseek-ai-dsh-agent-0.1.7-rc.2-fork1.tgz
   - package: "@deepseek-ai/dsh-agent-preset-registry"
     scope: global-override
     policy: release
     version: 0.1.7-rc.2-fork1
-    reason: Exact current asset is absent from inspected GitHub Releases;
-      publication requires authorization.
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork13/deepseek-ai-dsh-agent-preset-registry-0.1.7-rc.2-fork1.tgz
   - package: dsh-relay
     scope: profile
     policy: release
