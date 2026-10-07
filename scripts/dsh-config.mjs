@@ -5,7 +5,7 @@ import { root, renderMachine, resolveMachineArgument, parseCommandArguments, com
 import { deploymentTargets, doctor, isolatedTest, updateMachine, normalizeDeployment } from './deployment.mjs';
 
 try {
-  const { command, machineArgument, apply, live, tarballs } = parseCommandArguments(process.argv.slice(2));
+  const { command, machineArgument, apply, offline, tarballs } = parseCommandArguments(process.argv.slice(2));
   const { path, label } = resolveMachineArgument(machineArgument);
   if (!existsSync(path)) throw new Error('Machine configuration not found; provide --machine with an existing private machine name or a machine YAML path');
   const snapshotDir = join(dirname(path), 'snapshot');
@@ -24,7 +24,7 @@ try {
       console.log(`${label}: static YAML checks passed; no captured baseline available`);
     }
   } else if (command === 'update') {
-    const report = await updateMachine(path, label, apply, { live });
+    const report = await updateMachine(path, label, apply, { offline });
     console.log(JSON.stringify(report, null, 2));
     if (report.blocked) process.exitCode = 2;
   } else if (command === 'test') {

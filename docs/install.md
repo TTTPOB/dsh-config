@@ -28,7 +28,7 @@ pnpm check --machine workstation
 
 ## 2. 声明本机部署位置
 
-`deployment` 可以完全省略。Doctor、`update --live` 和 `update --apply` 在执行命令的机器上解析默认位置：
+`deployment` 可以完全省略。Doctor、update 默认预览和 `update --apply` 在执行命令的机器上解析默认位置：
 
 | 字段 | 默认值 |
 |---|---|
@@ -49,7 +49,7 @@ deployment:
     headless: {}
 ```
 
-所有部署路径支持 `~/`、`$HOME`、`${HOME}`、`$DSH_HOME` 及其他已定义环境变量；未定义变量按字段和变量名报错。展开仅替换路径文本，不使用 shell/eval，不递归展开变量值。显式其他 profile 按 home 推导位置，不自动扫描 profile。无需填写 pnpm 哈希 slot。显式 workspace 的 globalDir 从该 workspace 推导，或单独覆盖，避免借用另一套本机配置。
+所有部署路径支持 `~/`、`$HOME`、`${HOME}`、`$DSH_HOME` 及其他已定义环境变量；未定义变量按字段和变量名报错。展开仅替换路径文本，不使用 shell/eval，不递归展开变量值。显式其他 profile 按 home 推导位置，不自动扫描 profile。覆盖 profile 的 `packagePath` 后，未指定的 `patchPath` 默认位于该 manifest 同目录。无需填写 pnpm 哈希 slot。显式 workspace 的 globalDir 从该 workspace 推导，或单独覆盖，避免借用另一套本机配置。
 
 全局更新后通过 pnpm 公开安装清单重新定位当前 Host，避免继续检查旧安装代际。`pnpm root -g` 的版本化全局项目目录与 `global-dir` 基目录不同。使用用户级全局 store/default cache，关闭自动安装 peers 和 global virtual store，包安装和 lockfile 由 pnpm 正规管理。
 
@@ -59,11 +59,11 @@ deployment:
 
 ```sh
 node scripts/dsh-config.mjs update --machine workstation
-node scripts/dsh-config.mjs update --machine workstation --live
+node scripts/dsh-config.mjs update --machine server --offline
 node scripts/dsh-config.mjs doctor --machine workstation
 ```
 
-默认 update 预览使用机器 installation 参数或迁移快照，报告 `input: offline`；与 render/check 一样，不发现本机部署位置、不读取本机安装。可在工作机离线预览 server 参数。`--live` 预览使用执行机器的路径默认／覆盖和实际 manifest，报告 `input: live`；apply 始终使用 live 输入。两个预览均只读且不运行 doctor 或安装器。部署目标尚未准备时，live 诊断会指出缺失字段／profile，离线预览仍可使用。
+`update --offline` 预览使用机器 installation 参数或迁移快照，报告 `input: offline`；与 render/check 一样，不发现本机部署位置、不读取本机安装。可在工作机离线预览 server 参数。默认 update 预览使用执行机器的路径默认／覆盖和实际 manifest，报告 `input: live`；apply 始终使用 live 输入，与默认预览一致；`--offline` 不可与 `--apply` 组合。两个预览均只读且不运行 doctor 或安装器。部署目标尚未准备时，live 诊断会指出缺失字段／profile，离线预览仍可使用。
 
 预览展示受管目标与阻塞。Doctor 使用安装 Host 的正式 profile resolver 和兼容检查，核对实际版本、来源与原始拒绝原因，不启动 Host、不授予豁免、不修改配置。Doctor 通过不表示运行中的旧 Host 已换版；目标来源缺资产仍须先解决。
 

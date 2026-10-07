@@ -33,6 +33,7 @@ test('explicit paths expand defined variables and additional profiles without di
   assert.equal(result.hostManifest, '/anchor/host/package.json');
   assert.equal(result.profiles.headless.packagePath, '/users/example/chosen/profiles/headless/package.json');
   assert.equal(result.profiles.web.packagePath, '/users/example/web/package.json');
+  assert.equal(result.profiles.web.patchPath, '/users/example/web/cordis.patch.yml');
   assert.equal(result.homePatchPath, '/users/example/patch.yml');
 });
 

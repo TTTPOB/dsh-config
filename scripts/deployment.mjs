@@ -137,7 +137,8 @@ export function runStep(argv, cwd, env = process.env) {
 
 export async function updateMachine(machinePath, label, apply = false, dependencies = {}) {
   const machine = readYaml(machinePath);
-  const live = apply || dependencies.live === true;
+  if (apply && dependencies.offline) throw new Error('--offline cannot be combined with --apply');
+  const live = !dependencies.offline;
   if (live) machine.deployment = normalizeDeployment(machine.deployment, dependencies.discovery);
   const targets = live
     ? deploymentTargets(machine, join(dirname(machinePath), 'snapshot'), dependencies.catalog)

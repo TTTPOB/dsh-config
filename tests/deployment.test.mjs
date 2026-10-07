@@ -91,12 +91,12 @@ test('machine deployment reads live unrelated dependencies even when stale insta
 test('preview and blocked apply cannot call installers or touch target files', async () => {
   const { machine, machinePath } = fixture();
   const before = read(machine.deployment.globalWorkspacePath);
-  const dependencies = { catalog, runStep: () => assert.fail('preview installed'), doctor: () => assert.fail('preview inspected installation') };
+  const dependencies = { catalog, offline: true, runStep: () => assert.fail('preview installed'), doctor: () => assert.fail('preview inspected installation') };
   const { apply } = parseCommandArguments(['update', '--machine', 'server']);
   const preview = await updateMachine(machinePath, 'test-preview', apply, dependencies);
   assert.equal(preview.apply, false);
   const missing = { packages: [{ ...catalog.packages[0], policy: 'release', reason: 'missing' }] };
-  await assert.rejects(updateMachine(machinePath, 'test-preview', true, { ...dependencies, catalog: missing }), /Apply blocked/);
+  await assert.rejects(updateMachine(machinePath, 'test-preview', true, { ...dependencies, offline: false, catalog: missing }), /Apply blocked/);
   assert.equal(read(machine.deployment.globalWorkspacePath), before);
 });
 
@@ -140,7 +140,10 @@ test('apply with omitted deployment discovers fixture targets and remains idempo
     },
   } };
   const label = basename(directory) + '-defaults';
-  await updateMachine(machinePath, label, true, dependencies);
+  const preview = await updateMachine(machinePath, label, false, dependencies);
+  assert.equal(calls, 0);
+  const applied = await updateMachine(machinePath, label, true, dependencies);
+  assert.deepEqual(preview.entries, applied.entries);
   const result = await updateMachine(machinePath, label, true, dependencies);
   assert.equal(result.input, 'live');
   assert.equal(result.noOp, true);
@@ -205,17 +208,18 @@ test('offline update ignores deployment paths and never invokes local discovery'
   machine.deployment = { home: '$UNDEFINED_OFFLINE_VAR', globalWorkspacePath: '/missing/local/workspace' };
   writeJson(machinePath, machine);
   const result = await updateMachine(machinePath, 'test-offline-preview', false, {
-    catalog, discovery: { query: () => assert.fail('offline queried pnpm') },
+    catalog, offline: true, discovery: { query: () => assert.fail('offline queried pnpm') },
   });
   assert.equal(result.input, 'offline');
   assert.ok(!result.entries.some(row => row.name === 'live-unrelated'));
   assert.ok(result.entries.some(row => row.name === 'declared-unrelated'));
+  await assert.rejects(updateMachine(machinePath, 'test-offline-preview', true, { catalog, offline: true }), /cannot be combined/);
 });
 
-test('explicit live preview reads targets but never invokes doctor or installation', async () => {
+test('default live preview reads targets but never invokes doctor or installation', async () => {
   const { machinePath } = fixture();
   const result = await updateMachine(machinePath, 'test-live-preview', false, {
-    catalog, live: true, doctor: () => assert.fail('live preview inspected'), runStep: () => assert.fail('live preview installed'),
+    catalog, doctor: () => assert.fail('live preview inspected'), runStep: () => assert.fail('live preview installed'),
   });
   assert.equal(result.input, 'live');
   assert.ok(result.entries.some(row => row.name === 'live-unrelated'));
@@ -225,7 +229,7 @@ test('live preview reports a missing local target with field context', async () 
   const { machine, machinePath } = fixture();
   machine.deployment.globalWorkspacePath = '/missing/deployment-target/pnpm-workspace.yaml';
   writeJson(machinePath, machine);
-  await assert.rejects(updateMachine(machinePath, 'test-missing-target', false, { catalog, live: true }), /Missing local deployment.globalWorkspacePath target/);
+  await assert.rejects(updateMachine(machinePath, 'test-missing-target', false, { catalog }), /Missing local deployment.globalWorkspacePath target/);
 });
 
 test('CLI rejects plan without a compatibility alias', () => {
@@ -235,8 +239,10 @@ test('CLI rejects plan without a compatibility alias', () => {
 test('CLI accepts apply only for update and local tarballs only for test', () => {
   assert.deepEqual(parseCommandArguments(['update', '--machine', 'server', '--apply']), { command: 'update', machineArgument: 'server', apply: true });
   assert.deepEqual(parseCommandArguments(['test', '--machine', 'server', '--tarball', 'plugin=/example/plugin.tgz']), { command: 'test', machineArgument: 'server', tarballs: ['plugin=/example/plugin.tgz'] });
-  assert.deepEqual(parseCommandArguments(['update', '--machine', 'server', '--live']), { command: 'update', machineArgument: 'server', live: true });
-  assert.throws(() => parseCommandArguments(['render', '--machine', 'server', '--live']));
+  assert.deepEqual(parseCommandArguments(['update', '--machine', 'server', '--offline']), { command: 'update', machineArgument: 'server', offline: true });
+  assert.throws(() => parseCommandArguments(['render', '--machine', 'server', '--offline']));
+  assert.throws(() => parseCommandArguments(['update', '--machine', 'server', '--offline', '--apply']), /cannot be combined/);
+  assert.throws(() => parseCommandArguments(['update', '--machine', 'server', '--live']));
   assert.throws(() => parseCommandArguments(['doctor', '--machine', 'server', '--apply']));
   assert.throws(() => parseCommandArguments(['update', '--machine', 'server', '--tarball', 'plugin=/example/plugin.tgz']));
 });

@@ -45,9 +45,9 @@ export function normalizeDeployment(input = {}, { env = process.env, userHome = 
   const profiles = {};
   for (const [name, profile] of Object.entries({ web: {}, ...input.profiles })) {
     if (!/^[a-zA-Z0-9_-]+$/.test(name)) throw new Error('Invalid deployment profile name');
-    profiles[name] = { ...profile,
-      packagePath: path(profile.packagePath ?? join(home, 'profiles', name, 'package.json'), `profiles.${name}.packagePath`),
-      patchPath: path(profile.patchPath ?? join(home, 'profiles', name, 'cordis.patch.yml'), `profiles.${name}.patchPath`) };
+    const packagePath = path(profile.packagePath ?? join(home, 'profiles', name, 'package.json'), `profiles.${name}.packagePath`);
+    profiles[name] = { ...profile, packagePath,
+      patchPath: path(profile.patchPath ?? join(dirname(packagePath), 'cordis.patch.yml'), `profiles.${name}.patchPath`) };
   }
   return { ...input, home, globalWorkspacePath, globalBinDir, globalDir,
     hostManifest: path(hostManifest, 'hostManifest'),
