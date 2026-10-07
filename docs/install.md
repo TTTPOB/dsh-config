@@ -104,6 +104,19 @@ Apply 在 stderr 即时报告 pre-install doctor、global install、profile inst
 
 两机可以分开维护；先验证本机，再让服务器选择同一稳定提交和它自己的参数。远端执行 update 直接消费 Release URL，不通过 SCP tarball 维持长期依赖。只停止目标 DSH 服务，避免 `pkill node` 影响其他用户服务。
 
+### 客户端更新链与热加载边界
+
+以下边界决定「装了」和「页面真的用上了」之间的距离。
+
+- **配置热加载 ≠ Node 模块重新导入 ≠ 客户端资源换版。** Profile patch 可触发 fiber 撤销与重挂，但不保证清除 Node 解析、模块或 ClientModules 来源缓存。首次新增插件可热生效，不能据此推断已有包升级也可热生效。
+- **已有 bundle 升级按正式管理器的 `restart-required` 处理。** 依赖安装、配置中的新路径、Host 路由重新出现，都不能证明客户端已升级。绝对构建入口在 metadata 中合法，也不是生产热升级保证；不靠反复改名、私有清缓存或猴补绕过运行代际。未激活时明确报告“已安装、未激活”，需要重启则按当次授权另行安排运维切换。
+- **客户端有独立的生产更新链：** Host ClientModules 发布实际 graph/bundle，`/plugins/events` 的 graph/rebuilt 通知浏览器执行 entries.sync/reload。源码自动重建需确认同一 checkout 的 `dev:web` watcher；已构建产物的生产通知不等于必须开开发服务器。Web shell/普通包修改仍需构建对应产物并刷新原 GUI，另起服务器不会更新原页面。
+- **更新验收先查服务端实物，再查页面。** 读取公开 SSE 首个完整 graph 后关闭连接，定位目标插件广告的 revision/脚本 URL，对照实际服务脚本与目标包的构建入口，再核对已认证 boot/页面加载结果。combo 响应带分隔符与 source-map 尾缀，比较完整可执行内容时要区分这些包装；revision 基于文件 metadata，重新安装可变，不硬编码某个 hash 为永久版本号。磁盘版本、manifest、图标、登录 HTML、独立 link 实验或新进程烟测均不能替代日用客户端验收。
+- **公开版本状态有边界：** `ctx.modules.manifest` 是最新解析的 Host graph，不是已成功应用版本；`entries.state` 只公开 syncing/failures，成功 revision 表是私有实现。不得把 SSE 首帧或当前 manifest 伪装成页面已应用版本，也不得读取／包装私有表来补接口。精确更新横幅需公开 applied/settled 契约；现有失败状态可用于诚实的手动重载恢复提示。
+- **PWA 更新提示不是 Host 热升级。** 当前安装前端／mobile 未实现 SW waiting 更新流程；SW skipWaiting／controllerchange 只作用于浏览器 Service Worker。提示按钮重载页面，不重启服务器；仅服务器实际发布了新资源，刷新才可能取得新版。不要为更新提示缓存私有会话／API，也不要重复实现现有模块替换控制器。
+
+本节边界来自一次针对特定 DSH 版本的实测。出现「已安装但未激活」时的各层调用链和完整反例见[更新链调查](../../artifacts/mobile-workbench-3.0.3-fork4/UPDATE-INVESTIGATION.md)；不能把其中的内部行为推广为永久契约，升级 DSH 后需重新核对。
+
 ## 5. 首次迁移与恢复
 
 旧配置的共用行迁移可使用[配置迁移脚本](../../deepseek-harness/scripts/upgrade-daily-driver.mjs)：默认预览，`--apply` 只迁移配置与备份，`--rollback` 只恢复该次配置；日常包更新使用本仓库 update。旧 settings 的不支持项应先处理，不能静默丢弃。
