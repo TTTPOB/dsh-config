@@ -89,6 +89,8 @@ node scripts/dsh-config.mjs test --machine workstation \
 
 源码与成品通过后，原子提交并审查公开内容。只构建并发布受影响包，不覆盖既有 tag 或资产。
 
-发布分两条轨道。**核心 fork 子包**（`@deepseek-ai/dsh-*` 的 fork）在 `deepseek-harness` 内以 `daily-driver-v<上游版本>-forkN` tag 发布，由[DSH Release](../../deepseek-harness/.github/workflows/daily-driver-release.yml) 承担，触发条件是 `push: tags: daily-driver-v*-fork*`，并由[源码验证](../../deepseek-harness/.github/workflows/daily-driver-verify.yml)校验；**树外个人插件**分别在自身仓库用自己的 tag 与 Release workflow 发布，不经过 daily-driver。经单独授权才复用这些流程。
+发布分两条轨道。**核心 fork 子包**（`@deepseek-ai/dsh-*` 的 fork）在 `deepseek-harness` 内以 `daily-driver-v<上游版本>-forkN` tag 发布，由[DSH Release](../../deepseek-harness/.github/workflows/daily-driver-release.yml) 承担，触发条件是 `push: tags: daily-driver-v*-fork*`，并由[源码验证](../../deepseek-harness/.github/workflows/daily-driver-verify.yml)校验；**树外个人插件**分别在自身仓库用自己的 tag 与 Release workflow 发布，不经过 daily-driver。核心 fork 子包版本统一为 `<上游版本>-forkN`，同一上游版本每次修订递增 `N`。经单独授权才复用这些流程。
+
+只有树外插件（由 patch 或 bundle 加载）才产生可发布的版本化产物。Dynamic Cordis plugin 只适合当前进程中的临时实验——它不修改源码或 profile，重启即消失，因此没有可发布的 tarball、tag 或 Release；需要长期使用的能力必须先做成树外插件。
 
 将发布的精确 URL 写回依赖目标，运行两机 render／check／update 预览。测试完成只清理本次拥有的测试目录和进程；日用安装验收前保留功能 worktree 与必要回滚资料。维护报告分别写明源码测试、成品解析、Loader／行为验收与日用激活状态。
