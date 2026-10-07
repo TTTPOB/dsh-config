@@ -14,11 +14,4 @@ jobs:
         with:
           node-version: 24
       - run: pnpm install --frozen-lockfile --ignore-workspace
-      - name: Install pinned chezmoi for rendering tests
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p private/tools
-          gh release download v2.73.0 --repo twpayne/chezmoi --pattern chezmoi_2.73.0_linux_amd64.tar.gz --dir private/tools
-          tar -xzf private/tools/chezmoi_2.73.0_linux_amd64.tar.gz -C private/tools chezmoi
       - run: pnpm test

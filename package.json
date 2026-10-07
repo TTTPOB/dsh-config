@@ -14,5 +14,8 @@
   },
   "dependencies": {
     "yaml": "2.8.1"
+  },
+  "devDependencies": {
+    "nunjucks": "3.2.4"
   }
 }

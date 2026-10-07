@@ -1,4 +1,3 @@
-# chezmoi:template:left-delimiter=[[ right-delimiter=]]
 - id: web
   config:
     searchProvider: deepseek-official
@@ -32,7 +31,7 @@
     selectedDefault: standard-ptc
 - id: agent-default-model
   config:
-    provider: [[ .effective.defaultModel.provider | quote ]]
-    model: [[ .effective.defaultModel.model | quote ]]
-    reasoningEffort: [[ .effective.defaultModel.reasoningEffort | quote ]]
-[[ .machine.webPrivate ]]
+    provider: [[ effective.defaultModel.provider | quote ]]
+    model: [[ effective.defaultModel.model | quote ]]
+    reasoningEffort: [[ effective.defaultModel.reasoningEffort | quote ]]
+[[ machine.webPrivate ]]

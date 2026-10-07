@@ -4,7 +4,7 @@
 
 ## 1. 准备目标
 
-使用 Node.js 24、pnpm 11.24.0 与 chezmoi。选择已验证的 dsh-config Git 提交，安装仓库依赖：
+使用 Node.js 24 与 pnpm 11.24.0。选择已验证的 dsh-config Git 提交，完整安装仓库依赖（包括 Nunjucks 开发依赖）：
 
 ```sh
 pnpm install --frozen-lockfile --ignore-workspace

@@ -4,7 +4,7 @@
 
 ## 从这里开始
 
-需要 Node.js 24、pnpm 11.24.0 和 chezmoi；模板使用 chezmoi 2.73.0 验证。
+需要 Node.js 24 与 pnpm 11.24.0。Nunjucks 作为本仓库的开发工具列在 `devDependencies`；使用包含开发依赖的完整安装，不使用 `--prod`。
 
 ```sh
 pnpm install --frozen-lockfile --ignore-workspace
@@ -31,7 +31,7 @@ node scripts/dsh-config.mjs update --machine workstation
 |---|---|
 | [shared/defaults.yaml](shared/defaults.yaml) | 共用默认配置 |
 | [shared/dependencies.yaml](shared/dependencies.yaml) | 唯一选定版本、来源策略、安装归属和缺资产原因 |
-| `templates/` | home/Web patch 与安装目标模板 |
+| `templates/` | home/Web patch 文本模板；安装声明由脚本直接序列化 |
 | `private/machines/<name>/machine.yaml` | 各机私有差异与部署位置 |
 | `private/machines/<name>/snapshot/` | 首次迁移配置与依赖基线 |
 | `generated/` | 渲染、隔离测试与维护暂存 |
@@ -58,7 +58,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 ## 表达式与凭据
 
-chezmoi 使用 `[[ ... ]]`；DSH 的 `{{cwd}}`、`{{model}}` 与字面 `!!js` 保留到输出，由 Host 加载时解释。生成器不读取凭据文件，也不求值表达式。API key、认证文件和凭据状态留在各机原位置；已有参数可能含内联认证值，因此私有输入与输出均不进入 Git。
+Nunjucks 使用 `[[ ... ]]` 插值和 `[% ... %]` 控制块；关闭 HTML 转义，缺失插值报错。DSH 的 `{{cwd}}`、`{{model}}` 与字面 `!!js` 保留到输出，由 Host 加载时解释。生成器不读取凭据文件，也不求值表达式。API key、认证文件和凭据状态留在各机原位置；已有参数可能含内联认证值，因此私有输入与输出均不进入 Git。
 
 ## 提交与交付
 
@@ -66,4 +66,4 @@ CI 使用匿名示例；真实双机比对在持有私有参数的机器运行�
 
 源码仓库拥有功能、构建、成品 smoke 和不可变 Release workflow；本仓库维护个人两机安装与测试指南。发布、真实安装与 Host 切换分别授权。update 默认预览，只有显式 `--apply` 才执行变更，不启停 Host。
 
-参考：[chezmoi 多机差异](https://www.chezmoi.io/user-guide/manage-machine-to-machine-differences/) · [模板分隔符](https://www.chezmoi.io/reference/templates/directives/)。
+参考：[Nunjucks 模板语法](https://mozilla.github.io/nunjucks/templating.html)。
