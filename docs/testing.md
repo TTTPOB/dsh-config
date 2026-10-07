@@ -32,6 +32,7 @@ node scripts/daily-driver-source.mjs build packages/GROUP/PACKAGE
 
 | 改动范围 | 复用入口 | 验收重点 |
 |---|---|---|
+| Agent／preset registry／Pi adapter／MCP client | [核心四包 smoke](../../deepseek-harness/scripts/smoke-core-packages-fork13.mjs) | 官方 CLI 安装副本、Host peers、打包 Config、awaited setup／卸载与 lazy preset；不安装个人插件、不启动 Host |
 | query／SQLite 与 session-tools 配套 | [fork12 smoke](../../deepseek-harness/scripts/smoke-session-query-fork12.mjs) | query fork2、SQLite fork5、沿用 JSONL fork3；传入插件成品时验证真实工具调用 |
 | JSONL／SQLite 固定旧组合 | [session-index smoke](../../deepseek-harness/scripts/smoke-session-index-fork4.mjs) | 指定版本的解析、共享身份、搜索和 closing tail；不启动 Host |
 | Access、UI settings、plugin manager、terminal | [Access/UI smoke](../../deepseek-harness/scripts/smoke-access-navigation-fork6.mjs) | 配套成品、兼容性、官方 CLI 冷启动、认证 graph 与实际服务脚本 |

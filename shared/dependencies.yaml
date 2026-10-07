@@ -75,8 +75,7 @@ packages:
     scope: profile
     policy: release
     version: 0.2.0
-    reason: Exact current asset is absent from inspected GitHub Releases;
-      publication requires authorization.
+    url: https://github.com/TTTPOB/dsh-workspace-envrc/releases/download/v0.2.0/dsh-workspace-envrc-0.2.0.tgz
   - package: dsh-workspace-overlay
     scope: profile
     policy: release

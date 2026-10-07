@@ -148,9 +148,15 @@ test('release catalog distinguishes selected URLs, explicit registry pins and mi
   assert.ok(!readFileSync(join(root, 'shared/dependencies.yaml'), 'utf8').includes('file:'));
 });
 
-test('source planning does not guess missing Release assets', { skip: !existsSync(join(root, 'private/machines/workstation/snapshot/web.package.json')) }, () => {
-  const plan = resolveDependencyTargets(join(root, 'private/machines/workstation/snapshot')).entries;
-  assert.ok(plan.some(row => row.status === 'blocked-missing-release'));
-  assert.ok(plan.some(row => row.status === 'verified-release'));
-  assert.ok(!JSON.stringify(plan).includes('/home/'));
+test('source planning does not guess missing Release assets', () => {
+  const catalog = { schemaVersion: 2, packages: [
+    { package: 'unpublished-plugin', scope: 'profile', policy: 'release', version: '1.0.0', reason: 'Not published' },
+    { package: 'published-plugin', scope: 'profile', policy: 'release', version: '1.0.0', url: 'https://github.com/example/plugin/releases/download/v1.0.0/plugin-1.0.0.tgz' },
+  ] };
+  const targets = resolveDependencyTargets('unused-snapshot-directory', {
+    webPackage: { dependencies: { 'unpublished-plugin': 'file:/private/unpublished.tgz', 'published-plugin': 'file:/private/published.tgz' } },
+  }, catalog);
+  assert.ok(targets.entries.some(row => row.status === 'blocked-missing-release'));
+  assert.ok(targets.entries.some(row => row.status === 'verified-release'));
+  assert.ok(!JSON.stringify(targets.entries).includes('/private/'));
 });

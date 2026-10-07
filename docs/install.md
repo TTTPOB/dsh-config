@@ -14,7 +14,7 @@ pnpm check --machine workstation
 
 另一台机器使用自己的 `--machine server` 参数。通过私有通道保存各机 `private/machines/<name>/machine.yaml`；保留各机 MCP、relay、模型、认证引用、浏览器路径和专属插件。服务器不因共用配置更新而增加工作机的逆向 preset、session-tools 或 mobile。不要同步 credentials、sessions、storages、数据库或附件。
 
-目标版本和来源由 [shared/dependencies.yaml](../shared/dependencies.yaml) 选定：
+目标版本和来源由 [shared/dependencies.yaml](../shared/dependencies.yaml) 选定。按包名、包版本和实际资产 URL 核对；Release 的 fork 号表示发布批次，不用于推断包的 fork 号：
 
 | 包类型 | 安装方式 | 正式来源 |
 |---|---|---|
