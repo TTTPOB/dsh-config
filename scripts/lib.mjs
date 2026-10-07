@@ -1,4 +1,5 @@
-import { readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve, join, basename, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -84,61 +85,65 @@ export function canonicalPatch(text) {
   return stable(validatePatch(text).sort((a, b) => a.entry.id.localeCompare(b.entry.id)));
 }
 
-export function renderMachine(machinePath, label, catalog, { stage = true } = {}) {
+export function renderMachine(machinePath, label, catalog, { stage = true, generatedDir } = {}) {
   assert.match(label, /^[a-zA-Z0-9_-]+$/, 'Invalid output label');
-  const machine = validateMachine(readYaml(machinePath));
-  const targets = resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog);
-  machine.installation = { globalWorkspace: targets.globalWorkspace, webPackage: targets.profiles.web };
-  const output = join(root, 'generated', label);
-  const shared = readYaml(join(root, 'shared/defaults.yaml'));
-  const defaultModel = machine.overrides.defaultModel ?? shared.defaults.model;
-  for (const key of ['provider', 'model', 'reasoningEffort']) {
-    assert.equal(typeof defaultModel[key], 'string', `Missing model field: ${key}`);
-  }
-  const templateData = { shared, machine, effective: { defaultModel } };
-  const data = JSON.stringify({ data: templateData });
-  const dataPath = join(output, 'chezmoi.json');
-  if (stage) {
-    mkdirSync(output, { recursive: true, mode: 0o700 });
-    writeFileSync(dataPath, data, { mode: 0o600 });
-  }
-  const privateTools = join(root, 'private/tools/chezmoi');
-  const binary = process.env.CHEZMOI_BIN || (existsSync(privateTools) ? privateTools : 'chezmoi');
-  const rendered = {};
-  const outputs = [
-    { key: 'home', file: 'home.patch.yml', patch: true },
-    { key: 'web', file: 'web.patch.yml', patch: true },
-  ];
-  if (machine.installation) outputs.push(
-    { key: 'globalWorkspace', file: 'global-workspace.yaml', patch: false },
-    { key: 'webPackage', file: 'web.package.json', patch: false },
-  );
-  // Validate all staged files before writing them.
-  for (const { key, file, patch } of outputs) {
-    const child = spawnSync(binary, [
-      ...(stage ? ['--config', dataPath, '--config-format', 'json']
-        : ['--config', '/dev/null', '--config-format', 'yaml', '--override-data', JSON.stringify(templateData)]),
-      '--source', join(root, 'templates'), '--destination', output,
-      '--cache', join(root, 'private/chezmoi-cache'),
-      '--persistent-state', join(root, 'private/chezmoi-state.boltdb'),
-      'execute-template', '--left-delimiter', '[[', '--right-delimiter', ']]',
-      '--file', join(root, `templates/${file}.tmpl`),
-    ], { encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024 });
-    if (child.error || child.status !== 0) {
-      // Do not forward template data or subprocess stderr into logs.
-      throw new Error(`chezmoi failed for ${file}; check tool installation and template syntax`);
+  const temporary = !stage ? mkdtempSync(join(tmpdir(), 'dsh-render-check-')) : undefined;
+  if (temporary) generatedDir = temporary;
+  try {
+    const machine = validateMachine(readYaml(machinePath));
+    const targets = resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog);
+    machine.installation = { globalWorkspace: targets.globalWorkspace, webPackage: targets.profiles.web };
+    const output = join(generatedDir ?? join(root, 'generated'), label);
+    const shared = readYaml(join(root, 'shared/defaults.yaml'));
+    const defaultModel = machine.overrides.defaultModel ?? shared.defaults.model;
+    for (const key of ['provider', 'model', 'reasoningEffort']) {
+      assert.equal(typeof defaultModel[key], 'string', `Missing model field: ${key}`);
     }
-    if (patch) validatePatch(child.stdout);
-    else {
-      const value = parseYaml(child.stdout);
-      assert.ok(value && typeof value === 'object' && !Array.isArray(value), `Missing installation object: ${key}`);
+    const templateData = { shared, machine, effective: { defaultModel } };
+    const data = JSON.stringify({ data: templateData });
+    const dataPath = join(output, 'chezmoi.json');
+    if (stage) {
+      mkdirSync(output, { recursive: true, mode: 0o700 });
+      writeFileSync(dataPath, data, { mode: 0o600 });
     }
-    rendered[key] = child.stdout;
-  }
-  if (stage) {
-    for (const { key, file } of outputs) writeFileSync(join(output, file), rendered[key], { mode: 0o600 });
-  }
-  return { output, rendered };
+    const privateTools = join(root, 'private/tools/chezmoi');
+    const binary = process.env.CHEZMOI_BIN || (existsSync(privateTools) ? privateTools : 'chezmoi');
+    const rendered = {};
+    const outputs = [
+      { key: 'home', file: 'home.patch.yml', patch: true },
+      { key: 'web', file: 'web.patch.yml', patch: true },
+    ];
+    if (machine.installation) outputs.push(
+      { key: 'globalWorkspace', file: 'global-workspace.yaml', patch: false },
+      { key: 'webPackage', file: 'web.package.json', patch: false },
+    );
+    // Validate all staged files before writing them.
+    for (const { key, file, patch } of outputs) {
+      const child = spawnSync(binary, [
+        ...(stage ? ['--config', dataPath, '--config-format', 'json']
+          : ['--config', '/dev/null', '--config-format', 'yaml', '--override-data', JSON.stringify(templateData)]),
+        '--source', join(root, 'templates'), '--destination', output,
+        '--cache', generatedDir ? join(output, 'chezmoi-cache') : join(root, 'private/chezmoi-cache'),
+        '--persistent-state', generatedDir ? join(output, 'chezmoi-state.boltdb') : join(root, 'private/chezmoi-state.boltdb'),
+        'execute-template', '--left-delimiter', '[[', '--right-delimiter', ']]',
+        '--file', join(root, `templates/${file}.tmpl`),
+      ], { encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024 });
+      if (child.error || child.status !== 0) {
+        // Do not forward template data or subprocess stderr into logs.
+        throw new Error(`chezmoi failed for ${file}; check tool installation and template syntax`);
+      }
+      if (patch) validatePatch(child.stdout);
+      else {
+        const value = parseYaml(child.stdout);
+        assert.ok(value && typeof value === 'object' && !Array.isArray(value), `Missing installation object: ${key}`);
+      }
+      rendered[key] = child.stdout;
+    }
+    if (stage) {
+      for (const { key, file } of outputs) writeFileSync(join(output, file), rendered[key], { mode: 0o600 });
+    }
+    return { output, rendered };
+  } finally { if (temporary) rmSync(temporary, { recursive: true, force: true }); }
 }
 
 export function compareSnapshot(rendered, snapshotDir) {

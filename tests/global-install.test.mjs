@@ -1,15 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, renameSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { root, readYaml } from '../scripts/lib.mjs';
+import { readYaml } from '../scripts/lib.mjs';
 import { globalInstallArguments, resolveInstalledHost, doctor } from '../scripts/deployment.mjs';
 
 // Local test tarballs are consumed only by this independent pnpm global root.
-test('pnpm 11 global add consumes the selected workspace and rediscovery follows the current slot', async () => {
-  const directory = mkdtempSync(join(root, 'generated', 'pnpm-global-test-'));
+test('pnpm 11 global add consumes the selected workspace and rediscovery follows the current slot', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-pnpm-global-test-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
   const globalDir = join(directory, 'global');
   const bin = join(directory, 'bin');
   const globalRoot = join(globalDir, 'v11');

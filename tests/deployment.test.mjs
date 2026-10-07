@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, statSync, readdirSync, existsSync } from 'node:fs';
-import { join, basename } from 'node:path';
-import { root, readYaml, resolveDependencyTargets, parseCommandArguments, renderMachine } from '../scripts/lib.mjs';
-import { deploymentTargets, updateMachine, isolatedTest, runStep, grantVerifiedCompatibility } from '../scripts/deployment.mjs';
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, statSync, readdirSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, basename, dirname } from 'node:path';
+import { root, readYaml, resolveDependencyTargets, parseCommandArguments, renderMachine as render } from '../scripts/lib.mjs';
+import { deploymentTargets, updateMachine as update, isolatedTest, runStep, grantVerifiedCompatibility } from '../scripts/deployment.mjs';
 
 const url = 'https://github.com/example/plugin/releases/download/v2.0.0/plugin-2.0.0.tgz';
 const catalog = { schemaVersion: 2, packages: [
@@ -14,9 +15,17 @@ const catalog = { schemaVersion: 2, packages: [
 const read = path => readFileSync(path, 'utf8');
 const writeJson = (path, value) => writeFileSync(path, JSON.stringify(value, null, 2) + '\n');
 
-function fixture() {
-  mkdirSync(join(root, 'generated'), { recursive: true });
-  const directory = mkdtempSync(join(root, 'generated', 'deployment-test-'));
+const updateMachine = (path, label, apply, options = {}) => update(path, label, apply, { ...options, generatedDir: join(dirname(path), 'generated') });
+const renderMachine = (path, label, catalog) => render(path, label, catalog, { generatedDir: join(dirname(path), 'generated') });
+
+function temporaryDirectory(t) {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-deployment-test-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  return directory;
+}
+
+function fixture(t) {
+  const directory = temporaryDirectory(t);
   const globalDirectory = join(directory, 'installation');
   const home = join(directory, 'home');
   const profileDirectory = join(home, 'profiles/web');
@@ -49,8 +58,8 @@ const denied = { runtimeVersion: '0.1.7-rc.2', blocked: 1, issues: [
   { profile: 'web', name: 'managed-plugin', version: '2.0.0', status: 'compatibility-blocked' },
 ] };
 
-test('apply grants a recorded installed exact pair, rechecks doctor and then converges without more writes', async () => {
-  const { machinePath, directory, home } = fixture();
+test('apply grants a recorded installed exact pair, rechecks doctor and then converges without more writes', async t => {
+  const { machinePath, directory, home } = fixture(t);
   let accepted = false, installs = 0, grants = 0, inspections = 0;
   const dependencies = { catalog: verifiedCatalog, runStep: () => installs++,
     doctor: async () => { inspections++; return accepted ? healthy() : denied; },
@@ -74,8 +83,8 @@ test('apply grants a recorded installed exact pair, rechecks doctor and then con
   assert.equal(statSync(join(home, 'cordis.patch.yml')).mtimeMs, mtime);
 });
 
-test('unknown installed version, runtime or source finding cannot acquire a recorded exemption', async () => {
-  const { machine, machinePath } = fixture();
+test('unknown installed version, runtime or source finding cannot acquire a recorded exemption', async t => {
+  const { machine, machinePath } = fixture(t);
   const targets = deploymentTargets(machine, 'unused', verifiedCatalog);
   const grant = () => assert.fail('unverified pair was granted');
   await assert.rejects(updateMachine(machinePath, 'test-unknown-pair', true, {
@@ -87,10 +96,11 @@ test('unknown installed version, runtime or source finding cannot acquire a reco
   assert.deepEqual(await grantVerifiedCompatibility(machine, targets, { ...denied, issues: [...denied.issues, { status: 'declared-source-mismatch' }] }, verifiedCatalog, grant), []);
 });
 
-test('installer output is already visible in the private log before the command exits unsuccessfully', () => {
-  const log = join(root, 'generated/profile-install.log');
+test('installer output is already visible in the private log before the command exits unsuccessfully', t => {
+  const directory = temporaryDirectory(t);
+  const log = join(directory, 'profile-install.log');
   const program = 'console.log("installation-progress"); const fs=require("node:fs"); if (!fs.readFileSync(process.argv[1],"utf8").includes("installation-progress")) process.exit(99); console.error("installation-failed"); process.exit(7);';
-  assert.throws(() => runStep([process.execPath, '-e', program, log], root), /profile-install, 7/);
+  assert.throws(() => runStep([process.execPath, '-e', program, log], directory, process.env, { logDir: directory }), /profile-install, 7/);
   assert.match(read(log), /installation-progress/);
   assert.match(read(log), /installation-failed/);
 });
@@ -130,8 +140,8 @@ test('explicit consuming profiles share managed versions without installing abse
   assert.equal(restricted.profiles.headless.dependencies['managed-plugin'], 'file:other.tgz');
 });
 
-test('missing assets remain visible blockers without a file fallback and patch rendering still succeeds', () => {
-  const { machine, machinePath } = fixture();
+test('missing assets remain visible blockers without a file fallback and patch rendering still succeeds', t => {
+  const { machine, machinePath } = fixture(t);
   const missing = { schemaVersion: 2, packages: [{ ...catalog.packages[1], url: undefined, reason: 'not published' }] };
   const target = deploymentTargets(machine, 'unused', missing);
   assert.equal(target.entries.find(row => row.name === 'managed-plugin').status, 'blocked-missing-release');
@@ -140,15 +150,15 @@ test('missing assets remain visible blockers without a file fallback and patch r
   assert.ok(rendered.home.includes('!!js'));
 });
 
-test('machine deployment reads live unrelated dependencies even when stale installation inputs are present', () => {
-  const { machine } = fixture();
+test('machine deployment reads live unrelated dependencies even when stale installation inputs are present', t => {
+  const { machine } = fixture(t);
   const targets = deploymentTargets(machine, 'unused', catalog);
   assert.equal(targets.globalWorkspace.overrides['live-unrelated'], '4.0.0');
   assert.equal(targets.profiles.web.dependencies['live-profile-plugin'], '4.0.0');
 });
 
-test('preview and blocked apply cannot call installers or touch target files', async () => {
-  const { machine, machinePath } = fixture();
+test('preview and blocked apply cannot call installers or touch target files', async t => {
+  const { machine, machinePath } = fixture(t);
   const before = read(machine.deployment.globalWorkspacePath);
   const dependencies = { catalog, offline: true, runStep: () => assert.fail('preview installed'), doctor: () => assert.fail('preview inspected installation') };
   const { apply } = parseCommandArguments(['update', '--machine', 'server']);
@@ -159,8 +169,8 @@ test('preview and blocked apply cannot call installers or touch target files', a
   assert.equal(read(machine.deployment.globalWorkspacePath), before);
 });
 
-test('apply backs up manifests and lockfiles; a second aligned apply does no installation or target write', async () => {
-  const { machine, machinePath, home, directory } = fixture();
+test('apply backs up manifests and lockfiles; a second aligned apply does no installation or target write', async t => {
+  const { machine, machinePath, home, directory } = fixture(t);
   const label = basename(directory) + '-render';
   const lock = join(home, 'profiles/web/pnpm-lock.yaml');
   writeFileSync(lock, 'original-lock\n');
@@ -173,19 +183,19 @@ test('apply backs up manifests and lockfiles; a second aligned apply does no ins
   assert.equal(read(join(first.backup, String(backupPaths.indexOf(lock)))), 'original-lock\n');
   const patch = join(home, 'cordis.patch.yml');
   const mtime = statSync(patch).mtimeMs;
-  const backups = readdirSync(join(root, 'generated')).filter(name => name.startsWith(label + '-backup-')).length;
+  const backups = readdirSync(join(directory, 'generated')).filter(name => name.startsWith(label + '-backup-')).length;
   const second = await updateMachine(machinePath, label, true, dependencies);
   assert.equal(second.noOp, true);
-  assert.ok(!existsSync(join(root, 'generated', label)), 'aligned apply does not create staging files');
+  assert.ok(!existsSync(join(directory, 'generated', label)), 'aligned apply does not create staging files');
   assert.equal(calls.length, 2);
   assert.equal(statSync(patch).mtimeMs, mtime);
-  assert.equal(readdirSync(join(root, 'generated')).filter(name => name.startsWith(label + '-backup-')).length, backups);
+  assert.equal(readdirSync(join(directory, 'generated')).filter(name => name.startsWith(label + '-backup-')).length, backups);
   assert.equal(readYaml(machine.deployment.globalWorkspacePath).overrides['live-unrelated'], '4.0.0');
   assert.equal(readYaml(machine.deployment.profiles.web.packagePath).dependencies['live-profile-plugin'], '4.0.0');
 });
 
-test('apply with omitted deployment discovers fixture targets and remains idempotent', async () => {
-  const { machine, machinePath, home, directory } = fixture();
+test('apply with omitted deployment discovers fixture targets and remains idempotent', async t => {
+  const { machine, machinePath, home, directory } = fixture(t);
   const paths = machine.deployment;
   delete machine.deployment;
   writeJson(machinePath, machine);
@@ -209,8 +219,8 @@ test('apply with omitted deployment discovers fixture targets and remains idempo
   assert.equal(calls, 2);
 });
 
-test('matching manifests do not conceal missing actual packages', async () => {
-  const { machinePath } = fixture();
+test('matching manifests do not conceal missing actual packages', async t => {
+  const { machinePath } = fixture(t);
   let installs = 0;
   await updateMachine(machinePath, 'test-missing-actual', true, { catalog, doctor: healthy, runStep: () => installs++ });
   let inspections = 0;
@@ -223,8 +233,8 @@ test('matching manifests do not conceal missing actual packages', async () => {
   assert.equal(report.noOp, undefined);
 });
 
-test('post-install compatibility denial retains backups and untouched patches; authorized retry only applies configuration', async () => {
-  const { machinePath, home, machine } = fixture();
+test('post-install compatibility denial retains backups and untouched patches; authorized retry only applies configuration', async t => {
+  const { machinePath, home, machine } = fixture(t);
   const patch = join(home, 'cordis.patch.yml');
   let installs = 0;
   await assert.rejects(updateMachine(machinePath, 'test-retry', true, { catalog,
@@ -238,8 +248,8 @@ test('post-install compatibility denial retains backups and untouched patches; a
   assert.equal(readYaml(machine.deployment.profiles.web.packagePath).dependencies['live-profile-plugin'], '4.0.0');
 });
 
-test('isolated entry copies local tarballs and passes exact argv to an existing smoke without mutating formal input', () => {
-  const directory = mkdtempSync(join(root, 'generated', 'smoke-entry-test-'));
+test('isolated entry copies local tarballs and passes exact argv to an existing smoke without mutating formal input', t => {
+  const directory = temporaryDirectory(t);
   const machine = readYaml(join(root, 'examples/server-machine.yaml'));
   machine.installation = { webPackage: { private: true, dependencies: { 'dsh-session-tools': 'file:old.tgz' } } };
   machine.deployment = { smoke: { ownsInstallation: true, cwd: directory, argv: [process.execPath, 'existing-smoke.mjs', '{tarball:dsh-session-tools}'] } };
@@ -256,14 +266,27 @@ test('isolated entry copies local tarballs and passes exact argv to an existing 
     assert.ok(env.DSH_HOME.startsWith(env.DSH_CONFIG_TEST_ROOT));
     assert.equal(read(join(env.DSH_HOME, 'cordis.patch.yml')), '[]\n');
     assert.ok(readYaml(join(env.DSH_HOME, 'profiles/web/package.json')).dependencies['dsh-session-tools'].startsWith('file:'));
-  });
+  }, { generatedDir: join(directory, 'generated') });
+  assert.equal(result.cleaned, true);
+  assert.deepEqual(readdirSync(join(directory, 'generated')), []);
+  assert.throws(() => isolatedTest(machinePath, 'test-smoke-failure', [`dsh-session-tools=${tarball}`], () => { throw new Error('controlled smoke failure'); }, { generatedDir: join(directory, 'generated') }), /controlled smoke failure/);
+  assert.deepEqual(readdirSync(join(directory, 'generated')), []);
+  machine.deployment.smoke.argv = [process.execPath, '-e', 'console.log("controlled smoke")'];
+  writeJson(machinePath, machine);
+  assert.equal(isolatedTest(machinePath, 'test-smoke-log', [], undefined, { generatedDir: join(directory, 'generated') }).cleaned, true);
+  assert.deepEqual(readdirSync(join(directory, 'generated')), []);
+  machine.deployment.smoke.argv = [process.execPath, '-e', 'process.exit(7)'];
+  writeJson(machinePath, machine);
+  assert.throws(() => isolatedTest(machinePath, 'test-smoke-log-failure', [], undefined, { generatedDir: join(directory, 'generated') }), /profile-install, 7.*cleaned/);
+  assert.deepEqual(readdirSync(join(directory, 'generated')), []);
+  writeFileSync(machinePath, before);
   assert.equal(result.smokeOwnsInstallation, true);
   assert.equal(result.renderedConfigurationVerified, false);
   assert.equal(read(machinePath), before);
 });
 
-test('offline update ignores deployment paths and never invokes local discovery', async () => {
-  const { machine, machinePath } = fixture();
+test('offline update ignores deployment paths and never invokes local discovery', async t => {
+  const { machine, machinePath } = fixture(t);
   machine.deployment = { home: '$UNDEFINED_OFFLINE_VAR', globalWorkspacePath: '/missing/local/workspace' };
   writeJson(machinePath, machine);
   const result = await updateMachine(machinePath, 'test-offline-preview', false, {
@@ -275,8 +298,8 @@ test('offline update ignores deployment paths and never invokes local discovery'
   await assert.rejects(updateMachine(machinePath, 'test-offline-preview', true, { catalog, offline: true }), /cannot be combined/);
 });
 
-test('default live preview reads targets but never invokes doctor or installation', async () => {
-  const { machinePath } = fixture();
+test('default live preview reads targets but never invokes doctor or installation', async t => {
+  const { machinePath } = fixture(t);
   const result = await updateMachine(machinePath, 'test-live-preview', false, {
     catalog, doctor: () => assert.fail('live preview inspected'), runStep: () => assert.fail('live preview installed'),
   });
@@ -284,8 +307,8 @@ test('default live preview reads targets but never invokes doctor or installatio
   assert.ok(result.entries.some(row => row.name === 'live-unrelated'));
 });
 
-test('live preview reports a missing local target with field context', async () => {
-  const { machine, machinePath } = fixture();
+test('live preview reports a missing local target with field context', async t => {
+  const { machine, machinePath } = fixture(t);
   machine.deployment.globalWorkspacePath = '/missing/deployment-target/pnpm-workspace.yaml';
   writeJson(machinePath, machine);
   await assert.rejects(updateMachine(machinePath, 'test-missing-target', false, { catalog }), /Missing local deployment.globalWorkspacePath target/);

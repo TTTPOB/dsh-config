@@ -1,8 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { root, parseYaml, readYaml, validateMachine, validatePatch, canonicalPatch, renderMachine, compareSnapshot, resolveDependencyTargets, parseCommandArguments, resolveMachineArgument } from '../scripts/lib.mjs';
+
+function fixture(t) {
+  const directory = mkdtempSync(join(tmpdir(), 'dsh-config-test-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  return directory;
+}
 
 const example = join(root, 'examples/workstation-machine.yaml');
 
@@ -35,14 +43,14 @@ test('rejects incomplete machine config', () => {
   assert.throws(() => validateMachine(machine));
 });
 
-test('keeps template-like text in literal machine rows without evaluating it', () => {
+test('keeps template-like text in literal machine rows without evaluating it', t => {
   const machine = readYaml(example);
   machine.homePrivate = '- id: x\n  config:\n    value: "[[ secret ]]"\n';
   assert.equal(validateMachine(machine), machine);
-  const path = join(root, 'generated/test-input/literal-delimiters.yaml');
-  mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
+  const directory = fixture(t);
+  const path = join(directory, 'literal-delimiters.yaml');
   writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
-  const { rendered } = renderMachine(path, 'test-literal-delimiters');
+  const { rendered } = renderMachine(path, 'test-literal-delimiters', undefined, { generatedDir: directory });
   assert.ok(rendered.home.includes('[[ secret ]]'));
 });
 
@@ -59,8 +67,8 @@ test('canonicalization preserves expressions and nested plugin order', () => {
 });
 
 for (const role of ['workstation', 'server']) {
-  test(`chezmoi renders sanitized ${role} example and keeps DSH placeholders`, () => {
-    const { rendered } = renderMachine(join(root, `examples/${role}-machine.yaml`), `test-example-${role}`);
+  test(`chezmoi renders sanitized ${role} example and keeps DSH placeholders`, t => {
+    const { rendered } = renderMachine(join(root, `examples/${role}-machine.yaml`), `test-example-${role}`, undefined, { generatedDir: fixture(t) });
     assert.ok(rendered.home.includes('{{cwd}}'));
     assert.ok(rendered.home.includes('{{model}}'));
     assert.ok(rendered.home.includes('!!js'));
@@ -70,35 +78,35 @@ for (const role of ['workstation', 'server']) {
     assert.equal(model, role === 'workstation' ? 'gpt-6.1-sol' : 'gpt-6-astra');
   });
   const machinePath = join(root, `private/machines/${role}/machine.yaml`);
-  test(`private ${role} baseline preserves all captured row contents`, { skip: !existsSync(machinePath) }, () => {
-    const { rendered } = renderMachine(machinePath, `test-${role}`);
+  test(`private ${role} baseline preserves all captured row contents`, { skip: !existsSync(machinePath) }, t => {
+    const { rendered } = renderMachine(machinePath, `test-${role}`, undefined, { generatedDir: fixture(t) });
     compareSnapshot(rendered, join(root, `private/machines/${role}/snapshot`));
   });
 }
 
-test('offline render ignores unresolved deployment overrides', () => {
+test('offline render ignores unresolved deployment overrides', t => {
   const machine = readYaml(example);
   machine.deployment = { home: '$OFFLINE_UNDEFINED_ENV', globalWorkspacePath: '/missing/local/path' };
-  const path = join(root, 'generated/test-input/offline-deployment.yaml');
-  mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
+  const directory = fixture(t);
+  const path = join(directory, 'offline-deployment.yaml');
   writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
-  const { rendered } = renderMachine(path, 'test-offline-deployment');
+  const { rendered } = renderMachine(path, 'test-offline-deployment', undefined, { generatedDir: directory });
   assert.ok(rendered.home.includes('{{cwd}}'));
 });
 
-test('enabled prompt preset renders file paths without a package dependency', () => {
+test('enabled prompt preset renders file paths without a package dependency', t => {
   const machine = readYaml(example);
   machine.features.promptOverlay = true;
   assert.throws(() => validateMachine(machine));
+  const directory = fixture(t);
   machine.promptSections = {
     modulePath: join(root, 'plugins/prompt-sections.mjs'),
-    promptFile: join(root, 'generated/example-prompts/extra.md'),
-    identityFile: join(root, 'generated/example-prompts/identity.md'),
+    promptFile: join(directory, 'extra.md'),
+    identityFile: join(directory, 'identity.md'),
   };
-  const path = join(root, 'generated/test-input/prompt-machine.yaml');
-  mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
+  const path = join(directory, 'prompt-machine.yaml');
   writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
-  const { rendered } = renderMachine(path, 'test-prompt-preset');
+  const { rendered } = renderMachine(path, 'test-prompt-preset', undefined, { generatedDir: directory });
   const preset = validatePatch(rendered.home).find(row => row.entry.id === 'preset-standard-ptc-redteam').entry;
   const overlay = preset.config.plugins.find(row => row.id === 'prompt-overlay');
   assert.equal(overlay.name, machine.promptSections.modulePath);
@@ -109,26 +117,26 @@ test('enabled prompt preset renders file paths without a package dependency', ()
   assert.ok(!rendered.home.includes("name: 'dsh-prompt-overlay'"));
 });
 
-test('credential-shaped references remain literal through rendering', () => {
+test('credential-shaped references remain literal through rendering', t => {
   const machine = readYaml(example);
   machine.homePrivate = '- id: literal-test\n  config:\n    value: !!js (() => { throw new Error("render must not evaluate") })()\n';
-  const path = join(root, 'generated/test-input/machine.yaml');
-  mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
+  const directory = fixture(t);
+  const path = join(directory, 'machine.yaml');
   writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
-  const { rendered } = renderMachine(path, 'test-literal');
+  const { rendered } = renderMachine(path, 'test-literal', undefined, { generatedDir: directory });
   assert.match(rendered.home, /render must not evaluate/);
 });
 
-test('declared installation files render beside shared patches and drive source planning', () => {
+test('declared installation files render beside shared patches and drive source planning', t => {
   const machine = readYaml(example);
   machine.installation = {
     globalWorkspace: { packages: ['.'], overrides: { '@deepseek-ai/dsh-example': '0.1.7-rc.2' } },
     webPackage: { private: true, dependencies: { 'example-plugin': '1.0.0' } },
   };
-  const path = join(root, 'generated/test-input/installation-machine.yaml');
-  mkdirSync(join(root, 'generated/test-input'), { recursive: true, mode: 0o700 });
+  const directory = fixture(t);
+  const path = join(directory, 'installation-machine.yaml');
   writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
-  const { output, rendered } = renderMachine(path, 'test-installation');
+  const { output, rendered } = renderMachine(path, 'test-installation', undefined, { generatedDir: directory });
   assert.equal(readYaml(join(output, 'global-workspace.yaml')).overrides['@deepseek-ai/dsh-example'], '0.1.7-rc.2');
   assert.deepEqual(JSON.parse(readFileSync(join(output, 'web.package.json'), 'utf8')), machine.installation.webPackage);
   assert.ok(validatePatch(rendered.home).some(row => row.entry.id === 'preset-standard-ptc'));
@@ -159,4 +167,19 @@ test('source planning does not guess missing Release assets', () => {
   assert.ok(targets.entries.some(row => row.status === 'blocked-missing-release'));
   assert.ok(targets.entries.some(row => row.status === 'verified-release'));
   assert.ok(!JSON.stringify(targets.entries).includes('/private/'));
+});
+
+test('check renders current input without requiring or creating staged patches', t => {
+  const directory = fixture(t);
+  const path = join(directory, 'current-input.yaml');
+  const machine = readYaml(example);
+  writeFileSync(path, JSON.stringify(machine));
+  const run = () => spawnSync(process.execPath, [join(root, 'scripts/dsh-config.mjs'), 'check', path], { encoding: 'utf8' });
+  assert.equal(run().status, 0);
+  const generatedDir = join(directory, 'output');
+  renderMachine(path, 'current-input', undefined, { stage: false, generatedDir });
+  assert.ok(!existsSync(join(generatedDir, 'current-input/home.patch.yml')));
+  machine.features.sessionTools = 'invalid-current-input';
+  writeFileSync(path, JSON.stringify(machine));
+  assert.equal(run().status, 1);
 });

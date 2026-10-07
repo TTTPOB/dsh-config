@@ -45,7 +45,16 @@ node scripts/dsh-config.mjs update --machine workstation
 
 `deployment` 可省略；doctor、update 默认预览和 apply 使用执行机器的 DSH_HOME／用户主目录及 pnpm 公共信息推导部署路径，显式路径支持 `~/` 和已定义环境变量。`update --offline`、render/check 只消费机器 installation 参数或快照，不引入执行机器的安装输入。具体默认和覆盖方式见[部署位置](docs/install.md#2-声明本机部署位置)。
 
-`check` 比较首次迁移快照中的插件内容，保留表达式源码和嵌套插件顺序，忽略顶层行顺序与 insert 分组。这是静态等价检查；Host 加载与功能由成品 smoke 和实际维护验收确认。
+`check` 根据当前机器参数和模板重新渲染，在内存中校验并与首次迁移快照比较，无需先运行 render，也不读取已有生成结果。比较保留表达式源码和嵌套插件顺序，忽略顶层行顺序与 insert 分组。这是静态等价检查；Host 加载与功能由成品 smoke 和实际维护验收确认。
+
+## 生成文件与清理
+
+- **渲染产物：** `render` 写入 `generated/<name>/`，供人工检查；可删除并重新生成。保存的 doctor/update 输出是当次报告，不是后续命令的输入。
+- **测试暂存：** 自动测试和隔离测试各自拥有临时目录，在成功或失败结束后自动清理；测试日志与维护日志分开。
+- **维护日志：** `generated/*-install.log` 供更新过程即时排障，操作结束后按诊断需要保留或删除。
+- **更新备份：** `generated/<name>-backup-*` 保存更新前的真实文件，不能靠 render 重建。维护验收并确认不再需要回滚后，才删除对应备份。不要整体清空 generated 来代替分类清理。
+
+`private/machines/<name>/snapshot/` 是持久基线，不参与上述清理。配置比较使用其中的 home/Web patch；依赖解析可使用 global workspace 和 Web manifest。某台机器额外捕获的 profile、lockfile 等文件保留其历史参考用途，不要求所有机器的快照文件数一致。
 
 ## 表达式与凭据
 

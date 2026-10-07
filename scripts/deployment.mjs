@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync, openSync, closeSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync, openSync, closeSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, isAbsolute, delimiter } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -125,9 +126,9 @@ export async function doctor(machine, targets) {
   return { issues, runtimeVersion, blocked: issues.length, next: issues.length ? 'Inspect the original compatibility reason; update --apply can grant catalog-verified exact pairs. Unrecorded combinations require external validation and explicit authorization.' : 'Resolution and public compatibility checks passed; no Host was started.' };
 }
 
-export function runStep(argv, cwd, env = process.env) {
+export function runStep(argv, cwd, env = process.env, { logDir = join(root, 'generated') } = {}) {
   const kind = argv.includes('--global') ? 'global-install' : 'profile-install';
-  const log = join(root, 'generated', `${kind}.log`);
+  const log = join(logDir, `${kind}.log`);
   mkdirSync(dirname(log), { recursive: true, mode: 0o700 });
   // File descriptors expose output immediately and do not wait on descendant pipe EOF.
   const fd = openSync(log, 'w', 0o600);
@@ -176,7 +177,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   if (!apply) return preview;
   if (blocked.length) throw new Error(`Apply blocked: ${blocked.length} exact Release assets are missing; no files changed.`);
   const deployment = validateDeployment(machine.deployment);
-  const { rendered } = renderMachine(machinePath, label, dependencies.catalog, { stage: false });
+  const { rendered } = renderMachine(machinePath, label, dependencies.catalog, { stage: false, generatedDir: dependencies.generatedDir });
   const manifests = [
     [deployment.globalWorkspacePath, YAML.stringify(targets.globalWorkspace)],
     ...Object.entries(targets.profiles).map(([name, manifest]) => {
@@ -199,8 +200,9 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   let granted = [];
   if (!needsInstall && !patchesChanged && !before.blocked) return { ...preview, apply: true, noOp: true, granted, activation: 'No target changes; Host activation was not checked.' };
   const installArguments = needsInstall ? globalInstallArguments(deployment) : undefined;
-  mkdirSync(join(root, 'generated'), { recursive: true, mode: 0o700 });
-  const backup = mkdtempSync(join(root, 'generated', `${label}-backup-`));
+  const generatedDir = dependencies.generatedDir ?? join(root, 'generated');
+  mkdirSync(generatedDir, { recursive: true, mode: 0o700 });
+  const backup = mkdtempSync(join(generatedDir, `${label}-backup-`));
   const files = [...manifests, ...patches];
   const backupFiles = [...new Set([...files.map(([path]) => path),
     ...manifests.map(([path]) => join(dirname(path), 'pnpm-lock.yaml')),
@@ -208,7 +210,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
     ...Object.values(deployment.profiles).map(location => join(dirname(location.packagePath), 'compatibility.json'))])];
   for (const [index, path] of backupFiles.entries()) if (existsSync(path)) copyFileSync(path, join(backup, String(index)));
   writeFileSync(join(backup, 'files.json'), JSON.stringify(backupFiles), { mode: 0o600 });
-  const execute = dependencies.runStep ?? runStep;
+  const execute = dependencies.runStep ?? ((argv, cwd, env) => runStep(argv, cwd, env, { logDir: generatedDir }));
   try {
     if (needsInstall) {
       for (const [path, contents] of manifests) writeFileSync(path, contents, { mode: 0o600 });
@@ -237,7 +239,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   return { ...preview, apply: true, backup, granted, activation: 'installed-not-activated; external Host restart and behavior verification required' };
 }
 
-export function isolatedTest(machinePath, label, tarballs = [], execute = runStep) {
+export function isolatedTest(machinePath, label, tarballs = [], execute, { generatedDir = tmpdir() } = {}) {
   const machine = readYaml(machinePath);
   const smoke = machine.deployment?.smoke;
   assert.ok(Array.isArray(smoke?.argv) && smoke.argv.length && smoke.argv.every(arg => typeof arg === 'string'), 'Explicit smoke argv required');
@@ -261,41 +263,47 @@ export function isolatedTest(machinePath, label, tarballs = [], execute = runSte
   const targets = deploymentTargets(machine, join(dirname(machinePath), 'snapshot'), catalog);
   const blocked = targets.entries.filter(row => row.status.startsWith('blocked') && !sources.has(row.name));
   if (blocked.length && !smoke.ownsInstallation) throw new Error(`Isolated test blocked: provide local tarballs for ${blocked.map(row => row.name).join(', ')}`);
-  const { output } = renderMachine(machinePath, label);
-  const testRoot = mkdtempSync(join(output, 'isolated-'));
-  const copiedTarballs = new Map();
-  for (const [name, source] of sources) {
-    const destination = join(testRoot, name.replaceAll('/', '-').replace('@', '') + '.tgz');
-    copyFileSync(source.slice(5), destination);
-    copiedTarballs.set(name, destination);
-  }
-  for (const [name, path] of copiedTarballs) sources.set(name, 'file:' + path);
-  for (const row of targets.entries.filter(row => row.version)) {
-    if (!sources.has(row.name)) continue;
-    const object = row.scope === 'global-override' ? targets.globalWorkspace.overrides : targets.profiles[row.profile].dependencies;
-    const keys = row.scope === 'global-override' ? Object.keys(object).filter(key => key === row.name || key.startsWith(row.name + '@')) : [row.name];
-    for (const key of keys.length ? keys : [row.name]) object[key] = sources.get(row.name);
-  }
-  const home = join(testRoot, 'home');
-  mkdirSync(join(home, 'profiles/web'), { recursive: true, mode: 0o700 });
-  mkdirSync(join(testRoot, 'installation'), { mode: 0o700 });
-  const paths = { testRoot, home, globalWorkspace: join(testRoot, 'installation/pnpm-workspace.yaml'), webPackage: join(home, 'profiles/web/package.json'), homePatch: join(home, 'cordis.patch.yml'), webPatch: join(home, 'profiles/web/cordis.patch.yml') };
-  writeFileSync(paths.globalWorkspace, YAML.stringify(targets.globalWorkspace), { mode: 0o600 });
-  for (const [name, manifest] of Object.entries(targets.profiles)) {
-    mkdirSync(join(home, 'profiles', name), { recursive: true, mode: 0o700 });
-    writeFileSync(join(home, 'profiles', name, 'package.json'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
-    writeFileSync(join(home, 'profiles', name, '.npmrc'), 'auto-install-peers=false\n', { mode: 0o600 });
-  }
-  writeFileSync(paths.homePatch, smoke.homePatch ?? '[]\n', { mode: 0o600 });
-  writeFileSync(paths.webPatch, smoke.webPatch ?? '[]\n', { mode: 0o600 });
-  const argv = smoke.argv.map(arg => arg
-    .replace(/\{tarball:([^}]+)\}/g, (_, name) => {
-      assert.ok(copiedTarballs.has(name), `Missing smoke tarball: ${name}`);
-      return copiedTarballs.get(name);
-    })
-    .replace(/\{(testRoot|home|globalWorkspace|webPackage|homePatch|webPatch)\}/g, (_, key) => paths[key]));
-  execute(argv, smoke.cwd, { ...process.env, DSH_HOME: home, DSH_CONFIG_TEST_ROOT: testRoot });
-  return { testRoot, smokeOwnsInstallation: smoke.ownsInstallation === true, renderedConfigurationVerified: false,
-    unresolvedAssets: blocked.map(row => row.name),
-    configuration: 'Normal render retained separately; only explicit controlled smoke patches staged. Smoke behavior determines which layout is verified.', hostStartedByConfig: false };
+  mkdirSync(generatedDir, { recursive: true, mode: 0o700 });
+  const testRoot = mkdtempSync(join(generatedDir, 'dsh-isolated-'));
+  try {
+    renderMachine(machinePath, label, undefined, { stage: false, generatedDir: testRoot });
+    const copiedTarballs = new Map();
+    for (const [name, source] of sources) {
+      const destination = join(testRoot, name.replaceAll('/', '-').replace('@', '') + '.tgz');
+      copyFileSync(source.slice(5), destination);
+      copiedTarballs.set(name, destination);
+    }
+    for (const [name, path] of copiedTarballs) sources.set(name, 'file:' + path);
+    for (const row of targets.entries.filter(row => row.version)) {
+      if (!sources.has(row.name)) continue;
+      const object = row.scope === 'global-override' ? targets.globalWorkspace.overrides : targets.profiles[row.profile].dependencies;
+      const keys = row.scope === 'global-override' ? Object.keys(object).filter(key => key === row.name || key.startsWith(row.name + '@')) : [row.name];
+      for (const key of keys.length ? keys : [row.name]) object[key] = sources.get(row.name);
+    }
+    const home = join(testRoot, 'home');
+    mkdirSync(join(home, 'profiles/web'), { recursive: true, mode: 0o700 });
+    mkdirSync(join(testRoot, 'installation'), { mode: 0o700 });
+    const paths = { testRoot, home, globalWorkspace: join(testRoot, 'installation/pnpm-workspace.yaml'), webPackage: join(home, 'profiles/web/package.json'), homePatch: join(home, 'cordis.patch.yml'), webPatch: join(home, 'profiles/web/cordis.patch.yml') };
+    writeFileSync(paths.globalWorkspace, YAML.stringify(targets.globalWorkspace), { mode: 0o600 });
+    for (const [name, manifest] of Object.entries(targets.profiles)) {
+      mkdirSync(join(home, 'profiles', name), { recursive: true, mode: 0o700 });
+      writeFileSync(join(home, 'profiles', name, 'package.json'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
+      writeFileSync(join(home, 'profiles', name, '.npmrc'), 'auto-install-peers=false\n', { mode: 0o600 });
+    }
+    writeFileSync(paths.homePatch, smoke.homePatch ?? '[]\n', { mode: 0o600 });
+    writeFileSync(paths.webPatch, smoke.webPatch ?? '[]\n', { mode: 0o600 });
+    const argv = smoke.argv.map(arg => arg
+      .replace(/\{tarball:([^}]+)\}/g, (_, name) => {
+        assert.ok(copiedTarballs.has(name), `Missing smoke tarball: ${name}`);
+        return copiedTarballs.get(name);
+      })
+      .replace(/\{(testRoot|home|globalWorkspace|webPackage|homePatch|webPatch)\}/g, (_, key) => paths[key]));
+    (execute ?? ((argv, cwd, env) => runStep(argv, cwd, env, { logDir: testRoot })))(argv, smoke.cwd, { ...process.env, DSH_HOME: home, DSH_CONFIG_TEST_ROOT: testRoot });
+    return { cleaned: true, smokeOwnsInstallation: smoke.ownsInstallation === true, renderedConfigurationVerified: false,
+      unresolvedAssets: blocked.map(row => row.name),
+      configuration: 'Normal render validated without staging; only explicit controlled smoke patches staged. Smoke behavior determines which layout is verified.', hostStartedByConfig: false };
+  } catch (error) {
+    error.message = `${error.message.replaceAll(testRoot, '<cleaned temporary directory>')}; isolated temporary files cleaned`;
+    throw error;
+  } finally { rmSync(testRoot, { recursive: true, force: true }); }
 }

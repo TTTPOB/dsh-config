@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
@@ -8,9 +9,7 @@ import { root } from '../scripts/lib.mjs';
 import * as Plugin from '../plugins/prompt-sections.mjs';
 
 function fixture(t) {
-  const parent = join(root, 'generated/prompt-tests');
-  mkdirSync(parent, { recursive: true });
-  const dir = mkdtempSync(join(parent, 'case-'));
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-prompt-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const promptFile = join(dir, 'extra.md');
   const identityFile = join(dir, 'identity.md');
