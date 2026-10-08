@@ -4,3 +4,11 @@ defaults:
     provider: klaude-openai
     model: gpt-6.1-sol
     reasoningEffort: medium
+  compaction:
+    auto: true
+    thresholdRatio: 0.82
+    headroomTokens: 8192
+    retainTokens: 12000
+    maxTokens: 16384
+    compactionRetries: 1
+    maxOverflowRetries: 1

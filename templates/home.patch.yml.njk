@@ -115,6 +115,14 @@
             config:
               - id: compaction-basic
                 name: '@deepseek-ai/dsh-compaction-basic'
+                config:
+                  auto: [[ shared.defaults.compaction.auto | dump ]]
+                  thresholdRatio: [[ shared.defaults.compaction.thresholdRatio ]]
+                  headroomTokens: [[ shared.defaults.compaction.headroomTokens ]]
+                  retainTokens: [[ shared.defaults.compaction.retainTokens ]]
+                  maxTokens: [[ shared.defaults.compaction.maxTokens ]]
+                  compactionRetries: [[ shared.defaults.compaction.compactionRetries ]]
+                  maxOverflowRetries: [[ shared.defaults.compaction.maxOverflowRetries ]]
               - id: command-compact
                 name: '@deepseek-ai/dsh-command-compact'
               - id: tool-result-pruner
