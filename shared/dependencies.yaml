@@ -1,14 +1,19 @@
 schemaVersion: 2
 # Exact combinations validated by the existing built-package behavior checks.
 verifiedCompatibility:
-  'dsh-session-tools@0.1.4': ['0.1.7-rc.2']
+  'dsh-session-tools@0.1.5': ['0.1.7-rc.2']
   'dsh-workspace-overlay@0.2.0': ['0.1.7-rc.2']
   'dsh-workspace-envrc@0.2.0': ['0.1.7-rc.2']
-  '@deepseek-ai/dsh-session-query-sqlite@0.1.7-rc.2-fork5': ['0.1.7-rc.2']
+  '@deepseek-ai/dsh-session-query-sqlite@0.1.7-rc.2-fork6': ['0.1.7-rc.2']
   '@deepseek-ai/dsh-api-gateway@0.1.7-rc.2-fork2': ['0.1.7-rc.2']
   '@deepseek-ai/dsh-host-frontend-static@0.1.7-rc.2-fork2': ['0.1.7-rc.2']
   '@deepseek-ai/dsh-subagent@0.1.7-rc.2-fork2': ['0.1.7-rc.2']
 packages:
+  - package: "@deepseek-ai/dsh-session"
+    scope: global-override
+    policy: release
+    version: 0.1.7-rc.2-fork1
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork16/deepseek-ai-dsh-session-0.1.7-rc.2-fork1.tgz
   - package: "@deepseek-ai/dsh-session-persistence-jsonl"
     scope: global-override
     policy: release
@@ -17,13 +22,13 @@ packages:
   - package: "@deepseek-ai/dsh-session-query"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork2
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork12/deepseek-ai-dsh-session-query-0.1.7-rc.2-fork2.tgz
+    version: 0.1.7-rc.2-fork3
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork16/deepseek-ai-dsh-session-query-0.1.7-rc.2-fork3.tgz
   - package: "@deepseek-ai/dsh-session-query-sqlite"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork5
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork12/deepseek-ai-dsh-session-query-sqlite-0.1.7-rc.2-fork5.tgz
+    version: 0.1.7-rc.2-fork6
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork16/deepseek-ai-dsh-session-query-sqlite-0.1.7-rc.2-fork6.tgz
   - package: "@deepseek-ai/dsh-client-ui-plugin-manager"
     scope: global-override
     policy: release
@@ -79,8 +84,8 @@ packages:
   - package: dsh-session-tools
     scope: profile
     policy: release
-    version: 0.1.4
-    url: https://github.com/TTTPOB/dsh-session-tools/releases/download/v0.1.4/dsh-session-tools-0.1.4.tgz
+    version: 0.1.5
+    url: https://github.com/TTTPOB/dsh-session-tools/releases/download/v0.1.5/dsh-session-tools-0.1.5.tgz
   - package: dsh-workspace-envrc
     scope: profile
     patchOnly: true
