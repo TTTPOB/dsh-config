@@ -8,6 +8,7 @@ verifiedCompatibility:
   '@deepseek-ai/dsh-api-gateway@0.1.7-rc.2-fork2': ['0.1.7-rc.2']
   '@deepseek-ai/dsh-host-frontend-static@0.1.7-rc.2-fork2': ['0.1.7-rc.2']
   '@deepseek-ai/dsh-subagent@0.1.7-rc.2-fork2': ['0.1.7-rc.2']
+  '@deepseek-ai/dsh-session-query@0.1.7-rc.2-fork3': ['0.1.7-rc.2']
 packages:
   - package: "@deepseek-ai/dsh-session"
     scope: global-override
