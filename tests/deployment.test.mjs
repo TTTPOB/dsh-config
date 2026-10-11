@@ -71,9 +71,8 @@ test('live and offline previews select ACP from machine features without touchin
     });
     assert.equal(report.apply, false);
     assert.equal(report.blocked, 0);
-    for (const name of ['dsh-session-tools', 'dsh-active-context']) {
-      assert.ok(report.entries.some(row => row.name === name && row.profile === 'web' && row.status === 'verified-release'));
-    }
+    assert.ok(report.entries.some(row => row.name === 'dsh-active-context' && row.profile === 'web' && row.status === 'verified-release'));
+    assert.ok(!report.entries.some(row => row.name === 'dsh-session-tools'));
     assert.deepEqual(targetFiles.map(read), before);
   }
 });

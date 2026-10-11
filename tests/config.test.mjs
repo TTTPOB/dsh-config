@@ -102,14 +102,15 @@ test('enabled optional features render valid configuration', t => {
   assert.ok(validatePatch(rendered.web).length > 0);
 });
 
-test('active context is optional and requires the map consumer', () => {
+test('active context is optional and independent of history tools', () => {
   const machine = readYaml(example);
   delete machine.features.activeContext;
   assert.equal(validateMachine(machine), machine);
   machine.features.activeContext = 'yes';
   assert.throws(() => validateMachine(machine), /activeContext/);
   machine.features.activeContext = true;
-  assert.throws(() => validateMachine(machine), /requires sessionTools/);
+  assert.equal(machine.features.sessionTools, false);
+  assert.equal(validateMachine(machine), machine);
 });
 
 test('active context replaces Basic inside every declared preset and keeps the native policy', t => {
@@ -195,18 +196,22 @@ test('active context adds exact catalog targets only to prepared consumer profil
     { package: 'dsh-active-context', scope: 'profile', policy: 'release', version: '0.1.0', reason: 'Not published' },
   ] };
   const installation = { webPackage: { private: true }, profiles: {
-    prepared: { dependencies: { 'dsh-session-tools': '0.1.5' } },
+    prepared: { dependencies: { 'dsh-active-context': '0.1.0' } },
+    historyOnly: { dependencies: { 'dsh-session-tools': '0.1.5' } },
     other: { dependencies: { unrelated: '1.0.0' } },
   } };
   const targets = resolveDependencyTargets('unused-snapshot-directory', installation, catalog, { activeContext: true });
-  assert.equal(targets.entries.filter(row => row.status === 'blocked-missing-release').length, 4);
+  assert.equal(targets.entries.filter(row => row.status === 'blocked-missing-release').length, 3);
   for (const profile of ['web', 'prepared']) {
     assert.ok(targets.entries.some(row => row.profile === profile && row.name === 'dsh-active-context'));
     assert.ok(!('dsh-active-context' in targets.profiles[profile].dependencies));
   }
-  assert.ok(!targets.entries.some(row => row.profile === 'other' && row.name === 'dsh-active-context'));
+  assert.ok(!targets.entries.some(row => ['other', 'historyOnly'].includes(row.profile) && row.name === 'dsh-active-context'));
+  for (const profile of ['web', 'prepared']) assert.ok(!targets.entries.some(row => row.profile === profile && row.name === 'dsh-session-tools'));
   assert.ok(!installation.webPackage.dependencies);
-  assert.ok(!resolveDependencyTargets('unused-snapshot-directory', installation, catalog).entries.some(row => row.name === 'dsh-active-context'));
+  const unselected = resolveDependencyTargets('unused-snapshot-directory', installation, catalog);
+  assert.ok(!unselected.entries.some(row => row.profile === 'web' && row.name === 'dsh-active-context'));
+  assert.ok(unselected.entries.some(row => row.profile === 'prepared' && row.name === 'dsh-active-context'));
 });
 
 test('credential-shaped references remain literal through rendering', t => {

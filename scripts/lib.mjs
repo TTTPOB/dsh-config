@@ -37,7 +37,6 @@ export function validateMachine(machine) {
     assert.equal(typeof machine.features?.[key], 'boolean', `Missing feature: ${key}`);
   }
   if (machine.features.activeContext !== undefined) assert.equal(typeof machine.features.activeContext, 'boolean', 'Invalid feature: activeContext');
-  if (machine.features.activeContext) assert.equal(machine.features.sessionTools, true, 'activeContext requires sessionTools');
   if (machine.acp?.pressureRoutes !== undefined) {
     assert.equal(machine.features.activeContext, true, 'pressureRoutes requires activeContext');
     assert.ok(Array.isArray(machine.acp.pressureRoutes), 'pressureRoutes must be an array');
@@ -161,10 +160,9 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
   const profiles = structuredClone({ web: installation?.webPackage ?? snapshot('web.package.json', { private: true }), ...installation?.profiles });
   if (features.activeContext) {
     for (const [name, manifest] of Object.entries(profiles)) {
-      if (name !== 'web' && !manifest.dependencies?.['dsh-session-tools']) continue;
+      if (name !== 'web' && !manifest.dependencies?.['dsh-active-context']) continue;
       manifest.dependencies ??= {};
-      // The catalog resolves both placeholders; unpublished assets stay blockers.
-      manifest.dependencies['dsh-session-tools'] ??= '';
+      // The catalog resolves the placeholder; unpublished assets stay blockers.
       manifest.dependencies['dsh-active-context'] ??= '';
     }
   }

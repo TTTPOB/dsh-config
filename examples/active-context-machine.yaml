@@ -1,6 +1,6 @@
 schemaVersion: 1
 features:
-  sessionTools: true
+  sessionTools: false
   activeContext: true
   promptOverlay: false
 overrides: {}
