@@ -142,6 +142,22 @@ test('active context replaces Basic inside every declared preset and keeps the n
     assert.ok(group.config.some(row => row.id === 'command-compact'));
     assert.ok(group.config.some(row => row.id === 'tool-result-pruner'));
   }
+  for (const pressureRoutes of [
+    [{ provider: 'example-provider', model: 'example-model', nudgeAtTokens: 60000, resetBelowTokens: 50000 }],
+    [{ provider: 'other-provider', model: 'other-model', nudgeAtTokens: 42000, resetBelowTokens: 31000 }],
+  ]) {
+    machine.acp = { pressureRoutes };
+    writeFileSync(path, JSON.stringify(machine));
+    const configured = validatePatch(renderMachine(path, 'active-pressure', undefined, { stage: false }).rendered.home)
+      .filter(row => row.entry.name === '@deepseek-ai/dsh-agent-preset');
+    for (const { entry } of configured) {
+      const group = entry.config.plugins.find(row => row.id === 'compaction');
+      assert.deepEqual(group.config.find(row => row.id === 'active-context').config, {
+        acp: machine.acp, basic: readYaml(join(root, 'shared/defaults.yaml')).defaults.compaction,
+      });
+      assert.equal(group.config.filter(row => !row.disabled && ['dsh-active-context', '@deepseek-ai/dsh-compaction-basic'].includes(row.name)).length, 1);
+    }
+  }
   const disabled = readYaml(example);
   const disabledPath = join(directory, 'basic.yaml');
   writeFileSync(disabledPath, JSON.stringify(disabled));
@@ -152,6 +168,25 @@ test('active context replaces Basic inside every declared preset and keeps the n
     assert.ok(!children.some(row => row.name === 'dsh-active-context'));
     assert.deepEqual(children.find(row => row.id === 'compaction-basic').config, readYaml(join(root, 'shared/defaults.yaml')).defaults.compaction);
   }
+});
+
+test('pressure route parameters reject malformed thresholds and duplicate exact routes', () => {
+  const machine = readYaml(join(root, 'examples/active-context-machine.yaml'));
+  const route = { provider: 'example-provider', model: 'example-model', nudgeAtTokens: 60000, resetBelowTokens: 50000 };
+  machine.acp = { pressureRoutes: [route] };
+  assert.equal(validateMachine(machine), machine);
+  for (const invalid of [null, {}, { ...route, provider: '' }, { ...route, nudgeAtTokens: 1.5 },
+    { ...route, resetBelowTokens: -1 }, { ...route, resetBelowTokens: 60000 }]) {
+    machine.acp.pressureRoutes = [invalid];
+    assert.throws(() => validateMachine(machine));
+  }
+  machine.acp.pressureRoutes = {};
+  assert.throws(() => validateMachine(machine), /array/);
+  machine.acp.pressureRoutes = [route, { ...route }];
+  assert.throws(() => validateMachine(machine), /Duplicate/);
+  machine.acp.pressureRoutes = [route];
+  machine.features.activeContext = false;
+  assert.throws(() => validateMachine(machine), /requires activeContext/);
 });
 
 test('active context adds exact catalog targets only to prepared consumer profiles', () => {

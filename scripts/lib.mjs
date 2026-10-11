@@ -38,6 +38,20 @@ export function validateMachine(machine) {
   }
   if (machine.features.activeContext !== undefined) assert.equal(typeof machine.features.activeContext, 'boolean', 'Invalid feature: activeContext');
   if (machine.features.activeContext) assert.equal(machine.features.sessionTools, true, 'activeContext requires sessionTools');
+  if (machine.acp?.pressureRoutes !== undefined) {
+    assert.equal(machine.features.activeContext, true, 'pressureRoutes requires activeContext');
+    assert.ok(Array.isArray(machine.acp.pressureRoutes), 'pressureRoutes must be an array');
+    const routes = new Set();
+    for (const route of machine.acp.pressureRoutes) {
+      assert.ok(typeof route.provider === 'string' && route.provider.trim() && typeof route.model === 'string' && route.model.trim(), 'pressureRoutes requires provider/model');
+      assert.ok(Number.isSafeInteger(route.nudgeAtTokens) && route.nudgeAtTokens > 0
+        && Number.isSafeInteger(route.resetBelowTokens) && route.resetBelowTokens >= 0
+        && route.resetBelowTokens < route.nudgeAtTokens, 'pressureRoutes requires 0 <= resetBelowTokens < nudgeAtTokens');
+      const key = JSON.stringify([route.provider, route.model]);
+      assert.ok(!routes.has(key), 'Duplicate pressure route');
+      routes.add(key);
+    }
+  }
   if (machine.features.promptOverlay) {
     for (const field of ['modulePath', 'promptFile', 'identityFile']) {
       assert.ok(typeof machine.promptSections?.[field] === 'string' && isAbsolute(machine.promptSections[field]), `Missing absolute prompt path: ${field}`);

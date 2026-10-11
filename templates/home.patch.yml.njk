@@ -121,7 +121,7 @@
                 name: dsh-active-context
                 config:
                   acp:
-                    pressureRoutes: []
+                    pressureRoutes: [[ machine.acp.pressureRoutes | default([]) | dump ]]
                   basic:
                     auto: [[ shared.defaults.compaction.auto | dump ]]
                     thresholdRatio: [[ shared.defaults.compaction.thresholdRatio ]]
