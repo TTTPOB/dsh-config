@@ -183,6 +183,8 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
     }
   };
   merge(globalWorkspace, 'overrides', 'global-override');
+  // pnpm 11 otherwise rejects trusted Release overrides of transitive dependencies.
+  if (entries.some(row => row.scope === 'global-override' && row.status === 'verified-release')) globalWorkspace.blockExoticSubdeps = false;
   for (const [profile, manifest] of Object.entries(profiles)) {
     merge(manifest, 'dependencies', 'profile', profile);
     const patchOnly = new Set(catalog.packages.filter(item => item.scope === 'profile' && item.patchOnly

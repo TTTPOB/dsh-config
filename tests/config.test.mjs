@@ -196,6 +196,7 @@ test('declared installation files render beside shared patches and drive source 
   const { output, rendered } = renderMachine(path, 'test-installation', undefined, { generatedDir: directory });
   assert.deepEqual(readdirSync(output).sort(), ['global-workspace.yaml', 'home.patch.yml', 'web.package.json', 'web.patch.yml']);
   assert.equal(readYaml(join(output, 'global-workspace.yaml')).overrides['@deepseek-ai/dsh-example'], '0.1.7-rc.2');
+  assert.equal(parseYaml(rendered.globalWorkspace).blockExoticSubdeps, false);
   assert.deepEqual(JSON.parse(readFileSync(join(output, 'web.package.json'), 'utf8')), machine.installation.webPackage);
   assert.ok(validatePatch(rendered.home).length > 0);
   const plan = resolveDependencyTargets('unused-snapshot-directory', machine.installation).entries;
@@ -212,6 +213,18 @@ test('release catalog distinguishes selected URLs, explicit registry pins and mi
     else if (entry.policy === 'release') assert.equal(typeof entry.reason, 'string');
   }
   assert.ok(!readFileSync(join(root, 'shared/dependencies.yaml'), 'utf8').includes('file:'));
+});
+
+test('managed Release overrides select pnpm transitive URL policy without changing machine inputs', () => {
+  const installation = { globalWorkspace: { blockExoticSubdeps: true, autoInstallPeers: false } };
+  const managed = { packages: [{ package: 'managed-runtime', scope: 'global-override', policy: 'release', version: '1.0.0',
+    url: 'https://github.com/example/runtime/releases/download/v1.0.0/runtime-1.0.0.tgz' }] };
+  const selected = resolveDependencyTargets('unused-snapshot-directory', installation, managed);
+  assert.equal(selected.globalWorkspace.blockExoticSubdeps, false);
+  assert.equal(selected.globalWorkspace.autoInstallPeers, false);
+  assert.equal(installation.globalWorkspace.blockExoticSubdeps, true);
+  const registry = { packages: [{ ...managed.packages[0], policy: 'registry', url: undefined }] };
+  assert.equal(resolveDependencyTargets('unused-snapshot-directory', installation, registry).globalWorkspace.blockExoticSubdeps, true);
 });
 
 test('source planning does not guess missing Release assets', () => {

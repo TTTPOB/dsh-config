@@ -51,6 +51,33 @@ function fixture(t) {
   return { directory, home, machine, machinePath };
 }
 
+test('live and offline previews select ACP from machine features without touching the target', async t => {
+  const { machine, machinePath } = fixture(t);
+  machine.features.sessionTools = true;
+  machine.features.activeContext = true;
+  writeJson(machinePath, machine);
+  const selected = { packages: [
+    { package: 'dsh-session-tools', scope: 'profile', policy: 'release', version: '0.2.0', url },
+    { package: 'dsh-active-context', scope: 'profile', policy: 'release', version: '0.1.0', url },
+  ] };
+  const targetFiles = [machine.deployment.globalWorkspacePath, machine.deployment.profiles.web.packagePath,
+    join(machine.deployment.home, 'cordis.patch.yml')];
+  const before = targetFiles.map(read);
+  for (const offline of [false, true]) {
+    const report = await updateMachine(machinePath, 'active-context-preview', false, {
+      offline, catalog: selected,
+      doctor: () => assert.fail('preview called doctor'),
+      runStep: () => assert.fail('preview called installer'),
+    });
+    assert.equal(report.apply, false);
+    assert.equal(report.blocked, 0);
+    for (const name of ['dsh-session-tools', 'dsh-active-context']) {
+      assert.ok(report.entries.some(row => row.name === name && row.profile === 'web' && row.status === 'verified-release'));
+    }
+    assert.deepEqual(targetFiles.map(read), before);
+  }
+});
+
 const healthy = async () => ({ issues: [], blocked: 0 });
 
 const verifiedCatalog = { ...catalog, verifiedCompatibility: { 'managed-plugin@2.0.0': ['0.1.7-rc.2'] } };
