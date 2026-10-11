@@ -1,0 +1,10 @@
+schemaVersion: 1
+features:
+  sessionTools: true
+  activeContext: true
+  promptOverlay: false
+overrides: {}
+homePrivate: |
+  - insert: []
+webPrivate: |
+  - insert: []

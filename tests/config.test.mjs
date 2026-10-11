@@ -62,7 +62,7 @@ test('rejects duplicate ids and expressions in metadata', () => {
   assert.throws(() => validatePatch('- id: x\n  name: !!js "computed"\n'));
 });
 
-for (const role of ['workstation', 'server']) {
+for (const role of ['workstation', 'server', 'active-context']) {
   test(`renders valid configuration from the ${role} example`, t => {
     const { rendered } = renderMachine(join(root, `examples/${role}-machine.yaml`), `test-example-${role}`, undefined, { generatedDir: fixture(t) });
     assert.ok(validatePatch(rendered.home).length > 0);
@@ -100,6 +100,78 @@ test('enabled optional features render valid configuration', t => {
   const { rendered } = renderMachine(path, 'test-prompt-preset', undefined, { generatedDir: directory });
   assert.ok(validatePatch(rendered.home).length > 0);
   assert.ok(validatePatch(rendered.web).length > 0);
+});
+
+test('active context is optional and requires the map consumer', () => {
+  const machine = readYaml(example);
+  delete machine.features.activeContext;
+  assert.equal(validateMachine(machine), machine);
+  machine.features.activeContext = 'yes';
+  assert.throws(() => validateMachine(machine), /activeContext/);
+  machine.features.activeContext = true;
+  assert.throws(() => validateMachine(machine), /requires sessionTools/);
+});
+
+test('active context replaces Basic inside every declared preset and keeps the native policy', t => {
+  const machine = readYaml(example);
+  machine.features.sessionTools = true;
+  machine.features.activeContext = true;
+  machine.features.promptOverlay = true;
+  const directory = fixture(t);
+  machine.promptSections = {
+    modulePath: join(root, 'plugins/prompt-sections.mjs'),
+    promptFile: join(directory, 'extra.md'),
+    identityFile: join(directory, 'identity.md'),
+  };
+  const path = join(directory, 'active-context.yaml');
+  writeFileSync(path, JSON.stringify(machine));
+  const { rendered } = renderMachine(path, 'active-context', undefined, { stage: false });
+  const presets = validatePatch(rendered.home).filter(row => row.entry.name === '@deepseek-ai/dsh-agent-preset');
+  assert.equal(presets.length, 2);
+  for (const { operation, entry } of presets) {
+    assert.equal(operation, 'insert');
+    const group = entry.config.plugins.find(row => row.id === 'compaction');
+    assert.deepEqual(group.isolate, { compaction: true, toolResultPruner: true });
+    const basic = group.config.find(row => row.id === 'compaction-basic');
+    assert.equal(basic.disabled, true);
+    const active = group.config.find(row => row.id === 'active-context');
+    assert.equal(active.name, 'dsh-active-context');
+    assert.deepEqual(active.config.basic, readYaml(join(root, 'shared/defaults.yaml')).defaults.compaction);
+    assert.deepEqual(active.config.acp, { pressureRoutes: [] });
+    assert.equal(group.config.filter(row => !row.disabled && ['dsh-active-context', '@deepseek-ai/dsh-compaction-basic'].includes(row.name)).length, 1);
+    assert.ok(group.config.some(row => row.id === 'command-compact'));
+    assert.ok(group.config.some(row => row.id === 'tool-result-pruner'));
+  }
+  const disabled = readYaml(example);
+  const disabledPath = join(directory, 'basic.yaml');
+  writeFileSync(disabledPath, JSON.stringify(disabled));
+  const basicPresets = validatePatch(renderMachine(disabledPath, 'basic', undefined, { stage: false }).rendered.home)
+    .filter(row => row.entry.name === '@deepseek-ai/dsh-agent-preset');
+  for (const { entry } of basicPresets) {
+    const children = entry.config.plugins.find(row => row.id === 'compaction').config;
+    assert.ok(!children.some(row => row.name === 'dsh-active-context'));
+    assert.deepEqual(children.find(row => row.id === 'compaction-basic').config, readYaml(join(root, 'shared/defaults.yaml')).defaults.compaction);
+  }
+});
+
+test('active context adds exact catalog targets only to prepared consumer profiles', () => {
+  const catalog = { schemaVersion: 2, packages: [
+    { package: 'dsh-session-tools', scope: 'profile', policy: 'release', version: '0.2.0', reason: 'Not published' },
+    { package: 'dsh-active-context', scope: 'profile', policy: 'release', version: '0.1.0', reason: 'Not published' },
+  ] };
+  const installation = { webPackage: { private: true }, profiles: {
+    prepared: { dependencies: { 'dsh-session-tools': '0.1.5' } },
+    other: { dependencies: { unrelated: '1.0.0' } },
+  } };
+  const targets = resolveDependencyTargets('unused-snapshot-directory', installation, catalog, { activeContext: true });
+  assert.equal(targets.entries.filter(row => row.status === 'blocked-missing-release').length, 4);
+  for (const profile of ['web', 'prepared']) {
+    assert.ok(targets.entries.some(row => row.profile === profile && row.name === 'dsh-active-context'));
+    assert.ok(!('dsh-active-context' in targets.profiles[profile].dependencies));
+  }
+  assert.ok(!targets.entries.some(row => row.profile === 'other' && row.name === 'dsh-active-context'));
+  assert.ok(!installation.webPackage.dependencies);
+  assert.ok(!resolveDependencyTargets('unused-snapshot-directory', installation, catalog).entries.some(row => row.name === 'dsh-active-context'));
 });
 
 test('credential-shaped references remain literal through rendering', t => {

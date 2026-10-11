@@ -36,6 +36,8 @@ export function validateMachine(machine) {
   for (const key of ['sessionTools', 'promptOverlay']) {
     assert.equal(typeof machine.features?.[key], 'boolean', `Missing feature: ${key}`);
   }
+  if (machine.features.activeContext !== undefined) assert.equal(typeof machine.features.activeContext, 'boolean', 'Invalid feature: activeContext');
+  if (machine.features.activeContext) assert.equal(machine.features.sessionTools, true, 'activeContext requires sessionTools');
   if (machine.features.promptOverlay) {
     for (const field of ['modulePath', 'promptFile', 'identityFile']) {
       assert.ok(typeof machine.promptSections?.[field] === 'string' && isAbsolute(machine.promptSections[field]), `Missing absolute prompt path: ${field}`);
@@ -80,7 +82,7 @@ export function validatePatch(text) {
 export function renderMachine(machinePath, label, catalog, { stage = true, generatedDir } = {}) {
   assert.match(label, /^[a-zA-Z0-9_-]+$/, 'Invalid output label');
   const machine = validateMachine(readYaml(machinePath));
-  const targets = resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog);
+  const targets = resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog, machine.features);
   machine.installation = { globalWorkspace: targets.globalWorkspace, webPackage: targets.profiles.web };
   const output = join(generatedDir ?? join(root, 'generated'), label);
   const shared = readYaml(join(root, 'shared/defaults.yaml'));
@@ -139,10 +141,19 @@ export function readDependencyCatalog() {
   return catalog;
 }
 
-export function resolveDependencyTargets(snapshotDir, installation, catalog = readDependencyCatalog()) {
+export function resolveDependencyTargets(snapshotDir, installation, catalog = readDependencyCatalog(), features = {}) {
   const snapshot = (file, fallback) => existsSync(join(snapshotDir, file)) ? readYaml(join(snapshotDir, file)) : fallback;
   const globalWorkspace = structuredClone(installation?.globalWorkspace ?? snapshot('global-workspace.yaml', { packages: ['.'] }));
   const profiles = structuredClone({ web: installation?.webPackage ?? snapshot('web.package.json', { private: true }), ...installation?.profiles });
+  if (features.activeContext) {
+    for (const [name, manifest] of Object.entries(profiles)) {
+      if (name !== 'web' && !manifest.dependencies?.['dsh-session-tools']) continue;
+      manifest.dependencies ??= {};
+      // The catalog resolves both placeholders; unpublished assets stay blockers.
+      manifest.dependencies['dsh-session-tools'] ??= '';
+      manifest.dependencies['dsh-active-context'] ??= '';
+    }
+  }
   const entries = [];
   const merge = (container, field, scope, profile) => {
     container[field] ??= {};

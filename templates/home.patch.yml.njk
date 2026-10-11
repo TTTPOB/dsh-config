@@ -115,6 +115,22 @@
             config:
               - id: compaction-basic
                 name: '@deepseek-ai/dsh-compaction-basic'
+[% if machine.features.activeContext %]
+                disabled: true
+              - id: active-context
+                name: dsh-active-context
+                config:
+                  acp:
+                    pressureRoutes: []
+                  basic:
+                    auto: [[ shared.defaults.compaction.auto | dump ]]
+                    thresholdRatio: [[ shared.defaults.compaction.thresholdRatio ]]
+                    headroomTokens: [[ shared.defaults.compaction.headroomTokens ]]
+                    retainTokens: [[ shared.defaults.compaction.retainTokens ]]
+                    maxTokens: [[ shared.defaults.compaction.maxTokens ]]
+                    compactionRetries: [[ shared.defaults.compaction.compactionRetries ]]
+                    maxOverflowRetries: [[ shared.defaults.compaction.maxOverflowRetries ]]
+[% else %]
                 config:
                   auto: [[ shared.defaults.compaction.auto | dump ]]
                   thresholdRatio: [[ shared.defaults.compaction.thresholdRatio ]]
@@ -123,6 +139,7 @@
                   maxTokens: [[ shared.defaults.compaction.maxTokens ]]
                   compactionRetries: [[ shared.defaults.compaction.compactionRetries ]]
                   maxOverflowRetries: [[ shared.defaults.compaction.maxOverflowRetries ]]
+[% endif %]
               - id: command-compact
                 name: '@deepseek-ai/dsh-command-compact'
               - id: tool-result-pruner

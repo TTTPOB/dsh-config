@@ -41,6 +41,8 @@ node scripts/dsh-config.mjs update --machine workstation
 
 机器参数提供 `features`、`overrides.defaultModel`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。标准＋PTC 和逆向 preset 共用模板，逆向模式追加提示词插件。机器专属 provider／MCP 完整行保留为私有输入，不进行通用深合并。
 
+`features.activeContext: true` 选择 ACP，并要求 `features.sessionTools: true`；未填写或为 false 时保留 Basic。见[公开 ACP 示例](<examples/active-context-machine.yaml>)和[ACP 配置与验收](<docs/install.md#active-context-pruningacp>)。
+
 可选 `installation.globalWorkspace`／`installation.webPackage` 提供安装输入；共用清单覆盖受管项，保留无关 overrides 和机器专属依赖。受管 fork／个人插件选择精确 Release URL，明确允许的官方包、普通库与第三方插件保留精确 registry pin。缺精确资产会阻塞正式更新，不自动换版本或回退本地来源。
 
 `deployment` 可省略；doctor、update 默认预览和 apply 使用执行机器的 DSH_HOME／用户主目录及 pnpm 公共信息推导部署路径，显式路径支持 `~/` 和已定义环境变量。`update --offline`、render/check 只消费机器 installation 参数或快照，不引入执行机器的安装输入。具体默认和覆盖方式见[部署位置](docs/install.md#2-声明本机部署位置)。

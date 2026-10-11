@@ -71,7 +71,7 @@ export function deploymentTargets(machine, snapshotDir, catalog) {
       else installation.profiles[name] = merged;
     }
   }
-  return resolveDependencyTargets(snapshotDir, installation, catalog);
+  return resolveDependencyTargets(snapshotDir, installation, catalog, machine.features);
 }
 
 // Only the installed Host's public resolution and compatibility policy are used.
@@ -171,7 +171,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   if (live) machine.deployment = normalizeDeployment(machine.deployment, dependencies.discovery);
   const targets = live
     ? deploymentTargets(machine, join(dirname(machinePath), 'snapshot'), dependencies.catalog)
-    : resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, dependencies.catalog);
+    : resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, dependencies.catalog, machine.features);
   const blocked = targets.entries.filter(row => row.status.startsWith('blocked'));
   const preview = { input: live ? 'live' : 'offline', entries: targets.entries, blocked: blocked.length, apply: false, hostLifecycle: 'external-maintenance-window' };
   if (!apply) return preview;

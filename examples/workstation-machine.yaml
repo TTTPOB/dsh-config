@@ -1,6 +1,7 @@
 schemaVersion: 1
 features:
   sessionTools: false
+  activeContext: false
   promptOverlay: false
 overrides: {}
 homePrivate: |
