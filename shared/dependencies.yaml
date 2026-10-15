@@ -1,7 +1,7 @@
 schemaVersion: 2
 # Exact combinations validated by the existing built-package behavior checks.
 verifiedCompatibility:
-  'dsh-active-context@0.4.5': ['0.1.7-rc.2']
+  'dsh-active-context@0.4.6': ['0.1.7-rc.2']
   'dsh-session-tools@0.3.0': ['0.1.7-rc.2']
   '@deepseek-ai/dsh-session-query@0.1.7-rc.2-fork4': ['0.1.7-rc.2']
   'dsh-workspace-overlay@0.2.0': ['0.1.7-rc.2']
@@ -93,8 +93,8 @@ packages:
     scope: profile
     patchOnly: true
     policy: release
-    version: 0.4.5
-    url: https://github.com/TTTPOB/dsh-active-context/releases/download/v0.4.5/dsh-active-context-0.4.5.tgz
+    version: 0.4.6
+    url: https://github.com/TTTPOB/dsh-active-context/releases/download/v0.4.6/dsh-active-context-0.4.6.tgz
   - package: dsh-workspace-envrc
     scope: profile
     patchOnly: true
