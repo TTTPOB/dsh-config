@@ -64,8 +64,8 @@ packages:
   - package: "@earendil-works/pi-ai"
     scope: global-override
     policy: release
-    version: 0.85.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.5-rc.2-fork1/earendil-works-pi-ai-0.85.1-fork1.tgz
+    version: 0.85.1-fork2
+    url: https://github.com/TTTPOB/pi/releases/download/pi-ai-v0.85.1-fork2/earendil-works-pi-ai-0.85.1-fork2.tgz
   - package: dsh-web-mobile
     scope: profile
     profiles: [web]
