@@ -5,9 +5,9 @@ import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { isDeepStrictEqual } from 'node:util';
 import YAML from 'yaml';
-import { root, readYaml, parseYaml, readDependencyCatalog, resolveDependencyTargets, renderMachine, validatePatch } from './lib.mjs';
+import { summarizeFiles, formatDoctor } from './report.mjs';
+import { root, readYaml, readDependencyCatalog, resolveDependencyTargets, renderMachine, validatePatch } from './lib.mjs';
 
 import { normalizeDeployment } from './deployment-paths.mjs';
 export { normalizeDeployment } from './deployment-paths.mjs';
@@ -74,8 +74,19 @@ export function deploymentTargets(machine, snapshotDir, catalog) {
   return resolveDependencyTargets(snapshotDir, installation, catalog, machine.features);
 }
 
-// Only the installed Host's public resolution and compatibility policy are used.
+// Each inspection starts without modules or resolver state from an earlier installation.
 export async function doctor(machine, targets) {
+  const child = spawnSync(process.execPath, [fileURLToPath(new URL('./doctor-worker.mjs', import.meta.url))], {
+    input: JSON.stringify({ machine, targets }), encoding: 'utf8', timeout: 120000, maxBuffer: 16 * 1024 * 1024,
+  });
+  if (child.error || child.status !== 0) throw new Error(
+    `Doctor process failed (${child.error?.code ?? child.status ?? child.signal}): ${child.stderr?.trim() || 'no diagnostic output'}`,
+  );
+  return JSON.parse(child.stdout);
+}
+
+// Only the installed Host's public resolution and compatibility policy are used.
+export async function inspectInstallation(machine, targets) {
   const deployment = validateDeployment(normalizeDeployment(machine.deployment));
   const hostManifest = resolveInstalledHost(deployment);
   const require = createRequire(hostManifest);
@@ -86,6 +97,7 @@ export async function doctor(machine, targets) {
   const loader = ModuleLoader.fromInternal();
   if (!loader) throw new Error('Installed Host module resolver is unavailable; use the supported Node/Host runtime');
   const issues = [];
+  const checks = [];
   const globals = readYaml(deployment.globalWorkspacePath);
   for (const [name, location] of Object.entries(deployment.profiles)) {
     const profile = boot.loadProfileDirectory('dsh-config doctor', dirname(location.packagePath), hostManifest);
@@ -97,9 +109,11 @@ export async function doctor(machine, targets) {
       const requested = json(location.packagePath).dependencies ?? {};
       for (const reason of warnings) issues.push({ profile: name, status: 'compatibility-warning', reason });
       for (const target of targets.entries.filter(row => row.version && (row.scope === 'global-override' || row.profile === name))) {
+        const check = { profile: name, name: target.name, targetVersion: target.version };
+        checks.push(check);
         const sources = target.scope === 'profile' ? requested : globals.overrides ?? {};
         const declaredKeys = Object.keys(sources).filter(key => key === target.name || (target.scope === 'global-override' && key.startsWith(target.name + '@')));
-        if (target.target && (!declaredKeys.length || declaredKeys.some(key => sources[key] !== target.target))) issues.push({ profile: name, name: target.name, status: 'declared-source-mismatch', expected: target.target });
+        if (target.target && (!declaredKeys.length || declaredKeys.some(key => sources[key] !== target.target))) issues.push({ profile: name, name: target.name, status: 'declared-source-mismatch', expected: target.target, actual: declaredKeys.length ? declaredKeys.map(key => `${key}=${sources[key]}`).join(', ') : '(未声明)' });
         const anchor = target.scope === 'profile' ? location.packagePath : hostManifest;
         const parentURL = pathToFileURL(anchor).href;
         const installed = ctx.pluginPackages.packageOf(target.name, parentURL);
@@ -107,15 +121,18 @@ export async function doctor(machine, targets) {
           issues.push({ profile: name, name: target.name, status: 'missing-installed-package' });
           continue;
         }
+        check.installedVersion = installed.version;
+        check.manifestPath = installed.manifestPath;
         if (installed.version !== target.version) issues.push({ profile: name, name: target.name, status: 'installed-version-mismatch', expected: target.version, actual: installed.version });
         try {
           const selected = loader.version === 'v2'
             ? loader.resolveSync(parentURL, { specifier: target.name, attributes: {} })
             : loader.resolveSync(target.name, parentURL, {});
           const entry = fileURLToPath(selected.url);
-          if (!existsSync(entry) || /\.tsx?$/.test(entry)) issues.push({ profile: name, name: target.name, status: 'invalid-built-entry' });
+          check.entry = entry;
+          if (!existsSync(entry) || /\.tsx?$/.test(entry)) issues.push({ profile: name, name: target.name, status: 'invalid-built-entry', entry, manifestPath: installed.manifestPath, reason: !existsSync(entry) ? 'resolved-file-not-found' : 'resolved-to-typescript-source' });
         } catch (error) {
-          issues.push({ profile: name, name: target.name, status: 'missing-built-entry', reason: error.code ?? error.name });
+          issues.push({ profile: name, name: target.name, status: 'missing-built-entry', manifestPath: installed.manifestPath, reason: error.code ?? error.name, detail: error.message });
         }
         const manifest = json(installed.manifestPath);
         const conflict = boot.evaluatePluginCompatibility(manifest, exemptions);
@@ -123,7 +140,13 @@ export async function doctor(machine, targets) {
       }
     } finally { await ctx.fiber.dispose(); }
   }
-  return { issues, runtimeVersion, blocked: issues.length, next: issues.length ? 'Inspect the original compatibility reason; update --apply can grant catalog-verified exact pairs. Unrecorded combinations require external validation and explicit authorization.' : 'Resolution and public compatibility checks passed; no Host was started.' };
+  return { issues, checked: checks.length, checks, runtimeVersion, hostManifest, blocked: issues.length, next: doctorNext(issues) };
+}
+
+export function doctorNext(issues) {
+  if (!issues.length) return '解析与兼容检查通过；未检查运行中 Host 的激活状态。';
+  if (issues.some(issue => issue.status !== 'compatibility-blocked')) return '先修复上述安装／入口问题；这些问题会阻止自动兼容授权。';
+  return '仅剩兼容拒绝：update --apply 可授权清单已验证的精确组合；未记录的组合须先验证。';
 }
 
 export function runStep(argv, cwd, env = process.env, { logDir = join(root, 'generated') } = {}) {
@@ -174,8 +197,8 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
     : resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, dependencies.catalog, machine.features);
   const blocked = targets.entries.filter(row => row.status.startsWith('blocked'));
   const preview = { input: live ? 'live' : 'offline', entries: targets.entries, blocked: blocked.length, apply: false, hostLifecycle: 'external-maintenance-window' };
-  if (!apply) return preview;
-  if (blocked.length) throw new Error(`Apply blocked: ${blocked.length} exact Release assets are missing; no files changed.`);
+  if (!live) return preview;
+  if (apply && blocked.length) throw new Error(`Apply blocked: ${blocked.length} exact Release assets are missing; no files changed.`);
   const deployment = validateDeployment(machine.deployment);
   const { rendered } = renderMachine(machinePath, label, dependencies.catalog, { stage: false, generatedDir: dependencies.generatedDir });
   const manifests = [
@@ -189,12 +212,14 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
     [deployment.homePatchPath ?? join(deployment.home, 'cordis.patch.yml'), rendered.home],
     [deployment.profiles.web.patchPath ?? join(dirname(deployment.profiles.web.packagePath), 'cordis.patch.yml'), rendered.web],
   ];
+  preview.files = summarizeFiles(manifests, patches);
+  if (!apply) return preview;
   const inspect = dependencies.doctor ?? doctor;
   console.error('[apply] pre-install doctor started');
   const before = await inspect(machine, targets);
   console.error(`[apply] pre-install doctor finished: blocked=${before.blocked}`);
-  const manifestChanged = manifests.some(([path, contents]) => !existsSync(path) || !isDeepStrictEqual(readYaml(path), parseYaml(contents)));
-  const patchesChanged = patches.some(([path, contents]) => !existsSync(path) || readFileSync(path, 'utf8') !== contents);
+  const manifestChanged = preview.files.some(file => file.kind === 'installation' && file.changed);
+  const patchesChanged = preview.files.some(file => file.kind === 'configuration' && file.changed);
   const needsInstall = manifestChanged || before.issues.some(issue => ['missing-installed-package', 'installed-version-mismatch', 'declared-source-mismatch', 'missing-built-entry', 'invalid-built-entry'].includes(issue.status));
   const catalog = dependencies.catalog ?? readDependencyCatalog();
   let granted = [];
@@ -230,7 +255,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
     }
     if (report.blocked) {
       writeFileSync(join(backup, 'doctor.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
-      throw new Error('Post-install doctor blocked configuration application; inspect doctor.json in the backup and authorize the exact supported combination externally');
+      throw new Error(`Post-install doctor blocked configuration application:\n${formatDoctor({ ...report, next: doctorNext(report.issues) })}\nFull report: ${join(backup, 'doctor.json')}`);
     }
     for (const [path, contents] of patches) writeFileSync(path, contents, { mode: 0o600 });
   } catch (error) {

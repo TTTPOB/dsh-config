@@ -1,10 +1,12 @@
 import test from 'node:test';
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, statSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
 import { root, readYaml, resolveDependencyTargets, parseCommandArguments, renderMachine as render } from '../scripts/lib.mjs';
 import { deploymentTargets, updateMachine as update, isolatedTest, runStep, grantVerifiedCompatibility } from '../scripts/deployment.mjs';
+import { selectReport, formatUpdate, formatDoctor } from '../scripts/report.mjs';
 
 const url = 'https://github.com/example/plugin/releases/download/v2.0.0/plugin-2.0.0.tgz';
 const catalog = { schemaVersion: 2, packages: [
@@ -143,6 +145,14 @@ test('shared selections replace duplicate versions, preserve selectors and do no
   assert.ok(!target.entries.some(row => row.name === 'workstation-plugin'));
   assert.equal(target.entries.find(row => row.name === 'dsh-mcp-panel').status, 'unmanaged-registry-pin');
   assert.ok(!JSON.stringify(target.entries).includes('/private/'));
+});
+
+test('source planning notices a stale selector even when another selector already matches', () => {
+  const target = resolveDependencyTargets('unused', { globalWorkspace: { overrides: {
+    'managed-runtime@1': '2.0.0', 'managed-runtime@2': '1.0.0',
+  } } }, catalog);
+  assert.equal(target.entries.find(row => row.name === 'managed-runtime').changed, true);
+  assert.equal(target.globalWorkspace.overrides['managed-runtime@2'], '2.0.0');
 });
 
 test('patch-only plugins keep dependencies but remove duplicate bundle activation', () => {
@@ -338,6 +348,53 @@ test('live preview reports a missing local target with field context', async t =
   machine.deployment.globalWorkspacePath = '/missing/deployment-target/pnpm-workspace.yaml';
   writeJson(machinePath, machine);
   await assert.rejects(updateMachine(machinePath, 'test-missing-target', false, { catalog }), /Missing local deployment.globalWorkspacePath target/);
+});
+
+test('CLI separates JSON format from verbosity and hides unchanged items and private config values', async t => {
+  const { machine, machinePath, home } = fixture(t);
+  const aligned = deploymentTargets(machine, 'unused');
+  writeJson(machine.deployment.globalWorkspacePath, aligned.globalWorkspace);
+  writeJson(machine.deployment.profiles.web.packagePath, aligned.profiles.web);
+  const rendered = render(machinePath, 'output-test', undefined, { stage: false }).rendered;
+  writeFileSync(join(home, 'cordis.patch.yml'), rendered.home);
+  writeFileSync(join(home, 'profiles/web/cordis.patch.yml'), rendered.web);
+  const source = readYaml(machine.deployment.globalWorkspacePath);
+  const changedName = '@deepseek-ai/dsh-session';
+  source.overrides[changedName] = '0.0.1';
+  writeJson(machine.deployment.globalWorkspacePath, source);
+  machine.homePrivate = '- insert:\n  - id: private-row\n    module: example\n    config:\n      token: secret-marker\n';
+  writeJson(machinePath, machine);
+  const cli = flags => execFileSync(process.execPath, [join(root, 'scripts/dsh-config.mjs'), 'update', machinePath, ...flags], { encoding: 'utf8' });
+  const compact = JSON.parse(cli(['--json']));
+  const full = JSON.parse(cli(['--verbose', '--json']));
+  assert.equal(compact.summary.changed, 1);
+  assert.equal(compact.entries.length, 1);
+  assert.equal(compact.entries[0].name, changedName);
+  assert.equal(compact.entries[0].currentSources[0].source, '0.0.1');
+  assert.ok(full.entries.length > compact.entries.length);
+  assert.deepEqual(compact.summary, full.summary);
+  const text = cli([]), verbose = cli(['--verbose']);
+  assert.ok(text.includes(changedName));
+  assert.ok(!text.includes('@deepseek-ai/dsh-subagent'));
+  assert.ok(verbose.includes('@deepseek-ai/dsh-subagent'));
+  assert.ok(compact.files.some(file => file.added?.includes('private-row')));
+  for (const output of [text, verbose, JSON.stringify(compact), JSON.stringify(full)]) assert.ok(!output.includes('secret-marker'));
+  assert.equal(readYaml(machine.deployment.globalWorkspacePath).overrides[changedName], '0.0.1', 'preview did not apply changes');
+});
+
+test('doctor summary retains actionable failures while verbose adds successful package observations', () => {
+  const report = { checked: 2, runtimeVersion: '1.0.0', blocked: 1, next: 'repair installation', checks: [
+    { profile: 'web', name: 'healthy-plugin', installedVersion: '1.0.0', targetVersion: '1.0.0', entry: '/fixture/healthy.js' },
+  ], issues: [{ profile: 'web', name: 'broken-plugin', status: 'invalid-built-entry', entry: '/fixture/missing.js', reason: 'resolved-file-not-found' }] };
+  const summary = selectReport(report), full = selectReport(report, true);
+  assert.deepEqual(summary.issues, full.issues);
+  assert.equal(summary.checks, undefined);
+  assert.ok(formatDoctor(summary).includes('/fixture/missing.js'));
+  assert.ok(!formatDoctor(summary).includes('healthy-plugin'));
+  assert.ok(formatDoctor(full, true).includes('healthy-plugin'));
+  const update = selectReport({ input: 'live', apply: false, entries: [{ name: 'unchanged', status: 'registry-pin', changed: false }] });
+  assert.equal(update.summary.unchanged, 1);
+  assert.ok(!formatUpdate(update).includes('unchanged'));
 });
 
 test('CLI rejects plan without a compatibility alias', () => {

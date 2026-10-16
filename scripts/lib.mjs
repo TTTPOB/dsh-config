@@ -175,7 +175,8 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
         ? Object.keys(container[field]).filter(key => key === item.package || key.startsWith(item.package + '@'))
         : [item.package];
       const keys = matchingKeys.length ? matchingKeys : [item.package];
-      const current = container[field][keys[0]];
+      const currentSources = keys.map(selector => ({ selector, source: container[field][selector] }));
+      const current = currentSources.map(row => row.source);
       const target = item.policy === 'registry' ? item.version : item.url;
       for (const key of keys) {
         if (target) container[field][key] = target;
@@ -184,7 +185,9 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
       entries.push({ scope, ...(profile ? { profile } : {}), name: item.package, version: item.version,
         status: target ? (item.policy === 'release' ? 'verified-release' : item.package.startsWith('@deepseek-ai/') ? 'official-registry' : 'registry-pin') : 'blocked-missing-release',
         ...(target ? { target } : { reason: item.reason }),
-        changed: current !== target });
+        currentSources: currentSources.map(({ selector, source }) => ({ selector,
+          source: source === undefined ? null : /^(file:|link:|workspace:|\/)/.test(source) ? '(local source)' : source })),
+        changed: current.some(source => source !== target) });
     }
     const managed = new Set(entries.filter(row => row.scope === scope && row.profile === profile).map(row => row.name));
     for (const [name, source] of Object.entries(container[field])) {
@@ -210,7 +213,7 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
 export function parseCommandArguments(args) {
   args = [...args];
   const command = args.shift();
-  const usage = 'Usage: dsh-config <render|check|doctor|test|update> --machine <name> [--apply|--offline] [--tarball package=/absolute/file.tgz]';
+  const usage = 'Usage: dsh-config <render|check|doctor|test|update> --machine <name> [--apply|--offline] [--json] [--verbose] [--tarball package=/absolute/file.tgz]';
   if (!['render', 'check', 'doctor', 'test', 'update'].includes(command)) throw new Error(usage);
   const selector = args.shift();
   const machineArgument = selector === '--machine' ? args.shift() : selector;
@@ -222,6 +225,8 @@ export function parseCommandArguments(args) {
     const flag = args.shift();
     if (flag === '--apply' && command === 'update') options.apply = true;
     else if (flag === '--offline' && command === 'update') options.offline = true;
+    else if (flag === '--json' && ['doctor', 'update'].includes(command)) options.json = true;
+    else if (flag === '--verbose' && ['doctor', 'update'].includes(command)) options.verbose = true;
     else if (flag === '--tarball' && command === 'test') (options.tarballs ??= []).push(args.shift());
     else throw new Error(usage);
   }

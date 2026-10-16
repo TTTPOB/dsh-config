@@ -93,7 +93,20 @@ node scripts/dsh-config.mjs doctor --machine workstation
 
 `update --offline` 预览使用机器 installation 参数或迁移快照，报告 `input: offline`；与 render/check 一样，不发现本机部署位置、不读取本机安装。可在工作机离线预览 server 参数。默认 update 预览使用执行机器的路径默认／覆盖和实际 manifest，报告 `input: live`；apply 始终使用 live 输入，与默认预览一致；`--offline` 不可与 `--apply` 组合。两个预览均只读且不运行 doctor 或安装器。部署目标尚未准备时，live 诊断会指出缺失字段／profile，离线预览仍可使用。
 
-预览展示受管目标与阻塞。Doctor 使用安装 Host 的正式 profile resolver 和兼容检查，核对实际版本、来源与原始拒绝原因，不启动 Host、不授予豁免、不修改配置。Doctor 通过不表示运行中的旧 Host 已换版；目标来源缺资产仍须先解决。
+Update 默认只展开变化的受管依赖与阻塞，显示旧来源 → 新来源；不变项及非受管保留项只计数。Live 预览还列出变化的安装声明文件、配置 patch 的新增／移除／修改行 ID，不打印可能含凭据的配置值。依赖变化比较的是声明来源，实际安装版本与入口由 doctor 检查；offline 仅与输入声明／快照比较，不检查本机配置。
+
+Doctor 默认显示问题、已检查数量与下一步，通过项不逐项展开。输出格式与详细程度独立控制：
+
+| 参数 | 输出 |
+|---|---|
+| 默认 | 人类可读摘要 |
+| `--json` | 同一摘要的 JSON |
+| `--verbose` | 人类可读完整明细，包括不变依赖／成功解析项 |
+| `--json --verbose` | 完整明细的 JSON |
+
+两项参数均用于 doctor 和 update。脚本如需遍历全部依赖，应使用 `--json --verbose`。
+
+每次 doctor 都在新的 Node 进程中使用安装 Host 的正式 profile resolver 和兼容检查，核对实际版本、声明来源与原始拒绝原因；安装后重新发现当前 Host，避免复用安装前的模块和解析状态。入口错误报告实际解析路径、包 manifest 路径及文件缺失／源码入口原因。Doctor 不启动 Host、不授予豁免、不修改配置；通过不表示运行中的旧 Host 已换版，目标来源缺资产仍须先解决。
 
 ### 共享 peer 解析验收
 
@@ -124,7 +137,7 @@ node scripts/dsh-config.mjs update --machine workstation --apply
 
 入口合并受管安装目标，通过 pnpm 安装并核对解析／兼容结果，再应用配置；不启停 Host。同一目标重复 apply 会收敛到同一状态；目标声明、配置与实际解析已一致时，报告无需更新，不重复备份、安装或改写文件。
 
-需要变更时先保留本次文件备份。安装后若只剩清单已记录的精确兼容拒绝，一次 apply 会写入所需豁免并重新检查，无需维护脚本逐项执行 allow-version 或第二次 apply。未知组合仍保留已安装状态和备份，不应用配置。失败时按报告的具体步骤处理。通过后仍是“已安装，待原 Host 启动验收”。
+需要变更时先保留本次文件备份。安装后若只剩清单已记录的精确兼容拒绝，一次 apply 会写入所需豁免并重新检查，无需维护脚本逐项执行 allow-version 或第二次 apply。未知组合或安装／入口问题仍保留已安装状态和备份，不应用配置。安装／入口问题会阻止自动兼容授权；终端显示具体阻塞项，完整报告保存在备份的 `doctor.json`，按报告的具体原因处理。通过后仍是“已安装，待原 Host 启动验收”。
 
 Apply 在 stderr 即时报告 pre-install doctor、global install、profile install、post-install doctor 与精确豁免后的 doctor。安装器 stdout/stderr 直接写入私有 `generated/global-install.log` 和 `generated/profile-install.log`，运行期间即可查看，不等命令结束。每个安装步骤沿用 600 秒上限，超时强制结束直接子进程。外部维护流程应为整次 apply 设明确边界，超时结束其独立进程组，并在 finally 恢复目标服务；不要用同步缓冲的外层调用让日志和恢复一直等待。恢复服务不等于回滚安装，失败的备份继续保留。
 

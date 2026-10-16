@@ -3,9 +3,10 @@ import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { renderMachine, resolveMachineArgument, parseCommandArguments, validatePatch, readYaml } from './lib.mjs';
 import { deploymentTargets, doctor, isolatedTest, updateMachine, normalizeDeployment } from './deployment.mjs';
+import { formatDoctor, formatUpdate, selectReport } from './report.mjs';
 
 try {
-  const { command, machineArgument, apply, offline, tarballs } = parseCommandArguments(process.argv.slice(2));
+  const { command, machineArgument, apply, offline, json, verbose, tarballs } = parseCommandArguments(process.argv.slice(2));
   const { path, label } = resolveMachineArgument(machineArgument);
   if (!existsSync(path)) throw new Error('Machine configuration not found; provide --machine with an existing private machine name or a machine YAML path');
   const snapshotDir = join(dirname(path), 'snapshot');
@@ -17,8 +18,8 @@ try {
     renderMachine(path, label, undefined, { stage: false });
     console.log(`${label}: current configuration checks passed`);
   } else if (command === 'update') {
-    const report = await updateMachine(path, label, apply, { offline });
-    console.log(JSON.stringify(report, null, 2));
+    const report = selectReport(await updateMachine(path, label, apply, { offline }), verbose);
+    console.log(json ? JSON.stringify(report, null, 2) : formatUpdate(report, verbose));
     if (report.blocked) process.exitCode = 2;
   } else if (command === 'test') {
     console.log(JSON.stringify(isolatedTest(path, label, tarballs), null, 2));
@@ -27,7 +28,11 @@ try {
     machine.deployment = normalizeDeployment(machine.deployment);
     const targets = deploymentTargets(machine, snapshotDir);
     const report = await doctor(machine, targets);
-    console.log(JSON.stringify({ ...report, unresolvedAssets: targets.entries.filter(row => row.status.startsWith('blocked')) }, null, 2));
+    const unresolvedAssets = targets.entries.filter(row => row.status.startsWith('blocked'));
+    const result = selectReport({ ...report, unresolvedAssets, blocked: report.blocked + unresolvedAssets.length,
+      ...(unresolvedAssets.length ? { next: '补齐清单中缺少的精确发布资产，并处理上述安装问题。' } : {}),
+    }, verbose);
+    console.log(json ? JSON.stringify(result, null, 2) : formatDoctor(result, verbose));
     if (report.blocked || targets.entries.some(row => row.status.startsWith('blocked'))) process.exitCode = 2;
   }
 } catch (error) {

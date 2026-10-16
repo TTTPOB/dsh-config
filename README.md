@@ -22,7 +22,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 服务器使用自己的 `--machine server`。机器名只选择 `private/machines/<name>/machine.yaml`，不连接远程机器。也可以直接传参数文件路径。生成结果位于 `generated/<name>/`，保留为私有文件。
 
-- [正式安装与更新](docs/install.md)：机器参数、目标来源、doctor、显式 apply、精确豁免和维护切换。
+- [正式安装与更新](docs/install.md)：机器参数、目标来源、doctor、显式 apply、精确豁免和维护切换。Doctor/update 默认突出变化与问题，`--verbose` 展开完整明细，`--json` 独立切换输出格式。
 - [隔离成品测试](docs/testing.md)：源码聚焦验证、本地 tarball 测试副本及已有 smoke。
 
 ## 配置与依赖归属
