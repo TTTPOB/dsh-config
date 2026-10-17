@@ -10,7 +10,7 @@
 
 ## 2. 接入配置侧隔离测试
 
-在私有机器参数的 `deployment.smoke` 中声明测试命令 `argv` 和绝对工作目录 `cwd`。测试入口由源码仓库提供，本仓库不要求源码位于相邻目录。
+在私有机器参数的 `deployment.smoke` 中声明测试命令 `argv` 和绝对工作目录 `cwd`。包级测试入口由源码仓库提供，本仓库不要求源码位于相邻目录。个人 profile 组合验证是例外：本仓库提供 [profile-smoke.mjs](<../scripts/profile-smoke.mjs>)，负责 CLI／全部插件的组合安装与隔离 Host 工具注册验收，执行方法见 [rc.1 组合验收](<upgrade-rc1.md>)。
 
 两种接入方式：
 
@@ -39,7 +39,7 @@ node scripts/dsh-config.mjs test --machine workstation \
 node --test tests/deployment-paths.test.mjs tests/deployment.test.mjs tests/config.test.mjs
 ```
 
-这些测试使用独立临时 fixture 和模拟安装，不执行日用全局安装；每个测试登记结束清理，断言失败也会回收本次目录。完整 `pnpm test` 还包含使用独立安装根的真实 pnpm 安装测试，同样自动清理。测试日志不写维护日志。模板引擎随完整 pnpm 依赖安装，无需外部二进制。模板自动测试只检查输出结构、输入传递与字面表达式保留，不固定示例中的模型、插件清单或 preset 内容。配置语义由变更审查确认；两机当前目标配置通过 check 检查，无需预先 render。
+这些测试使用独立临时 fixture 和模拟安装，不执行日用全局安装；每个测试登记结束清理，断言失败也会回收本次目录。完整 `pnpm test` 还包含使用独立安装根的真实 pnpm 安装测试，同样自动清理。测试日志不写维护日志。模板引擎随完整 pnpm 依赖安装，无需外部二进制。模板自动测试只检查输出结构、输入传递与字面表达式保留，不固定示例中的模型、插件清单或 preset 内容。rc.1 的模板回归另行固定 PTC、普通子代理与 Team 分流等用户决定的语义；两机当前目标配置通过 check 检查，无需预先 render。
 
 ACP 配置回归使用[公开示例](<../examples/active-context-machine.yaml>)，检查每个生成 preset 的 Basic 行已禁用、ACP 在同一 isolation group、原生策略完整、提醒 routes 为空。成品烟测由 ACP 源码仓库提供，使用 capture-capable Query 与 ACP tarball、仅安装 ACP 的 profile、干净 peer 布局和正式 Host resolver／Loader，直接以原文端点验证压缩；本地 tarball 只进入隔离测试，不写入正式来源。
 

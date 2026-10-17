@@ -131,6 +131,8 @@ const exactVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 export function readDependencyCatalog() {
   const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
   assert.equal(catalog.schemaVersion, 2, 'Dependency catalog requires schemaVersion: 2');
+  if (catalog.runtimeVersion !== undefined) assert.match(catalog.runtimeVersion, exactVersion, 'Runtime version must be exact');
+  assert.ok((catalog.retiredGlobalOverrides ?? []).every(name => typeof name === 'string' && name.length), 'Invalid retired overrides');
   const keys = new Set();
   for (const item of catalog.packages) {
     assert.ok(['global-override', 'profile'].includes(item.scope), 'Invalid dependency scope');
@@ -142,6 +144,7 @@ export function readDependencyCatalog() {
     keys.add(key);
     if (item.policy === 'release' && item.url !== undefined) assert.match(item.url, releaseUrl, 'Invalid Release URL');
     if (item.policy === 'release' && !item.url) assert.equal(typeof item.reason, 'string', 'Missing asset reason required');
+    for (const flag of ['required', 'resetSelectors']) if (item[flag] !== undefined) assert.equal(typeof item[flag], 'boolean', `Invalid dependency flag: ${flag}`);
     if (item.profiles !== undefined) assert.ok(Array.isArray(item.profiles) && item.profiles.every(p => /^[a-zA-Z0-9_-]+$/.test(p)), 'Invalid profiles');
   }
   for (const [identity, runtimes] of Object.entries(catalog.verifiedCompatibility ?? {})) {
@@ -169,13 +172,23 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
   const entries = [];
   const merge = (container, field, scope, profile) => {
     container[field] ??= {};
+    if (scope === 'global-override') {
+      for (const name of catalog.retiredGlobalOverrides ?? []) {
+        for (const key of Object.keys(container[field]).filter(key => key === name || key.startsWith(name + '@'))) {
+          delete container[field][key];
+          entries.push({ scope, name: key, status: 'retired-override', changed: true, target: '(removed)' });
+        }
+      }
+    }
     for (const item of catalog.packages.filter(item => item.scope === scope)) {
-      if (scope === 'profile' && ((item.profiles && !item.profiles.includes(profile)) || !(item.package in container[field]))) continue;
+      if (scope === 'profile' && ((item.profiles && !item.profiles.includes(profile)) || (!item.required && !(item.package in container[field])))) continue;
       const matchingKeys = scope === 'global-override'
         ? Object.keys(container[field]).filter(key => key === item.package || key.startsWith(item.package + '@'))
         : [item.package];
-      const keys = matchingKeys.length ? matchingKeys : [item.package];
-      const currentSources = keys.map(selector => ({ selector, source: container[field][selector] }));
+      const reset = scope === 'global-override' && item.resetSelectors;
+      const keys = !reset && matchingKeys.length ? matchingKeys : [item.package];
+      const currentSources = (matchingKeys.length ? matchingKeys : keys).map(selector => ({ selector, source: container[field][selector] }));
+      if (reset) for (const key of matchingKeys) delete container[field][key];
       const current = currentSources.map(row => row.source);
       const target = item.policy === 'registry' ? item.version : item.url;
       for (const key of keys) {
@@ -187,7 +200,7 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
         ...(target ? { target } : { reason: item.reason }),
         currentSources: currentSources.map(({ selector, source }) => ({ selector,
           source: source === undefined ? null : /^(file:|link:|workspace:|\/)/.test(source) ? '(local source)' : source })),
-        changed: current.some(source => source !== target) });
+        changed: current.some(source => source !== target) || Boolean(reset && matchingKeys.some(key => key !== item.package)) });
     }
     const managed = new Set(entries.filter(row => row.scope === scope && row.profile === profile).map(row => row.name));
     for (const [name, source] of Object.entries(container[field])) {
@@ -208,6 +221,11 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
     if (bundles) manifest.dsh.profile.bundles = bundles.filter(name => !patchOnly.has(name));
   }
   return { globalWorkspace, profiles, entries };
+}
+
+// A profile-owned fork may also have a global override even when the CLI never depends on it.
+export function resolvesFromProfile(target, entries, profile) {
+  return target.scope === 'profile' || entries.some(row => row.scope === 'profile' && row.profile === profile && row.name === target.name);
 }
 
 export function parseCommandArguments(args) {

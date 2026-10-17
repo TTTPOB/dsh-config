@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import YAML from 'yaml';
 import { summarizeFiles, formatDoctor } from './report.mjs';
-import { root, readYaml, readDependencyCatalog, resolveDependencyTargets, renderMachine, validatePatch } from './lib.mjs';
+import { root, readYaml, readDependencyCatalog, resolveDependencyTargets, renderMachine, validatePatch, resolvesFromProfile } from './lib.mjs';
 
 import { normalizeDeployment } from './deployment-paths.mjs';
 export { normalizeDeployment } from './deployment-paths.mjs';
@@ -28,15 +28,17 @@ export function resolveInstalledHost(deployment) {
   return realpathSync(join(anchors[0], 'package.json'));
 }
 
-export function globalInstallArguments(deployment) {
+export function globalInstallArguments(deployment, runtimeVersion) {
   const manifest = json(resolveInstalledHost(deployment));
   assert.equal(manifest.name, '@deepseek-ai/dsh', 'Global installation anchor must be official DSH');
   assert.match(manifest.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'Global runtime version must be exact');
+  const targetVersion = runtimeVersion ?? manifest.version;
+  assert.match(targetVersion, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'Target runtime version must be exact');
   assert.ok(isAbsolute(deployment.globalBinDir ?? ''), 'Absolute deployment.globalBinDir required for global apply');
   const globalDir = deployment.globalDir ?? dirname(dirname(deployment.globalWorkspacePath));
   assert.ok(isAbsolute(globalDir), 'Global directory must be absolute');
   return ['pnpm', '--config.enable-global-virtual-store=false', `--config.global-dir=${globalDir}`,
-    `--config.global-bin-dir=${deployment.globalBinDir}`, '--ignore-workspace', 'add', '--global', `@deepseek-ai/dsh@${manifest.version}`];
+    `--config.global-bin-dir=${deployment.globalBinDir}`, '--ignore-workspace', 'add', '--global', `@deepseek-ai/dsh@${targetVersion}`];
 }
 
 export function validateDeployment(deployment) {
@@ -114,7 +116,7 @@ export async function inspectInstallation(machine, targets) {
         const sources = target.scope === 'profile' ? requested : globals.overrides ?? {};
         const declaredKeys = Object.keys(sources).filter(key => key === target.name || (target.scope === 'global-override' && key.startsWith(target.name + '@')));
         if (target.target && (!declaredKeys.length || declaredKeys.some(key => sources[key] !== target.target))) issues.push({ profile: name, name: target.name, status: 'declared-source-mismatch', expected: target.target, actual: declaredKeys.length ? declaredKeys.map(key => `${key}=${sources[key]}`).join(', ') : '(未声明)' });
-        const anchor = target.scope === 'profile' ? location.packagePath : hostManifest;
+        const anchor = resolvesFromProfile(target, targets.entries, name) ? location.packagePath : hostManifest;
         const parentURL = pathToFileURL(anchor).href;
         const installed = ctx.pluginPackages.packageOf(target.name, parentURL);
         if (!installed) {
@@ -149,7 +151,7 @@ export function doctorNext(issues) {
   return '仅剩兼容拒绝：update --apply 可授权清单已验证的精确组合；未记录的组合须先验证。';
 }
 
-export function runStep(argv, cwd, env = process.env, { logDir = join(root, 'generated') } = {}) {
+export function runStep(argv, cwd, env = process.env, { logDir = join(root, 'generated'), timeoutMs = 600000, killSignal = 'SIGKILL' } = {}) {
   const kind = argv.includes('--global') ? 'global-install' : 'profile-install';
   const log = join(logDir, `${kind}.log`);
   mkdirSync(dirname(log), { recursive: true, mode: 0o700 });
@@ -158,7 +160,7 @@ export function runStep(argv, cwd, env = process.env, { logDir = join(root, 'gen
   console.error(`[apply] ${kind} started; private live log: ${log}`);
   let child;
   try {
-    child = spawnSync(argv[0], argv.slice(1), { cwd, env, stdio: ['ignore', fd, fd], timeout: 600000, killSignal: 'SIGKILL' });
+    child = spawnSync(argv[0], argv.slice(1), { cwd, env, stdio: ['ignore', fd, fd], timeout: timeoutMs, killSignal });
   } finally { closeSync(fd); }
   console.error(`[apply] ${kind} finished: ${child.error?.code ?? child.status ?? child.signal}`);
   if (child.error || child.status !== 0) throw new Error(`Step failed (${kind}, ${child.error?.code ?? child.status ?? child.signal}); private log: ${log}`);
@@ -189,18 +191,26 @@ export async function grantVerifiedCompatibility(machine, targets, report, catal
 
 export async function updateMachine(machinePath, label, apply = false, dependencies = {}) {
   const machine = readYaml(machinePath);
+  const catalog = dependencies.catalog ?? readDependencyCatalog();
   if (apply && dependencies.offline) throw new Error('--offline cannot be combined with --apply');
   const live = !dependencies.offline;
   if (live) machine.deployment = normalizeDeployment(machine.deployment, dependencies.discovery);
   const targets = live
-    ? deploymentTargets(machine, join(dirname(machinePath), 'snapshot'), dependencies.catalog)
-    : resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, dependencies.catalog, machine.features);
+    ? deploymentTargets(machine, join(dirname(machinePath), 'snapshot'), catalog)
+    : resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog, machine.features);
   const blocked = targets.entries.filter(row => row.status.startsWith('blocked'));
   const preview = { input: live ? 'live' : 'offline', entries: targets.entries, blocked: blocked.length, apply: false, hostLifecycle: 'external-maintenance-window' };
+  if (catalog.runtimeVersion) {
+    preview.runtime = { targetVersion: catalog.runtimeVersion };
+    if (live) {
+      preview.runtime.installedVersion = json(resolveInstalledHost(machine.deployment)).version;
+      preview.runtime.changed = preview.runtime.installedVersion !== catalog.runtimeVersion;
+    }
+  }
   if (!live) return preview;
   if (apply && blocked.length) throw new Error(`Apply blocked: ${blocked.length} exact Release assets are missing; no files changed.`);
   const deployment = validateDeployment(machine.deployment);
-  const { rendered } = renderMachine(machinePath, label, dependencies.catalog, { stage: false, generatedDir: dependencies.generatedDir });
+  const { rendered } = renderMachine(machinePath, label, catalog, { stage: false, generatedDir: dependencies.generatedDir });
   const manifests = [
     [deployment.globalWorkspacePath, YAML.stringify(targets.globalWorkspace)],
     ...Object.entries(targets.profiles).map(([name, manifest]) => {
@@ -220,11 +230,10 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   console.error(`[apply] pre-install doctor finished: blocked=${before.blocked}`);
   const manifestChanged = preview.files.some(file => file.kind === 'installation' && file.changed);
   const patchesChanged = preview.files.some(file => file.kind === 'configuration' && file.changed);
-  const needsInstall = manifestChanged || before.issues.some(issue => ['missing-installed-package', 'installed-version-mismatch', 'declared-source-mismatch', 'missing-built-entry', 'invalid-built-entry'].includes(issue.status));
-  const catalog = dependencies.catalog ?? readDependencyCatalog();
+  const needsInstall = preview.runtime?.changed || manifestChanged || before.issues.some(issue => ['missing-installed-package', 'installed-version-mismatch', 'declared-source-mismatch', 'missing-built-entry', 'invalid-built-entry'].includes(issue.status));
   let granted = [];
   if (!needsInstall && !patchesChanged && !before.blocked) return { ...preview, apply: true, noOp: true, granted, activation: 'No target changes; Host activation was not checked.' };
-  const installArguments = needsInstall ? globalInstallArguments(deployment) : undefined;
+  const installArguments = needsInstall ? globalInstallArguments(deployment, catalog.runtimeVersion) : undefined;
   const generatedDir = dependencies.generatedDir ?? join(root, 'generated');
   mkdirSync(generatedDir, { recursive: true, mode: 0o700 });
   const backup = mkdtempSync(join(generatedDir, `${label}-backup-`));
@@ -269,6 +278,7 @@ export function isolatedTest(machinePath, label, tarballs = [], execute, { gener
   const smoke = machine.deployment?.smoke;
   assert.ok(Array.isArray(smoke?.argv) && smoke.argv.length && smoke.argv.every(arg => typeof arg === 'string'), 'Explicit smoke argv required');
   assert.ok(isAbsolute(smoke.cwd ?? ''), 'Absolute smoke cwd required');
+  if (smoke.resultFile !== undefined) assert.match(smoke.resultFile, /^[a-zA-Z0-9_.-]+\.json$/, 'Smoke resultFile must be a JSON basename');
   assert.ok(smoke.ownsInstallation === true || smoke.argv.some(arg => arg.includes('{testRoot}') || arg.includes('{home}')), 'Smoke must declare its own installation or receive the isolated root');
   if (!smoke.ownsInstallation) {
     validatePatch(smoke.homePatch);
@@ -323,11 +333,15 @@ export function isolatedTest(machinePath, label, tarballs = [], execute, { gener
         return copiedTarballs.get(name);
       })
       .replace(/\{(testRoot|home|globalWorkspace|webPackage|homePatch|webPatch)\}/g, (_, key) => paths[key]));
-    (execute ?? ((argv, cwd, env) => runStep(argv, cwd, env, { logDir: testRoot })))(argv, smoke.cwd, { ...process.env, DSH_HOME: home, DSH_CONFIG_TEST_ROOT: testRoot });
-    return { cleaned: true, smokeOwnsInstallation: smoke.ownsInstallation === true, renderedConfigurationVerified: false,
+    (execute ?? ((argv, cwd, env) => runStep(argv, cwd, env, { logDir: testRoot, timeoutMs: 1800000, killSignal: 'SIGTERM' })))(argv, smoke.cwd, { ...process.env, DSH_HOME: home, DSH_CONFIG_TEST_ROOT: testRoot });
+    const smokeResult = smoke.resultFile ? json(join(testRoot, smoke.resultFile)) : undefined;
+    return { ...(smokeResult === undefined ? {} : { smokeResult }), cleaned: true, smokeOwnsInstallation: smoke.ownsInstallation === true, renderedConfigurationVerified: false,
       unresolvedAssets: blocked.map(row => row.name),
       configuration: 'Normal render validated without staging; only explicit controlled smoke patches staged. Smoke behavior determines which layout is verified.', hostStartedByConfig: false };
   } catch (error) {
+    const resultPath = smoke.resultFile && join(testRoot, smoke.resultFile);
+    const diagnostic = resultPath && existsSync(resultPath) ? json(resultPath).error : undefined;
+    if (typeof diagnostic === 'string') error.message += `; smoke: ${diagnostic}`;
     error.message = `${error.message.replaceAll(testRoot, '<cleaned temporary directory>')}; isolated temporary files cleaned`;
     throw error;
   } finally { rmSync(testRoot, { recursive: true, force: true }); }

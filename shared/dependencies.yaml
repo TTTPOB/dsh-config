@@ -1,158 +1,198 @@
+# Release URLs and compatibility records are added only after artifact validation.
 schemaVersion: 2
-# Exact combinations validated by the existing built-package behavior checks.
-verifiedCompatibility:
-  'dsh-active-context@0.4.7': ['0.1.7-rc.2']
-  'dsh-session-tools@0.3.0': ['0.1.7-rc.2']
-  '@deepseek-ai/dsh-session-query@0.1.7-rc.2-fork4': ['0.1.7-rc.2']
-  'dsh-workspace-overlay@0.2.0': ['0.1.7-rc.2']
-  'dsh-workspace-envrc@0.2.0': ['0.1.7-rc.2']
-  '@deepseek-ai/dsh-session-query-sqlite@0.1.7-rc.2-fork6': ['0.1.7-rc.2']
-  '@deepseek-ai/dsh-api-gateway@0.1.7-rc.2-fork2': ['0.1.7-rc.2']
-  '@deepseek-ai/dsh-host-frontend-static@0.1.7-rc.2-fork2': ['0.1.7-rc.2']
-  '@deepseek-ai/dsh-subagent@0.1.7-rc.2-fork2': ['0.1.7-rc.2']
+verifiedCompatibility: {}
 packages:
   - package: "@deepseek-ai/dsh-session"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork16/deepseek-ai-dsh-session-0.1.7-rc.2-fork1.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-session-persistence-jsonl"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork3
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork10/deepseek-ai-dsh-session-persistence-jsonl-0.1.7-rc.2-fork3.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-session-query"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork4
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork17/deepseek-ai-dsh-session-query-0.1.7-rc.2-fork4.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-session-query-sqlite"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork6
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork16/deepseek-ai-dsh-session-query-sqlite-0.1.7-rc.2-fork6.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-client-ui-plugin-manager"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork2
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork8/deepseek-ai-dsh-client-ui-plugin-manager-0.1.7-rc.2-fork2.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-client-ui-sidebar-terminal"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork2
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork8/deepseek-ai-dsh-client-ui-sidebar-terminal-0.1.7-rc.2-fork2.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-api-gateway"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork2
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork6/deepseek-ai-dsh-api-gateway-0.1.7-rc.2-fork2.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-client-connection"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork2
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork6/deepseek-ai-dsh-client-connection-0.1.7-rc.2-fork2.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-host-frontend-static"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork2
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork6/deepseek-ai-dsh-host-frontend-static-0.1.7-rc.2-fork2.tgz
-  - package: "@deepseek-ai/dsh-client-ui-settings"
-    scope: global-override
-    policy: release
-    version: 0.1.7-rc.2-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork5/deepseek-ai-dsh-client-ui-settings-0.1.7-rc.2-fork1.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@earendil-works/pi-ai"
     scope: global-override
     policy: release
-    version: 0.85.1-fork2
-    url: https://github.com/TTTPOB/pi/releases/download/pi-ai-v0.85.1-fork2/earendil-works-pi-ai-0.85.1-fork2.tgz
+    version: 1.1.0-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: dsh-web-mobile
     scope: profile
-    profiles: [web]
+    profiles:
+      - web
     policy: release
-    version: 3.1.0
-    url: https://github.com/TTTPOB/dsh-mobile-workbench/releases/download/v3.1.0/dsh-web-mobile-3.1.0.tgz
+    version: 3.2.0
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
   - package: "@firecrawl/dsh-firecrawl"
     scope: profile
     policy: release
-    version: 0.1.0-fork1
-    url: https://github.com/TTTPOB/dsh-firecrawl/releases/download/v0.1.0-fork1/firecrawl-dsh-firecrawl-0.1.0-fork1.tgz
+    version: 0.2.0-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
   - package: dsh-progressive-tools
     scope: profile
     patchOnly: true
     policy: release
-    version: 0.3.0
-    url: https://github.com/TTTPOB/dsh-progressive-tools/releases/download/v0.3.0/dsh-progressive-tools-0.3.0.tgz
+    version: 0.4.0
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
   - package: dsh-session-tools
     scope: profile
     policy: release
     patchOnly: true
-    version: 0.3.0
-    url: https://github.com/TTTPOB/dsh-session-tools/releases/download/v0.3.0/dsh-session-tools-0.3.0.tgz
+    version: 0.4.0
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
   - package: dsh-active-context
     scope: profile
     patchOnly: true
     policy: release
-    version: 0.4.7
-    url: https://github.com/TTTPOB/dsh-active-context/releases/download/v0.4.7/dsh-active-context-0.4.7.tgz
+    version: 0.5.0
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
   - package: dsh-workspace-envrc
     scope: profile
     patchOnly: true
     policy: release
-    version: 0.2.0
-    url: https://github.com/TTTPOB/dsh-workspace-envrc/releases/download/v0.2.0/dsh-workspace-envrc-0.2.0.tgz
+    version: 0.3.0
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
   - package: dsh-workspace-overlay
     scope: profile
     patchOnly: true
     policy: release
-    version: 0.2.0
-    url: https://github.com/TTTPOB/dsh-workspace-overlay/releases/download/v0.2.0/dsh-workspace-overlay-0.2.0.tgz
+    version: 0.3.0
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
   - package: "@deepseek-ai/dsh-llm-pi-ai"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork2
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork14/deepseek-ai-dsh-llm-pi-ai-0.1.7-rc.2-fork2.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-mcp-client"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork13/deepseek-ai-dsh-mcp-client-0.1.7-rc.2-fork1.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-subagent"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork2
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork2/deepseek-ai-dsh-subagent-0.1.7-rc.2-fork2.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-agent"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork13/deepseek-ai-dsh-agent-0.1.7-rc.2-fork1.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-agent-preset-registry"
     scope: global-override
     policy: release
-    version: 0.1.7-rc.2-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.1.7-rc.2-fork13/deepseek-ai-dsh-agent-preset-registry-0.1.7-rc.2-fork1.tgz
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：rc.1 兼容构建的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
   - package: dsh-mcp-panel
     scope: profile
     policy: registry
-    version: 0.6.19
+    version: 0.6.24
   - package: "@deepseek-ai/libreoffice-kit"
     scope: global-override
     policy: registry
-    version: 0.1.2
-  - package: "node-addon-require-builtin"
+    version: 0.1.5
+    resetSelectors: true
+  - package: node-addon-require-builtin
     scope: global-override
     policy: registry
-    version: 0.1.6
-  - package: "node-addon-native-custom-loader"
+    version: 0.1.9
+    resetSelectors: true
+  - package: node-addon-native-custom-loader
     scope: global-override
     policy: registry
-    version: 0.1.6
-  - package: "wsl-utils"
+    version: 0.1.9
+    resetSelectors: true
+  - package: wsl-utils
     scope: global-override
     policy: registry
     version: 1.0.0
+    resetSelectors: true
   - package: "@smithy/core"
     scope: global-override
     policy: registry
     version: 3.35.0
+    resetSelectors: true
+  - package: "@deepseek-ai/dsh-experimental-tool-agent-team"
+    scope: global-override
+    policy: release
+    version: 0.2.1-rc.1-fork1
+    reason: 待发布来源：preset 作用域注册修复 fork 的精确 Release 资产尚未发布并核实。
+    resetSelectors: true
+  - package: "@deepseek-ai/dsh-experimental-agent-team"
+    scope: profile
+    policy: registry
+    version: 0.2.1-rc.1
+    patchOnly: true
+    required: true
+  - package: "@deepseek-ai/dsh-experimental-tool-agent-team"
+    scope: profile
+    policy: release
+    version: 0.2.1-rc.1-fork1
+    patchOnly: true
+    required: true
+    reason: 待发布来源：preset 作用域注册修复 fork 的精确 Release 资产尚未发布并核实。
+  - package: "@deepseek-ai/dsh-experimental-client-ui-agent-team"
+    scope: profile
+    policy: registry
+    version: 0.2.1-rc.1
+    patchOnly: true
+    required: true
+  - package: "@deepseek-ai/dsh-experimental-agent-team-profile"
+    scope: profile
+    policy: registry
+    version: 0.2.1-rc.1
+    patchOnly: true
+runtimeVersion: 0.2.1-rc.1
+retiredGlobalOverrides:
+  - "@deepseek-ai/dsh-client-ui-settings"

@@ -1,5 +1,5 @@
 import test from 'node:test';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, statSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -80,6 +80,25 @@ test('live and offline previews select ACP from machine features without touchin
 });
 
 const healthy = async () => ({ issues: [], blocked: 0 });
+
+test('explicit catalog runtime upgrades an otherwise aligned installation without touching preview targets', async t => {
+  const { machine, machinePath } = fixture(t);
+  const selected = { ...catalog, runtimeVersion: '0.2.1-rc.1' };
+  await updateMachine(machinePath, 'runtime-baseline', true, { catalog, doctor: healthy, runStep: () => {} });
+  const before = read(machine.deployment.globalWorkspacePath);
+  const preview = await updateMachine(machinePath, 'runtime-preview', false, { catalog: selected });
+  assert.deepEqual(preview.runtime, { targetVersion: '0.2.1-rc.1', installedVersion: '0.1.7-rc.2', changed: true });
+  assert.equal(read(machine.deployment.globalWorkspacePath), before);
+  assert.match(formatUpdate(selectReport(preview)), /CLI runtime: 0.1.7-rc.2 → 0.2.1-rc.1/);
+  const calls = [];
+  await updateMachine(machinePath, 'runtime-upgrade', true, { catalog: selected, doctor: healthy,
+    runStep: argv => calls.push(argv) });
+  assert.equal(calls[0].at(-1), '@deepseek-ai/dsh@0.2.1-rc.1');
+  writeJson(machine.deployment.hostManifest, { name: '@deepseek-ai/dsh', version: '0.2.1-rc.1' });
+  assert.equal((await updateMachine(machinePath, 'runtime-aligned', true, { catalog: selected,
+    doctor: healthy, runStep: () => assert.fail('aligned runtime reinstalled') })).noOp, true);
+});
+
 
 const verifiedCatalog = { ...catalog, verifiedCompatibility: { 'managed-plugin@2.0.0': ['0.1.7-rc.2'] } };
 const denied = { runtimeVersion: '0.1.7-rc.2', blocked: 1, issues: [
@@ -304,6 +323,18 @@ test('isolated entry copies local tarballs and passes exact argv to an existing 
     assert.ok(readYaml(join(env.DSH_HOME, 'profiles/web/package.json')).dependencies['dsh-session-tools'].startsWith('file:'));
   }, { generatedDir: join(directory, 'generated') });
   assert.equal(result.cleaned, true);
+  machine.deployment.smoke.resultFile = 'result.json';
+  writeJson(machinePath, machine);
+  const structured = isolatedTest(machinePath, 'test-structured-result', [`dsh-session-tools=${tarball}`], (_argv, _cwd, env) => {
+    writeJson(join(env.DSH_CONFIG_TEST_ROOT, 'result.json'), { presets: ['standard-ptc', 'standard-ptc-team'] });
+  }, { generatedDir: join(directory, 'generated') });
+  assert.deepEqual(structured.smokeResult.presets, ['standard-ptc', 'standard-ptc-team']);
+  assert.throws(() => isolatedTest(machinePath, 'test-structured-error', [`dsh-session-tools=${tarball}`], (_argv, _cwd, env) => {
+    writeJson(join(env.DSH_CONFIG_TEST_ROOT, 'result.json'), { error: 'Team tools leaked into ordinary preset' });
+    throw new Error('smoke process exited 1');
+  }, { generatedDir: join(directory, 'generated') }), /smoke: Team tools leaked.*cleaned/);
+  delete machine.deployment.smoke.resultFile;
+  writeJson(machinePath, machine);
   assert.deepEqual(readdirSync(join(directory, 'generated')), []);
   assert.throws(() => isolatedTest(machinePath, 'test-smoke-failure', [`dsh-session-tools=${tarball}`], () => { throw new Error('controlled smoke failure'); }, { generatedDir: join(directory, 'generated') }), /controlled smoke failure/);
   assert.deepEqual(readdirSync(join(directory, 'generated')), []);
@@ -359,24 +390,28 @@ test('CLI separates JSON format from verbosity and hides unchanged items and pri
   writeFileSync(join(home, 'cordis.patch.yml'), rendered.home);
   writeFileSync(join(home, 'profiles/web/cordis.patch.yml'), rendered.web);
   const source = readYaml(machine.deployment.globalWorkspacePath);
-  const changedName = '@deepseek-ai/dsh-session';
+  const changedName = '@smithy/core';
   source.overrides[changedName] = '0.0.1';
   writeJson(machine.deployment.globalWorkspacePath, source);
   machine.homePrivate = '- insert:\n  - id: private-row\n    module: example\n    config:\n      token: secret-marker\n';
   writeJson(machinePath, machine);
-  const cli = flags => execFileSync(process.execPath, [join(root, 'scripts/dsh-config.mjs'), 'update', machinePath, ...flags], { encoding: 'utf8' });
+  const cli = flags => {
+    const result = spawnSync(process.execPath, [join(root, 'scripts/dsh-config.mjs'), 'update', machinePath, ...flags], { encoding: 'utf8' });
+    assert.equal(result.status, 2, 'unpublished rc.1 assets remain explicit preview blockers');
+    assert.equal(result.stderr, '');
+    return result.stdout;
+  };
   const compact = JSON.parse(cli(['--json']));
   const full = JSON.parse(cli(['--verbose', '--json']));
   assert.equal(compact.summary.changed, 1);
-  assert.equal(compact.entries.length, 1);
-  assert.equal(compact.entries[0].name, changedName);
-  assert.equal(compact.entries[0].currentSources[0].source, '0.0.1');
+  assert.equal(compact.entries.length, compact.summary.blocked + 1);
+  assert.equal(compact.entries.find(row => row.name === changedName).currentSources[0].source, '0.0.1');
   assert.ok(full.entries.length > compact.entries.length);
   assert.deepEqual(compact.summary, full.summary);
   const text = cli([]), verbose = cli(['--verbose']);
   assert.ok(text.includes(changedName));
-  assert.ok(!text.includes('@deepseek-ai/dsh-subagent'));
-  assert.ok(verbose.includes('@deepseek-ai/dsh-subagent'));
+  assert.ok(!text.includes('node-addon-native-custom-loader'));
+  assert.ok(verbose.includes('node-addon-native-custom-loader'));
   assert.ok(compact.files.some(file => file.added?.includes('private-row')));
   for (const output of [text, verbose, JSON.stringify(compact), JSON.stringify(full)]) assert.ok(!output.includes('secret-marker'));
   assert.equal(readYaml(machine.deployment.globalWorkspacePath).overrides[changedName], '0.0.1', 'preview did not apply changes');

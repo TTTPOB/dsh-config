@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { root, parseYaml, readYaml, validateMachine, validatePatch, renderMachine, resolveDependencyTargets, parseCommandArguments, resolveMachineArgument } from '../scripts/lib.mjs';
+import { root, parseYaml, readYaml, validateMachine, validatePatch, renderMachine, resolveDependencyTargets, parseCommandArguments, resolveMachineArgument, resolvesFromProfile } from '../scripts/lib.mjs';
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-config-test-'));
@@ -13,6 +13,89 @@ function fixture(t) {
 }
 
 const example = join(root, 'examples/workstation-machine.yaml');
+
+test('rc.1 presets separate ordinary delegation, no-present spawn children and Team tools', () => {
+  const { rendered } = renderMachine(example, 'rc1-presets', undefined, { stage: false });
+  const rows = validatePatch(rendered.home).map(row => row.entry);
+  const presets = rows.filter(row => row.name === '@deepseek-ai/dsh-agent-preset');
+  const byId = id => presets.find(row => row.config.id === id).config.plugins;
+  const delegation = plugins => plugins.find(row => row.id === 'delegation').config;
+  for (const id of ['standard-ptc', 'standard-ptc-child']) {
+    const plugins = byId(id), tools = delegation(plugins);
+    const spawn = tools.find(row => row.id === 'tool-subagent').config;
+    assert.deepEqual(spawn, { provider: 'spawn', toolName: 'subagent', modelSelectionSettings: true,
+      agentPreset: 'standard-ptc-child', allowedAgentPresets: ['standard-ptc-child'] });
+    assert.deepEqual(tools.find(row => row.id === 'tool-subagent-fork').config,
+      { provider: 'fork', toolName: 'subagent_fork' });
+    assert.ok(!tools.some(row => row.id === 'tool-agent-team'));
+    assert.equal(plugins.find(row => row.id === 'tool-presentation').config.mode, 'ptc');
+  }
+  assert.ok(byId('standard-ptc').some(row => row.id === 'present'));
+  assert.ok(!byId('standard-ptc-child').some(row => row.id === 'present'));
+  const teamTools = delegation(byId('standard-ptc-team'));
+  for (const id of ['tool-subagent', 'tool-subagent-fork', 'tool-subagent-control', 'tool-subagent-list-agents']) {
+    assert.ok(!teamTools.some(row => row.id === id));
+  }
+  assert.deepEqual(teamTools.find(row => row.id === 'tool-agent-team').config, { freshProvider: 'spawn', forkProvider: 'fork' });
+  for (const preset of presets) for (const id of ['workflow-ptc', 'tool-workflow', 'tool-ralph']) {
+    assert.ok(delegation(preset.config.plugins).some(row => row.id === id));
+  }
+  assert.equal(rows.find(row => row.id === 'ptc-runtime').config.executionMode, 'per-call');
+  assert.ok(!rows.some(row => row.id === 'ptc-runtime-personal'));
+  assert.equal(rows.filter(row => row.id === 'agent-team').length, 1);
+  assert.equal(rows.filter(row => row.id === 'ui-agent-team').length, 1);
+  assert.ok(!rows.some(row => row.id === 'tool-agent-team'));
+});
+
+test('rc.1 dependency migration removes retired overrides and resets obsolete Pi selectors', () => {
+  const catalog = { packages: [{ package: '@earendil-works/pi-ai', scope: 'global-override', policy: 'release',
+    version: '1.1.0-fork1', resetSelectors: true, reason: '待发布来源' }],
+    retiredGlobalOverrides: ['@deepseek-ai/dsh-client-ui-settings'] };
+  const source = { globalWorkspace: { overrides: {
+    '@deepseek-ai/dsh-client-ui-settings': 'file:old-ui.tgz',
+    '@deepseek-ai/dsh-client-ui-settings@0.1.7-rc.2': 'file:old-ui.tgz',
+    '@earendil-works/pi-ai@0.85.1': 'file:old-pi.tgz',
+    unrelated: '1.0.0',
+  } } };
+  const target = resolveDependencyTargets('unused', source, catalog);
+  assert.deepEqual(target.globalWorkspace.overrides, { unrelated: '1.0.0' });
+  assert.equal(target.entries.filter(row => row.status === 'retired-override').length, 2);
+  assert.ok(target.entries.some(row => row.status === 'blocked-missing-release'));
+  catalog.packages[0].url = 'https://github.com/example/pi/releases/download/v1.1.0-fork1/pi.tgz';
+  assert.deepEqual(resolveDependencyTargets('unused', source, catalog).globalWorkspace.overrides,
+    { unrelated: '1.0.0', '@earendil-works/pi-ai': catalog.packages[0].url });
+  assert.ok(source.globalWorkspace.overrides['@earendil-works/pi-ai@0.85.1']);
+});
+
+test('rc.1 catalog normalizes old core and native selectors to effective package-wide overrides', () => {
+  const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
+  const targets = resolveDependencyTargets('unused', { globalWorkspace: { overrides: {
+    '@deepseek-ai/dsh-session@0.1.7-rc.2': 'file:old-session.tgz',
+    'node-addon-require-builtin@0.1.6': '0.1.6',
+  } } }, catalog);
+  assert.ok(!('@deepseek-ai/dsh-session@0.1.7-rc.2' in targets.globalWorkspace.overrides));
+  assert.ok(!('node-addon-require-builtin@0.1.6' in targets.globalWorkspace.overrides));
+  assert.equal(targets.globalWorkspace.overrides['node-addon-require-builtin'], '0.1.9');
+});
+
+test('required Team packages are installed without activating the official global-tool bundle', () => {
+  const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
+  const target = resolveDependencyTargets('unused', { webPackage: { dsh: { profile: { bundles: [
+    '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-experimental-agent-team-profile',
+  ] } } } }, catalog);
+  assert.equal(target.profiles.web.dependencies['@deepseek-ai/dsh-experimental-agent-team'], '0.2.1-rc.1');
+  assert.ok(target.entries.some(row => row.name === '@deepseek-ai/dsh-experimental-tool-agent-team'
+    && row.scope === 'profile' && row.status === 'blocked-missing-release'));
+  assert.deepEqual(target.profiles.web.dsh.profile.bundles, ['@deepseek-ai/dsh-base']);
+});
+
+
+test('profile-owned official forks resolve from the actual consumer even when a global override is also declared', () => {
+  const entries = [{ name: 'team-tool', scope: 'global-override' }, { name: 'team-tool', scope: 'profile', profile: 'web' }];
+  assert.equal(resolvesFromProfile(entries[0], entries, 'web'), true);
+  assert.equal(resolvesFromProfile(entries[0], entries, 'headless'), false);
+  assert.equal(resolvesFromProfile({ name: 'core', scope: 'global-override' }, entries, 'web'), false);
+});
 
 test('machine selector resolves private directories and preserves file path input', () => {
   for (const machine of ['workstation', 'server', 'research-box_2']) {
@@ -128,7 +211,7 @@ test('active context replaces Basic inside every declared preset and keeps the n
   writeFileSync(path, JSON.stringify(machine));
   const { rendered } = renderMachine(path, 'active-context', undefined, { stage: false });
   const presets = validatePatch(rendered.home).filter(row => row.entry.name === '@deepseek-ai/dsh-agent-preset');
-  assert.equal(presets.length, 2);
+  assert.equal(presets.length, 5);
   for (const { operation, entry } of presets) {
     assert.equal(operation, 'insert');
     const group = entry.config.plugins.find(row => row.id === 'compaction');
@@ -236,8 +319,8 @@ test('declared installation files render beside shared patches and drive source 
   const { output, rendered } = renderMachine(path, 'test-installation', undefined, { generatedDir: directory });
   assert.deepEqual(readdirSync(output).sort(), ['global-workspace.yaml', 'home.patch.yml', 'web.package.json', 'web.patch.yml']);
   assert.equal(readYaml(join(output, 'global-workspace.yaml')).overrides['@deepseek-ai/dsh-example'], '0.1.7-rc.2');
-  assert.equal(parseYaml(rendered.globalWorkspace).blockExoticSubdeps, false);
-  assert.deepEqual(JSON.parse(readFileSync(join(output, 'web.package.json'), 'utf8')), machine.installation.webPackage);
+  assert.equal(parseYaml(rendered.globalWorkspace).blockExoticSubdeps, undefined);
+  assert.equal(JSON.parse(readFileSync(join(output, 'web.package.json'), 'utf8')).dependencies['example-plugin'], '1.0.0');
   assert.ok(validatePatch(rendered.home).length > 0);
   const plan = resolveDependencyTargets('unused-snapshot-directory', machine.installation).entries;
   assert.ok(plan.some(row => row.name === 'example-plugin' && row.status === 'unmanaged-registry-pin'));

@@ -22,7 +22,7 @@ pnpm check --machine workstation
 | 独立个人插件 | 每个消费 profile 的 dependencies | 精确 GitHub Release tarball URL |
 | 官方运行时、普通库及明确允许的第三方插件 | 原有安装归属 | 精确 registry pin |
 
-机器 `installation.globalWorkspace` 和 `installation.webPackage` 保留无关 overrides、专属依赖及 bundles；受管项由共用清单覆盖。未声明 installation 时，已有机器以首次迁移快照作为输入。缺少精确资产的条目保留目标版本并阻塞正式更新，不回退本地来源，也不自动改用新版或旧版。Pi 的同版本多资产由清单明确选定唯一来源。包含受管 Release overrides 的全局目标 workspace 设置 `blockExoticSubdeps: false`，允许 pnpm 11 用选定 URL 替换间接依赖；此设置随安装声明应用，预览不改写真实 workspace。
+机器 `installation.globalWorkspace` 和 `installation.webPackage` 保留无关 overrides、专属依赖及 bundles；受管项由共用清单覆盖。清单的 `retiredGlobalOverrides` 显式删除已退休包的裸名与版本选择器；`resetSelectors: true` 把目标包的旧选择器归一为裸包名，避免旧核心／Pi／native pins 的版本选择器只匹配旧版依赖。删除清单条目本身不会删除安装中的 override。未声明 installation 时，已有机器以首次迁移快照作为输入。缺少精确资产的条目保留目标版本并阻塞正式更新，不回退本地来源，也不自动改用新版或旧版。Pi 的同版本多资产由清单明确选定唯一来源。包含受管 Release overrides 的全局目标 workspace 设置 `blockExoticSubdeps: false`，允许 pnpm 11 用选定 URL 替换间接依赖；此设置随安装声明应用，预览不改写真实 workspace。
 
 清单中 `patchOnly: true` 的包保留 profile dependency，但移除重复的 profile bundle 激活；MCP Panel、mobile 等仍通过 bundle 贡献客户端行的包不受影响。共用插件与 preset 声明在 `$DSH_HOME/cordis.patch.yml`；真正 profile 特化的配置留在对应 profile patch。依赖安装在 profile 不表示配置属于该 profile。覆盖既有行的 `config` 是整个对象替换；保留该行需要的全部配置键和 `!!js` 表达式。
 
@@ -135,7 +135,7 @@ dsh plugin --profile web allow-version PACKAGE@VERSION \
 node scripts/dsh-config.mjs update --machine workstation --apply
 ```
 
-入口合并受管安装目标，通过 pnpm 安装并核对解析／兼容结果，再应用配置；不启停 Host。同一目标重复 apply 会收敛到同一状态；目标声明、配置与实际解析已一致时，报告无需更新，不重复备份、安装或改写文件。
+入口合并受管安装目标，通过 pnpm 安装并核对解析／兼容结果，再应用配置；清单的 `runtimeVersion` 选择精确 CLI 版本，live 预览报告已装／目标版本，即使 manifests 未变化，CLI 版本不同也会重装。未声明 `runtimeVersion` 的调用仍保留已安装 CLI 版本；不启停 Host。同一目标重复 apply 会收敛到同一状态；目标声明、配置与实际解析已一致时，报告无需更新，不重复备份、安装或改写文件。
 
 需要变更时先保留本次文件备份。安装后若只剩清单已记录的精确兼容拒绝，一次 apply 会写入所需豁免并重新检查，无需维护脚本逐项执行 allow-version 或第二次 apply。未知组合或安装／入口问题仍保留已安装状态和备份，不应用配置。安装／入口问题会阻止自动兼容授权；终端显示具体阻塞项，完整报告保存在备份的 `doctor.json`，按报告的具体原因处理。通过后仍是“已安装，待原 Host 启动验收”。
 

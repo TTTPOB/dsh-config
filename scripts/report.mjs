@@ -51,9 +51,10 @@ export function formatUpdate(report, verbose = false) {
   const files = report.files ?? [];
   const heading = report.apply ? (report.noOp ? '无需更新' : '更新已完成') : '更新预览（未执行）';
   const lines = [`${heading} · ${report.input}`, `依赖：${changed.length} 项声明变化，${unchanged} 项不变，${unmanaged} 项非受管保留，${blocked.length} 项阻塞`];
+  if (report.runtime) lines.push(`CLI runtime: ${report.runtime.installedVersion ?? '(离线未检查)'} → ${report.runtime.targetVersion}${report.runtime.changed === false ? '（不变）' : ''}`);
   for (const row of blocked) lines.push(`! [${scopeOf(row)}] ${row.name}: ${row.status} — ${row.reason ?? '缺少精确发布资产'}`);
   for (const row of changed) {
-    lines.push(`~ [${scopeOf(row)}] ${row.name} → ${row.version}`);
+    lines.push(`~ [${scopeOf(row)}] ${row.name} → ${row.status === 'retired-override' ? '(移除旧 override)' : row.version}`);
     for (const old of row.currentSources ?? []) lines.push(`  原 ${old.selector}: ${sourceOf(old.source)}`);
     lines.push(`  新: ${row.target}`);
   }

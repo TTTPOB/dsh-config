@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { renderMachine, resolveMachineArgument, parseCommandArguments, validatePatch, readYaml } from './lib.mjs';
+import { renderMachine, resolveMachineArgument, parseCommandArguments, validatePatch, readYaml, resolveDependencyTargets } from './lib.mjs';
 import { deploymentTargets, doctor, isolatedTest, updateMachine, normalizeDeployment } from './deployment.mjs';
 import { formatDoctor, formatUpdate, selectReport } from './report.mjs';
 
@@ -17,6 +17,10 @@ try {
   } else if (command === 'check') {
     renderMachine(path, label, undefined, { stage: false });
     console.log(`${label}: current configuration checks passed`);
+    const machine = readYaml(path);
+    const pending = resolveDependencyTargets(snapshotDir, machine.installation, undefined, machine.features).entries
+      .filter(row => row.status.startsWith('blocked'));
+    if (pending.length) console.log(`待发布来源（结构检查不验证安装）：${[...new Set(pending.map(row => row.name))].join(', ')}`);
   } else if (command === 'update') {
     const report = selectReport(await updateMachine(path, label, apply, { offline }), verbose);
     console.log(json ? JSON.stringify(report, null, 2) : formatUpdate(report, verbose));
