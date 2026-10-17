@@ -20,7 +20,7 @@ export function verifyToolCatalog(id, schemas, assembly, { acp = true } = {}) {
     const sdk = assembly.sections.map(section => section.text).join('\n');
     assert.match(sdk, /context_compress/, `${id}: ACP is missing from the PTC SDK`);
   }
-  if (id.endsWith('-child')) assert.ok(!names.includes('present'), `${id}: spawn child exposes present`);
+  assert.ok(!names.includes('present'), `${id}: present is disabled for every preset`);
   return { id, tools: names.sort(), ptc: true, acp };
 }
 

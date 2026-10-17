@@ -69,7 +69,7 @@
         disposalTimeoutMs: 5000
     - id: ui-agent-team
       name: "@deepseek-ai/dsh-experimental-client-ui-agent-team"
-[% macro preset(entryId, presetId, name, description, order, overlay, promptSections, child=false, team=false) %]
+[% macro preset(entryId, presetId, name, description, order, overlay, promptSections, team=false) %]
 - insert:
     - id: [[ entryId | quote ]]
       name: "@deepseek-ai/dsh-agent-preset"
@@ -192,15 +192,11 @@
                   provider: spawn
                   toolName: subagent
                   modelSelectionSettings: true
-                  agentPreset: [[ (presetId if child else presetId + "-child") | quote ]]
-                  allowedAgentPresets: [[ [presetId if child else presetId + "-child"] | dump ]]
               - id: tool-subagent-fork
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
                   provider: fork
                   toolName: subagent_fork
-                  # Fork inherits the parent preset; rc.1 rejects independent preset selection.
-                  # Unlike spawn children, forks of a parent with present retain that tool.
               - id: tool-subagent-codex
                 name: '@deepseek-ai/dsh-tool-subagent'
                 disabled: true
@@ -244,10 +240,6 @@
             name: '@deepseek-ai/dsh-agent-tool-presentation'
             config:
               mode: ptc
-[% if not child %]
-          - id: present
-            name: '@deepseek-ai/dsh-tool-present'
-[% endif %]
           - id: tool-plugin-manager
             name: '@deepseek-ai/dsh-plugin-manager/tools'
             disabled: true
@@ -262,8 +254,7 @@
 [% endif %]
 [% endmacro %]
 [[ preset("preset-standard-ptc", "standard-ptc", "标准+PTC", "功能完整的编码 Agent，支持文件编辑、Shell、网页检索、Skills、计划、子代理和工作流。", 5, false, none) ]]
-[[ preset("preset-standard-ptc-child", "standard-ptc-child", "标准+PTC（子代理）", "独立子代理组合，不挂载 present。", 50, false, none, true) ]]
-[[ preset("preset-standard-ptc-team", "standard-ptc-team", "标准+PTC+Team", "使用 Agent Teams 协作，保留工作流与 Ralph，不挂载普通子代理控制工具。", 7, false, none, false, true) ]]
+[[ preset("preset-standard-ptc-team", "standard-ptc-team", "标准+PTC+Team", "使用 Agent Teams 协作，保留工作流与 Ralph，不挂载普通子代理控制工具。", 7, false, none, true) ]]
 [% if machine.features.sessionTools %]
 - insert:
     - id: session-tools
@@ -271,6 +262,5 @@
 [% endif %]
 [% if machine.features.promptOverlay %]
 [[ preset("preset-standard-ptc-redteam", "standard-ptc-redteam", "标准+PTC（逆向模式）", "与「标准+PTC」完全一致，仅额外挂载 dsh-prompt-overlay（自定义提示词内核 + 覆盖 Harness 身份槽位）。", 6, true, machine.promptSections) ]]
-[[ preset("preset-standard-ptc-redteam-child", "standard-ptc-redteam-child", "标准+PTC（逆向子代理）", "保留逆向模式提示词的独立子代理组合，不挂载 present。", 51, true, machine.promptSections, true) ]]
 [% endif %]
 [[ machine.homePrivate ]]

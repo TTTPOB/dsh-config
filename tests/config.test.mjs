@@ -14,24 +14,23 @@ function fixture(t) {
 
 const example = join(root, 'examples/workstation-machine.yaml');
 
-test('rc.1 presets separate ordinary delegation, no-present spawn children and Team tools', () => {
+test('rc.1 presets separate ordinary delegation and Team tools without present', () => {
   const { rendered } = renderMachine(example, 'rc1-presets', undefined, { stage: false });
   const rows = validatePatch(rendered.home).map(row => row.entry);
   const presets = rows.filter(row => row.name === '@deepseek-ai/dsh-agent-preset');
   const byId = id => presets.find(row => row.config.id === id).config.plugins;
   const delegation = plugins => plugins.find(row => row.id === 'delegation').config;
-  for (const id of ['standard-ptc', 'standard-ptc-child']) {
+  assert.deepEqual(presets.map(row => row.config.id).sort(), ['standard-ptc', 'standard-ptc-team']);
+  for (const id of ['standard-ptc']) {
     const plugins = byId(id), tools = delegation(plugins);
     const spawn = tools.find(row => row.id === 'tool-subagent').config;
-    assert.deepEqual(spawn, { provider: 'spawn', toolName: 'subagent', modelSelectionSettings: true,
-      agentPreset: 'standard-ptc-child', allowedAgentPresets: ['standard-ptc-child'] });
+    assert.deepEqual(spawn, { provider: 'spawn', toolName: 'subagent', modelSelectionSettings: true });
     assert.deepEqual(tools.find(row => row.id === 'tool-subagent-fork').config,
       { provider: 'fork', toolName: 'subagent_fork' });
     assert.ok(!tools.some(row => row.id === 'tool-agent-team'));
     assert.equal(plugins.find(row => row.id === 'tool-presentation').config.mode, 'ptc');
   }
-  assert.ok(byId('standard-ptc').some(row => row.id === 'present'));
-  assert.ok(!byId('standard-ptc-child').some(row => row.id === 'present'));
+  for (const preset of presets) assert.ok(!preset.config.plugins.some(row => row.id === 'present'));
   const teamTools = delegation(byId('standard-ptc-team'));
   for (const id of ['tool-subagent', 'tool-subagent-fork', 'tool-subagent-control', 'tool-subagent-list-agents']) {
     assert.ok(!teamTools.some(row => row.id === id));
@@ -211,7 +210,7 @@ test('active context replaces Basic inside every declared preset and keeps the n
   writeFileSync(path, JSON.stringify(machine));
   const { rendered } = renderMachine(path, 'active-context', undefined, { stage: false });
   const presets = validatePatch(rendered.home).filter(row => row.entry.name === '@deepseek-ai/dsh-agent-preset');
-  assert.equal(presets.length, 5);
+  assert.equal(presets.length, 3);
   for (const { operation, entry } of presets) {
     assert.equal(operation, 'insert');
     const group = entry.config.plugins.find(row => row.id === 'compaction');
