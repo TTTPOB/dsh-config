@@ -1,6 +1,6 @@
 # DSH 0.2.1-rc.1 组合验收
 
-本页供维护者验证个人 profile 的升级组合。配置仓库的单元测试与 schema 检查不启动 Host；下面的成品 smoke 会启动并停止它自己创建的隔离 Host，执行前需要对应授权。发布与日用安装仍按[正式维护指南](<install.md>)另行进行。
+本页记录 DSH 0.2.1-rc.1 的个人 profile 组合、验证命令与本次结果。后续版本的步骤顺序、fork 文件、Actions 发布和授权边界见[上游升级手册](<upstream-upgrade.md>)；真实安装与维护切换见[正式维护指南](<install.md>)。下面的成品 smoke 会启停自己创建的隔离 Host，执行前需要明确授权。
 
 ## 1. 组合与依赖
 
@@ -69,8 +69,8 @@ NODE_OPTIONS=--max-old-space-size=4096 node scripts/run-profile-smoke.mjs \
 测试入口执行以下步骤：
 
 1. `test` 创建独立临时目录、独立 `DSH_HOME`、安装 manifests、受控 home/Web patch 与 tarball 副本。
-2. 在隔离 installation 与 Web profile 各写 `pnpm-workspace.yaml`，放入 overrides、`blockExoticSubdeps: false` 和明确的 `allowBuilds`（包括 koffi、esbuild、node-pty 和官方 subprocess-local 的 spawn-helper postinstall）；不使用 `--ignore-workspace`，不创建项目 store/cache。
-3. CLI installation 启用 `autoInstallPeers`，补齐 app-boot 等 Host 自身的 bootstrap peers；profile 关闭它，由正式 resolver 共享 Host 实例。用 pnpm 安装官方 `@deepseek-ai/dsh@0.2.1-rc.1` 与全部选定成品。临时风险豁免只写隔离 profile，不写共享兼容记录或真实 profile。
+2. 按[长期 pnpm 11 规则](<install.md#pnpm-11-安装规则>)准备隔离 installation 与 Web profile 的 workspace、构建许可和共享 peers。
+3. 用 pnpm 安装官方 `@deepseek-ai/dsh@0.2.1-rc.1` 与全部选定成品。临时风险豁免只写隔离 profile，不写共享兼容记录或真实 profile。
 4. 通过该 CLI 的 `--dump-config` 检查三个 PTC preset、没有全局 Team 工具、Web 监听为 `127.0.0.1:0`。端口 `0` 由 OS 分配，不使用日用端口。
 5. 启动同一个隔离 CLI 的 Web profile。临时 Loader probe 等待挂载审计，通过正式 pluginPackages resolver 核对全部受管包的实际版本及官方 ui-settings，检查 overlay／envrc／Team service，以及 session-tools／progressive-tools 的工具注册。
 6. 同时创建三个空闲 Agent，防止 Team 启动遍历的跨 preset 泄漏漏测。普通 preset 必须有普通 subagent/control 且没有 `spawn_teammate`；Team preset 必须有 Team 控制、wait/task 工具且没有 subagent/fork。检查 `send_message` 参数来自正确实现、工具名无重复、任何 preset 都没有 `present`。

@@ -26,6 +26,16 @@ pnpm check --machine workstation
 
 清单中 `patchOnly: true` 的包保留 profile dependency，但移除重复的 profile bundle 激活；MCP Panel、mobile 等仍通过 bundle 贡献客户端行的包不受影响。共用插件与 preset 声明在 `$DSH_HOME/cordis.patch.yml`；真正 profile 特化的配置留在对应 profile patch。依赖安装在 profile 不表示配置属于该 profile。覆盖既有行的 `config` 是整个对象替换；保留该行需要的全部配置键和 `!!js` 表达式。
 
+### pnpm 11 安装规则
+
+这些规则同时适用于正式安装声明、隔离安装与发布消费者测试；Pi 源码仓库继续使用它自身的 npm 工具链。
+
+- **Overrides 写在目标 `pnpm-workspace.yaml`。** pnpm 11 不使用旧的 package.json `pnpm.overrides` 承载方式。需要这些 overrides 的安装不能加 `--ignore-workspace`；本仓库自身依赖安装的 `--ignore-workspace` 不适用于 CLI／profile／消费者安装。
+- **明确声明 `allowBuilds`。** 按[依赖清单](<../shared/dependencies.yaml>)审查并允许实际需要的安装脚本，包括 `esbuild`、`koffi`、`node-pty` 和 `@deepseek-ai/dsh-subprocess-local` 的 spawn-helper postinstall；无脚本需求的消费者也显式写 `allowBuilds: {}`。保留无关既有审批，不靠全面放行或 `--ignore-scripts` 代替必需的 native 构建。
+- **Release URL 替换间接依赖时设置 `blockExoticSubdeps: false`。** 与精确 overrides 放在同一目标 workspace；预览只展示计划，不改真实文件。
+- **CLI installation 设置 `autoInstallPeers: true`，消费 profile 设置 `autoInstallPeers: false`。** 前者补齐 app-boot 等 bootstrap peers；后者通过正式 resolver 共享 Host 服务，不补装第二套 Cordis／DSH peers。
+- 使用用户级全局 store 和默认 cache，关闭 global virtual store；不在项目内创建 store／cache，不手工修补 lockfile 或 node_modules。具体共享身份验收见[共享 peer 解析验收](<#共享-peer-解析验收>)。
+
 ### Active Context Pruning（ACP）
 
 在机器参数中选择：
