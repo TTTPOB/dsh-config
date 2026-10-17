@@ -232,7 +232,7 @@ test('active context replaces Basic inside every declared preset and keeps the n
     [{ provider: 'example-provider', model: 'example-model', nudgeAtTokens: 60000, resetBelowTokens: 50000 }],
     [{ provider: 'other-provider', model: 'other-model', nudgeAtTokens: 42000, resetBelowTokens: 31000 }],
   ]) {
-    machine.acp = { pressureRoutes };
+    machine.acp = { pressureDefault: { nudgeAtRatio: 0.7, resetBelowRatio: 0.65 }, pressureRoutes };
     writeFileSync(path, JSON.stringify(machine));
     const configured = validatePatch(renderMachine(path, 'active-pressure', undefined, { stage: false }).rendered.home)
       .filter(row => row.entry.name === '@deepseek-ai/dsh-agent-preset');
@@ -258,6 +258,11 @@ test('active context replaces Basic inside every declared preset and keeps the n
 
 test('pressure route parameters reject malformed thresholds and duplicate exact routes', () => {
   const machine = readYaml(join(root, 'examples/active-context-machine.yaml'));
+  assert.equal(validateMachine(machine), machine);
+  for (const resetBelowRatio of [0.7, 0.8]) {
+    machine.acp.pressureDefault.resetBelowRatio = resetBelowRatio;
+    assert.throws(() => validateMachine(machine), /resetBelowRatio < nudgeAtRatio/);
+  }
   const route = { provider: 'example-provider', model: 'example-model', nudgeAtTokens: 60000, resetBelowTokens: 50000 };
   machine.acp = { pressureRoutes: [route] };
   assert.equal(validateMachine(machine), machine);

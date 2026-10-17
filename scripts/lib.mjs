@@ -37,6 +37,13 @@ export function validateMachine(machine) {
     assert.equal(typeof machine.features?.[key], 'boolean', `Missing feature: ${key}`);
   }
   if (machine.features.activeContext !== undefined) assert.equal(typeof machine.features.activeContext, 'boolean', 'Invalid feature: activeContext');
+  if (machine.acp?.pressureDefault !== undefined) {
+    assert.equal(machine.features.activeContext, true, 'pressureDefault requires activeContext');
+    const { nudgeAtRatio, resetBelowRatio } = machine.acp.pressureDefault;
+    assert.ok(Number.isFinite(nudgeAtRatio) && Number.isFinite(resetBelowRatio)
+      && 0 <= resetBelowRatio && resetBelowRatio < nudgeAtRatio && nudgeAtRatio < 1,
+    'pressureDefault requires 0 <= resetBelowRatio < nudgeAtRatio < 1');
+  }
   if (machine.acp?.pressureRoutes !== undefined) {
     assert.equal(machine.features.activeContext, true, 'pressureRoutes requires activeContext');
     assert.ok(Array.isArray(machine.acp.pressureRoutes), 'pressureRoutes must be an array');

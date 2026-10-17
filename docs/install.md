@@ -49,18 +49,17 @@ features:
 
 完整的无私有参数示例见[active-context-machine.yaml](<../examples/active-context-machine.yaml>)。选择后，依赖计划为 Web 添加 ACP，并更新已显式声明 ACP 的其他 profile，按共用清单选择精确来源。ACP 使用 Query capture 和 tokenMeter，不要求启用 session-tools；历史检索工具由 `sessionTools` 独立选择并显式准备 profile 依赖。其他 profile 仍须准备完整依赖布局和验收。
 
-模板在标准＋PTC 及可选逆向 preset 的同一 compaction isolation group 中禁用 Basic 行，插入 ACP 行。ACP 的 `basic` 对象完整重述共用原生策略，保留 `/compact`、tool-result pruner 和 overflow 兜底；机器参数可选的 `acp.pressureRoutes` 原样传给各个 ACP preset；省略时为 `[]`，保持提前提醒禁用。每项须填写 `provider`、`model`、绝对 token 提醒线 `nudgeAtTokens` 和较低的复位线 `resetBelowTokens`；没有比例参数。先从实际路由核实容量 C、输出预留 O 和 Basic 参数，确认 `0 <= R < S < floor(min(C × thresholdRatio, C − O − headroomTokens))`，只列出已有容量依据的路由。配置示例：
+模板在标准＋PTC 及可选逆向 preset 的同一 compaction isolation group 中禁用 Basic 行，插入 ACP 行。ACP 的 `basic` 对象完整重述共用原生策略，保留 `/compact`、tool-result pruner 和 overflow 兜底；机器参数可选的 `acp.pressureDefault` 原样传给各个 ACP preset，默认比例直接相对模型最大 `contextWindow`：S = floor(C × nudgeAtRatio)，R = floor(C × resetBelowRatio)。加载时要求 `0 <= resetBelowRatio < nudgeAtRatio < 1`。`acp.pressureRoutes` 仍支持精确 provider/model 的绝对 `nudgeAtTokens`／`resetBelowTokens` 覆盖，优先于默认比例；两者都未配置时不提前提醒。容量未知或运行时 `R < S < H` 不成立会按 provider/model 警告一次并跳过，原生兜底继续。配置示例：
 
 ```yaml
 acp:
-  pressureRoutes:
-    - provider: example-provider
-      model: example-model
-      nudgeAtTokens: 60000
-      resetBelowTokens: 50000
+  pressureDefault:
+    nudgeAtRatio: 0.70
+    resetBelowRatio: 0.65
+  pressureRoutes: []
 ```
 
-示例阈值只适用于已核实 C=100000、O=10000、Basic thresholdRatio=0.82 和 headroomTokens=8192 的路由，不是通用默认值。仅修改提醒配置且安装目标不变时，正式 `update --apply` 可跳过安装，由 profile patch watcher 热加载新 preset 定义，无需重启服务；已有 Agent 及继承其绑定的子 Agent 保留旧 preset revision，新建独立 Agent 才使用新配置。
+H = floor(min(C × thresholdRatio, C − O − headroomTokens))，O 为请求输出预留。比例不按 H 换算，由使用者自行管理。仅修改提醒配置且安装目标不变时，正式 `update --apply` 可跳过安装，由 profile patch watcher 热加载新 preset 定义，无需重启服务；已有 Agent 及继承其绑定的子 Agent 保留旧 preset revision，新建独立 Agent 才使用新配置。
 
 先运行 `node scripts/dsh-config.mjs check --machine workstation` 和 `node scripts/dsh-config.mjs update --machine workstation`。核对预览包含 ACP 和必要的 Query 目标且无缺资产阻塞，再审查生成配置的单 provider 替换。render/check 只验证配置结构，dry-run 只预览来源；它们不启用 ACP，也不代表 Loader、运行中 Host 或模型连续工作质量已验收。成品验证见[隔离测试](<testing.md>)，实际切换仍按本指南的独立维护窗口进行。
 

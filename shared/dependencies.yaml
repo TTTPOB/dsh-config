@@ -9,7 +9,7 @@ verifiedCompatibility:
   "@deepseek-ai/dsh-session-query@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-session-query-sqlite@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-subagent@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
-  "dsh-active-context@0.5.0": ["0.2.1-rc.1"]
+  "dsh-active-context@0.5.1": ["0.2.1-rc.1"]
   "dsh-session-tools@0.4.0": ["0.2.1-rc.1"]
   "dsh-workspace-envrc@0.3.0": ["0.2.1-rc.1"]
   "dsh-workspace-overlay@0.3.0": ["0.2.1-rc.1"]
@@ -112,8 +112,8 @@ packages:
     scope: profile
     patchOnly: true
     policy: release
-    version: 0.5.0
-    url: https://github.com/TTTPOB/dsh-active-context/releases/download/v0.5.0/dsh-active-context-0.5.0.tgz
+    version: 0.5.1
+    url: https://github.com/TTTPOB/dsh-active-context/releases/download/v0.5.1/dsh-active-context-0.5.1.tgz
   - package: dsh-workspace-envrc
     scope: profile
     patchOnly: true

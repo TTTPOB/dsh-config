@@ -142,6 +142,9 @@
                 name: dsh-active-context
                 config:
                   acp:
+[% if machine.acp.pressureDefault %]
+                    pressureDefault: [[ machine.acp.pressureDefault | dump ]]
+[% endif %]
                     pressureRoutes: [[ machine.acp.pressureRoutes | default([]) | dump ]]
                   basic:
                     auto: [[ shared.defaults.compaction.auto | dump ]]

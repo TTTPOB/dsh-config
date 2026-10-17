@@ -3,6 +3,10 @@ features:
   sessionTools: false
   activeContext: true
   promptOverlay: false
+acp:
+  pressureDefault:
+    nudgeAtRatio: 0.70
+    resetBelowRatio: 0.65
 overrides: {}
 homePrivate: |
   - insert: []

@@ -53,6 +53,55 @@ export async function probeInvalidCompression(ctx, agent, { createAssistantMessa
   }
 }
 
+async function probeSuccessfulCompression(ctx, agent, { createAssistantMessage, createToolResultMessage, createUserMessage }) {
+  const session = agent.session;
+  const callId = 'smoke-acp-success-' + randomUUID();
+  const anchor = 'Completed smoke history ' + randomUUID();
+  const summary = 'Smoke summary ' + randomUUID() + ': completed work preserved.';
+  const input = { regions: [{ range: [{ text: anchor, role: 'assistant' }, { text: anchor, role: 'assistant' }], summary }] };
+  const args = { code: 'return await tools.context_compress(' + JSON.stringify(input) + ');', description: 'Compress completed smoke history' };
+  const source = { provider: 'profile-smoke', model: 'scripted-no-request' };
+  session.append('turn/start', { turn: 2 });
+  session.append('step/start', { turn: 2, step: 1 });
+  session.append('assistant/message', { turn: 2, step: 1, stream: [], message: createAssistantMessage({
+    content: [{ type: 'text', text: anchor + '. Completed evidence and details. '.repeat(200) }], source,
+  }) }, { surfaceOp: 'append' });
+  session.append('step/end', { turn: 2, step: 1 });
+  session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Preserve this current smoke task.' }], source: { kind: 'user' } }), { surfaceOp: 'append' });
+  session.append('step/start', { turn: 2, step: 2 });
+  const assistant = session.append('assistant/message', { turn: 2, step: 2, stream: [], message: createAssistantMessage({
+    content: [{ type: 'tool-call', id: callId, name: 'run_code', arguments: JSON.stringify(args) }], source,
+  }) }, { surfaceOp: 'append' });
+  const call = session.append('tool/call', { turn: 2, step: 2, callId, name: 'run_code', arguments: JSON.stringify(args) });
+  try {
+    const signal = AbortSignal.timeout(30000);
+    const result = await ctx.tools.execute({ callId, name: 'run_code', arguments: args, agent, signal });
+    assert.equal(result.isError, false, 'Canonical per-call compression failed: ' + JSON.stringify(result));
+    const resultEvent = session.append('tool/result', { turn: 2, step: 2, message: createToolResultMessage({ callId,
+      content: result.content, isError: result.isError }) }, { surfaceOp: 'append', sourceEventSeqs: [call.seq] });
+    const summaries = () => session.snapshotEvents().filter(event => event.type === 'compaction/summary');
+    assert.equal(summaries().length, 1, 'Compression did not commit exactly one summary');
+    assert.ok(JSON.stringify(summaries()[0]).includes(summary), 'Committed summary is missing');
+    session.append('step/end', { turn: 2, step: 2 });
+    // Run the mounted production pre-step chain without asking a model for another reply.
+    await agent.ctx.waterfall('agent/pre-step', { agent, messages: [], turn: 2, step: 3, signal },
+      async () => ({ kind: 'enter', messages: [] }));
+    session.append('step/start', { turn: 2, step: 3 });
+    const maintenance = session.snapshotEvents().find(event => event.type === 'user/message'
+      && event.data.source.kind === 'acp-maintenance' && event.sourceEventSeqs?.includes(call.seq));
+    assert.ok(maintenance && session.surface.nodes.includes(maintenance.seq), 'Successful root pair was not archived at the next step');
+    assert.ok(!session.surface.nodes.includes(assistant.seq) && !session.surface.nodes.includes(resultEvent.seq), 'Root run_code call/result remains on the Surface');
+    const messages = session.surface.nodes.map(seq => session.deriveEventMessage(session.eventAt(seq))).filter(Boolean);
+    assert.equal(JSON.stringify(messages).split(summary).length - 1, 1, 'Summary appears more than once on the Surface');
+    assert.equal(summaries().length, 1, 'Maintenance committed an extra summary');
+    session.append('step/end', { turn: 2, step: 3 });
+    return { summaryCommitted: true, rootPairArchivedNextStep: true, summaryOccurrences: 1,
+      runtime: 'typescript/function-body/per-call' };
+  } finally {
+    session.append('turn/end', { turn: 2, reason: { kind: 'completed' } });
+  }
+}
+
 export async function createProbeAgent(ctx, id, cwd) {
   // Agent metadata records the choice; the caller's setup composes its plugins.
   return ctx.agents.create({ sessionId: randomUUID(), meta: { cwd, agentPreset: id },
@@ -103,8 +152,10 @@ async function inspect(ctx, config) {
         arguments: { code, description: 'Verify scoped profile tool SDK' }, agent, signal: AbortSignal.timeout(30000) });
       if (execution.isError) throw new Error(`${id}: run_code failed: ${JSON.stringify(execution.content)}`);
     }
-    const acpInvalidCall = config.acp ? await probeInvalidCompression(ctx, handles[0].agent, await load('@deepseek-ai/dsh-llm')) : undefined;
-    return { presets: results, packages, loaded: true, modelRequests: 0, acpInvalidCall };
+    const messages = config.acp ? await load('@deepseek-ai/dsh-llm') : undefined;
+    const acpInvalidCall = config.acp ? await probeInvalidCompression(ctx, handles[0].agent, messages) : undefined;
+    const acpSuccessfulCall = config.acp ? await probeSuccessfulCompression(ctx, handles[0].agent, messages) : undefined;
+    return { presets: results, packages, loaded: true, modelRequests: 0, acpInvalidCall, acpSuccessfulCall };
   } finally {
     for (const handle of handles.reverse()) await handle.dispose();
   }

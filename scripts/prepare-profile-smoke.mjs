@@ -27,6 +27,7 @@ assert.equal(missing.length, 0, `Missing required smoke tarballs: ${missing.join
 mkdirSync(output, { recursive: true, mode: 0o700 });
 const machine = readYaml(join(root, 'examples/workstation-machine.yaml'));
 machine.features = { sessionTools: true, activeContext: true, promptOverlay: true };
+machine.acp = { pressureDefault: { nudgeAtRatio: 0.70, resetBelowRatio: 0.65 }, pressureRoutes: [] };
 machine.promptSections = { modulePath: join(root, 'plugins/prompt-sections.mjs'),
   promptFile: join(output, 'smoke-prompt.md'), identityFile: join(output, 'smoke-identity.md') };
 writeFileSync(machine.promptSections.promptFile, 'This is a disposable profile composition smoke.\n', { mode: 0o600 });
@@ -43,6 +44,7 @@ const presets = homeRows.filter(row => row.name === '@deepseek-ai/dsh-agent-pres
 const expectedEntries = catalog.packages.map(item => ({ name: item.package, version: item.version, scope: item.scope,
   ...(item.scope === 'profile' ? { profile: 'web' } : {}) }));
 const config = { runtimeVersion: catalog.runtimeVersion, presets, acp: true,
+  pressureDefault: machine.acp.pressureDefault, expectedBasic: readYaml(join(root, 'shared/defaults.yaml')).defaults.compaction,
   expectedPackages: [...expectedEntries.map(item => ({ ...item, profileOwned: resolvesFromProfile(item, expectedEntries, 'web') })),
     { name: '@deepseek-ai/dsh-client-ui-settings', version: catalog.runtimeVersion, scope: 'global-override' }],
   compatibility: [...new Set(catalog.packages.filter(item => item.policy === 'release').map(item => `${item.package}@${item.version}`))] };

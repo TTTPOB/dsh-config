@@ -120,7 +120,7 @@ export async function runProfileSmoke(testRoot, home, dependencies = {}) {
     'allow-version', identity, '--dsh-version', options.runtimeVersion, '--accept-risk'], installation, env);
   const dump = execute([process.execPath, cli, '--profile', 'web', '--dump-config'], installation, env);
   writeFileSync(join(testRoot, 'dump-config.yml'), dump, { mode: 0o600 });
-  verifyDumpConfiguration(YAML.parse(dump), options.presets);
+  verifyDumpConfiguration(YAML.parse(dump), options.presets, options.pressureDefault, options.expectedBasic);
   const host = await (dependencies.launch ?? launchHost)([process.execPath, cli, '--profile', 'web', '--no-open'], installation, env);
   try {
     const request = dependencies.fetch ?? fetch;

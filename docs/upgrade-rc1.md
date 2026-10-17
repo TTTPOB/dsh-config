@@ -71,10 +71,10 @@ NODE_OPTIONS=--max-old-space-size=4096 node scripts/run-profile-smoke.mjs \
 1. `test` 创建独立临时目录、独立 `DSH_HOME`、安装 manifests、受控 home/Web patch 与 tarball 副本。
 2. 按[长期 pnpm 11 规则](<install.md#pnpm-11-安装规则>)准备隔离 installation 与 Web profile 的 workspace、构建许可和共享 peers。
 3. 用 pnpm 安装官方 `@deepseek-ai/dsh@0.2.1-rc.1` 与全部选定成品。临时风险豁免只写隔离 profile，不写共享兼容记录或真实 profile。
-4. 通过该 CLI 的 `--dump-config` 检查三个 PTC preset、没有全局 Team 工具、Web 监听为 `127.0.0.1:0`。端口 `0` 由 OS 分配，不使用日用端口。
+4. 通过该 CLI 的 `--dump-config` 检查三个 PTC preset、ACP 默认比例 0.70／0.65、没有精确 routes、Basic 配置完整、没有全局 Team 工具、Web 监听为 `127.0.0.1:0`。端口 `0` 由 OS 分配，不使用日用端口。
 5. 启动同一个隔离 CLI 的 Web profile。临时 Loader probe 等待挂载审计，通过正式 pluginPackages resolver 核对全部受管包的实际版本及官方 ui-settings，检查 overlay／envrc／Team service，以及 session-tools／progressive-tools 的工具注册。
 6. 同时创建三个空闲 Agent，防止 Team 启动遍历的跨 preset 泄漏漏测。普通 preset 必须有普通 subagent/control 且没有 `spawn_teammate`；Team preset 必须有 Team 控制、wait/task 工具且没有 subagent/fork。检查 `send_message` 参数来自正确实现、工具名无重复、任何 preset 都没有 `present`。
-7. 检查每个 Agent 的 PTC runtime 为 TypeScript／function-body，以及实际提示词 assembly 有 `run_code` 与 ACP SDK；通过真实 `run_code` 调用各自的 `list_agents`；ACP SDK 的存在从真实 assembly 校验，不在普通程序中引用受限的 `tools.context_compress`。再在一个 ACP Agent 中追加合成的工具调用日志，经真实 per-call Node 子进程执行 `return await tools.context_compress({"regions":[]});`，必须到达“submit 1-N non-overlapping regions”的参数拒绝，而不是只在独立调用 guard 被挡住；断言拒绝前后既有 Surface 节点不变、没有 compaction summary。不发起模型请求、不创建 teammate、不实际压缩上下文。
+7. 检查每个 Agent 的 PTC runtime 为 TypeScript／function-body，以及实际提示词 assembly 有 `run_code` 与 ACP SDK；通过真实 `run_code` 调用各自的 `list_agents`；ACP SDK 的存在从真实 assembly 校验，不在普通程序中引用受限的 `tools.context_compress`。ACP SDK 只从真正的 `tools:sdk` section 检查，不能由 active-context 提示文字代替。再在一个 ACP Agent 中追加合成历史与工具调用日志，经真实 per-call Node 子进程分别验证空 regions 拒绝和合法区间成功：`return await tools.context_compress({"regions":[]});` 必须到达“submit 1-N non-overlapping regions”的参数拒绝，拒绝前后既有 Surface 节点不变、没有 compaction summary；合法规范调用必须提交摘要，下一 step 的生产 pre-step 链用维护记录替换成功根 run_code call/result，Surface 上摘要只出现一次。不发起模型请求、不创建 teammate。
 8. 无论 probe 成功或失败，停止并等待自己启动的 Host；子进程 TMPDIR 位于隔离根内，`test` 的 finally 一并清理此次安装、会话、logs、dump、临时缓存和 tarball 副本。
 
 外层 `test` 固定返回 `renderedConfigurationVerified: false`：本次验证的是明确构造的受控组合，不是整份日用私有配置。Host 挂载与工具注册成功也不等于手机布局、浏览器交互或真实 Firecrawl 请求已验收；客户端与实网行为仍由对应功能测试确认。
@@ -96,6 +96,6 @@ DSH_CONFIG_BROWSER_SMOKE_ARGV='["node","/absolute/path/to/browser-smoke.mjs","{u
 4. 通过插件按钮打开官方管理器，核对出现 modal 而非切换主页面；关闭后仍能使用三页导航。
 5. 用 1280×800 的鼠标上下文确认移动导航不生效，保存两种布局的截图并收集页面错误。
 
-本次已用已发布的 23 个成品通过一次完整隔离 Host smoke：三个 preset 的 PTC／ACP、普通与 Team 工具隔离、实际包版本及官方 ui-settings 均通过；零模型请求，非法 ACP 调用在压缩前拒绝且 Surface 不变，临时 Host 与安装已清理。Playwright 基础检查通过：390×844 触屏三页切换与 aria-current、插件 modal 保持主页面且关闭后导航可用、1280×800 鼠标首页无移动底部导航，两端 pageerror／console error 均为零。没有生成带真实 token 用量的会话，usage／activity pill 不计作通过；真实 provider／Firecrawl、IME、真实软键盘、PWA、剪贴板、系统返回与复杂审批／终端交互仍未覆盖。受控组合通过不代表整份日用私有配置已验证或已应用。
+本次已用已发布的 23 个成品通过一次完整隔离 Host smoke：三个 preset 的 PTC／ACP、普通与 Team 工具隔离、实际包版本及官方 ui-settings 均通过；零模型请求，非法 ACP 调用在压缩前拒绝且 Surface 不变，临时 Host 与安装已清理。ACP v0.5.1 成品复验同时通过默认比例／完整 Basic dump 检查、真实 SDK section 校验，以及真实 Node per-call 成功压缩、下一 step 根工具对维护和摘要单次呈现；该轮没有重跑浏览器交互。Playwright 基础检查通过：390×844 触屏三页切换与 aria-current、插件 modal 保持主页面且关闭后导航可用、1280×800 鼠标首页无移动底部导航，两端 pageerror／console error 均为零。没有生成带真实 token 用量的会话，usage／activity pill 不计作通过；真实 provider／Firecrawl、IME、真实软键盘、PWA、剪贴板、系统返回与复杂审批／终端交互仍未覆盖。受控组合通过不代表整份日用私有配置已验证或已应用。
 
 准备目录不是 Host 数据目录。确认无需重跑后，只删除本次 `generated/profile-smoke-input`；不要清空整个 generated 或任何日用 home。

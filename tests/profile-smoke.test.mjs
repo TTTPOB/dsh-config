@@ -39,7 +39,7 @@ function catalog(team) {
 }
 const runtimeRows = [{ id: 'ptc-runtime',
   name: '@deepseek-ai/dsh-ptc-runtime-node', config: { executionMode: 'per-call' } }];
-const assembly = { tools: [{ name: 'run_code' }], sections: [{ text: 'tools.context_compress' }] };
+const assembly = { tools: [{ name: 'run_code' }], sections: [{ name: 'tools:sdk', text: 'tools.context_compress' }] };
 
 test('Web smoke exchanges the launch token and sends its cookie to the clean index', async () => {
   const urls = [];
@@ -61,6 +61,10 @@ test('profile assertions reject Team leakage, wrong message implementation and a
   wrong.find(row => row.name === 'send_message').parameters = { type: 'object', properties: { agent_id: {} } };
   assert.throws(() => verifyToolCatalog('standard-ptc-team', wrong, assembly), /wrong send_message/);
   assert.throws(() => verifyToolCatalog('standard-ptc', catalog(false), { ...assembly, sections: [] }), /PTC SDK/);
+  assert.throws(() => verifyToolCatalog('standard-ptc', catalog(false), { ...assembly, sections: [
+    { name: 'active-context', text: 'Use context_compress for completed work.' },
+    { name: 'tools:sdk', text: 'tools.list_agents' },
+  ] }), /PTC SDK/);
   assert.throws(() => verifyToolCatalog('standard-ptc', [...catalog(false), catalog(false)[0]], assembly), /duplicate/);
 });
 

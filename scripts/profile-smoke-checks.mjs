@@ -17,19 +17,26 @@ export function verifyToolCatalog(id, schemas, assembly, { acp = true } = {}) {
   assert.ok(assembly.tools.some(tool => tool.name === 'run_code'), `${id}: PTC transport is not model-visible`);
   if (acp) {
     assert.ok(names.includes('context_compress'), `${id}: ACP is not registered`);
-    const sdk = assembly.sections.map(section => section.text).join('\n');
+    const sdk = assembly.sections.filter(section => section.name === 'tools:sdk').map(section => section.text).join('\n');
     assert.match(sdk, /context_compress/, `${id}: ACP is missing from the PTC SDK`);
   }
   assert.ok(!names.includes('present'), `${id}: present is disabled for every preset`);
   return { id, tools: names.sort(), ptc: true, acp };
 }
 
-export function verifyDumpConfiguration(rows, expectedPresets) {
+export function verifyDumpConfiguration(rows, expectedPresets, pressureDefault, expectedBasic) {
   const entries = rows.flatMap(row => row.insert ?? [row]);
   for (const id of expectedPresets) {
     const preset = entries.find(row => row.name === '@deepseek-ai/dsh-agent-preset' && row.config.id === id);
     assert.ok(preset, `dump-config: missing preset ${id}`);
     assert.equal(preset.config.plugins.find(row => row.id === 'tool-presentation')?.config.mode, 'ptc');
+    if (pressureDefault) {
+      const compaction = preset.config.plugins.find(row => row.id === 'compaction');
+      const acp = compaction?.config.find(row => row.id === 'active-context');
+      assert.deepEqual(acp?.config.acp.pressureDefault, pressureDefault, `${id}: ACP default ratios`);
+      assert.deepEqual(acp?.config.acp.pressureRoutes ?? [], [], `${id}: unexpected exact ACP routes`);
+      assert.deepEqual(acp?.config.basic, expectedBasic, `${id}: incomplete native Basic policy`);
+    }
   }
   const runtime = entries.find(row => row.id === 'ptc-runtime');
   assert.equal(runtime?.name, '@deepseek-ai/dsh-ptc-runtime-node');
