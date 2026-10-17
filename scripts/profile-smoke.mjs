@@ -101,7 +101,7 @@ export async function runProfileSmoke(testRoot, home, dependencies = {}) {
     .filter(key => process.env[key] !== undefined).map(key => [key, process.env[key]]));
   const temporary = join(testRoot, 'tmp');
   mkdirSync(temporary, { recursive: true, mode: 0o700 });
-  const env = { ...inherited, TMPDIR: temporary, DSH_HOME: home, DSH_CONFIG_TEST_ROOT: testRoot, NODE_OPTIONS: '--max-old-space-size=3072' };
+  const env = { ...inherited, TMPDIR: temporary, DSH_HOME: home, DSH_CONFIG_TEST_ROOT: testRoot, NODE_OPTIONS: '--max-old-space-size=4096' };
   const execute = dependencies.run ?? runSmokeCommand;
   const install = ['pnpm', '--config.verify-deps-before-run=false', '--config.enable-global-virtual-store=false',
     'install', '--no-frozen-lockfile'];

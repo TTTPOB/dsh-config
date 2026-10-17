@@ -14,14 +14,14 @@
 
 MCP Panel 使用 registry `0.6.24`，其 engines 与 DSH peers 已包含 `>=0.2.1-0 <0.3.0`。与 `0.6.19` 的[版本比较](<https://github.com/PerryLink/dsh-mcp-panel/compare/v0.6.19...v0.6.24>)显示配置 schema 未改，runtime 源码只更新 MCP probe 的 clientInfo 版本；其余主要是兼容声明、测试 Loader 失败报告、CI、文档与发布修正。实际 profile 解析仍须确认 connection 命中 fork1、ui-settings 命中官方 rc.1。
 
-新 Release 条目在资产发布并核实前只保存目标版本与“待发布来源”，没有推测 URL。`check`通过结构检查后另列缺来源；`update` 预览以退出码 `2` 报告阻塞。`verifiedCompatibility` 只记录实际验证过的精确组合，本次成品 smoke 前为空。
+本次 11 个 GitHub Actions Release 已交付 23 个唯一 tarball，资产包名、版本与 SHA256 已核对，清单保存精确 URL；Team 工具的 global override 与 profile dependency 共用同一已核实资产。`verifiedCompatibility` 只登记成品 smoke 通过、且官方 runtime 兼容检查确实要求豁免的精确组合，不按 fork 名称批量授权。缺来源仍由 `check` 单独列出，并使 `update` 以退出码 `2` 阻塞。
 
 ## 2. 第一阶段：不安装、不启动 Host
 
 在配置仓库根目录执行：
 
 ```sh
-NODE_OPTIONS=--max-old-space-size=3072 node --test \
+NODE_OPTIONS=--max-old-space-size=4096 node --test \
   tests/deployment-paths.test.mjs tests/deployment.test.mjs tests/config.test.mjs \
   tests/prompt-sections.test.mjs tests/profile-smoke.test.mjs
 node scripts/dsh-config.mjs check examples/workstation-machine.yaml
@@ -29,12 +29,12 @@ node scripts/dsh-config.mjs check examples/active-context-machine.yaml
 node scripts/dsh-config.mjs update examples/workstation-machine.yaml --offline --verbose
 ```
 
-最后一条在新资产尚未发布时应返回 `2`，不是配置 schema 失败。以上命令不要求私有参数。持有当前机器私有参数时，可另外执行 `check --machine <name>` 与默认 live `update --machine <name>`，但不要加 `--apply`；live 预览只读取目标 manifests。
+已核实来源的离线预览应返回 `0`；缺少精确来源时仍返回 `2`，不是配置 schema 失败。以上命令不要求私有参数。持有当前机器私有参数时，可另外执行 `check --machine <name>` 与默认 live `update --machine <name>`，但不要加 `--apply`；live 预览只读取目标 manifests。
 
 源码 schema 检查使用 rc.1 checkout 的 tsx loader，直接调用 Config／自定义 resolver，不挂载插件。先设置绝对路径变量 `CONFIG_ROOT`、`RUNTIME_SOURCE` 和可选的 `EXTERNAL_SOURCE_ROOT`（树外插件 checkout 的父目录）：
 
 ```sh
-(cd "$RUNTIME_SOURCE" && NODE_OPTIONS=--max-old-space-size=3072 \
+(cd "$RUNTIME_SOURCE" && NODE_OPTIONS=--max-old-space-size=4096 \
   node --import tsx/esm "$CONFIG_ROOT/scripts/check-runtime-schemas.mjs" \
   "$RUNTIME_SOURCE" "$CONFIG_ROOT/examples/active-context-machine.yaml" "$EXTERNAL_SOURCE_ROOT")
 ```
@@ -51,7 +51,7 @@ node scripts/dsh-config.mjs check "$CONFIG_ROOT/generated/profile-smoke-input/ma
 node scripts/dsh-config.mjs update "$CONFIG_ROOT/generated/profile-smoke-input/machine.yaml" --offline --verbose
 ```
 
-准备入口只生成无凭据的受控输入和 [测试 argv](<../scripts/prepare-profile-smoke.mjs>)，不安装、不启动 Host。它选择 ACP、session-tools 与逆向模式，覆盖五个生成 preset；加入所有受管 profile 包；关闭 Codegraph MCP；使用不会发请求的 Firecrawl 占位 key；用本次生成的固定文本测试 prompt-sections。它不需要临时私有参数副本，也不读取真实凭据或日用会话。
+准备入口只生成无凭据的受控输入和 [测试 argv](<../scripts/prepare-profile-smoke.mjs>)，不安装、不启动 Host。它启用 ACP、session-tools 与 prompt-sections，覆盖三个生成 preset；加入所有受管 profile 包；关闭 Codegraph MCP；使用不会发请求的 Firecrawl 占位 key；用本次生成的固定文本测试 prompt-sections。它不需要临时私有参数副本，也不读取真实凭据或日用会话。
 
 需要另外核对日用私有参数时，在私有副本中保留原字段文本且只改部署位置，使用独立 home/profile/installation。日用 MCP、provider 和认证配置不在此公开 smoke 的验收范围内，不把含凭据的完整 dump 输出到对话。
 
@@ -60,7 +60,7 @@ node scripts/dsh-config.mjs update "$CONFIG_ROOT/generated/profile-smoke-input/m
 获得执行通知后，在配置仓库根目录运行：
 
 ```sh
-NODE_OPTIONS=--max-old-space-size=3072 node scripts/run-profile-smoke.mjs \
+NODE_OPTIONS=--max-old-space-size=4096 node scripts/run-profile-smoke.mjs \
   "$CONFIG_ROOT/generated/profile-smoke-input/argv.json"
 ```
 
@@ -71,9 +71,9 @@ NODE_OPTIONS=--max-old-space-size=3072 node scripts/run-profile-smoke.mjs \
 1. `test` 创建独立临时目录、独立 `DSH_HOME`、安装 manifests、受控 home/Web patch 与 tarball 副本。
 2. 在隔离 installation 与 Web profile 各写 `pnpm-workspace.yaml`，放入 overrides、`blockExoticSubdeps: false` 和明确的 `allowBuilds`（包括 koffi、esbuild、node-pty 和官方 subprocess-local 的 spawn-helper postinstall）；不使用 `--ignore-workspace`，不创建项目 store/cache。
 3. CLI installation 启用 `autoInstallPeers`，补齐 app-boot 等 Host 自身的 bootstrap peers；profile 关闭它，由正式 resolver 共享 Host 实例。用 pnpm 安装官方 `@deepseek-ai/dsh@0.2.1-rc.1` 与全部选定成品。临时风险豁免只写隔离 profile，不写共享兼容记录或真实 profile。
-4. 通过该 CLI 的 `--dump-config` 检查五个 PTC preset、没有全局 Team 工具、Web 监听为 `127.0.0.1:0`。端口 `0` 由 OS 分配，不使用日用端口。
+4. 通过该 CLI 的 `--dump-config` 检查三个 PTC preset、没有全局 Team 工具、Web 监听为 `127.0.0.1:0`。端口 `0` 由 OS 分配，不使用日用端口。
 5. 启动同一个隔离 CLI 的 Web profile。临时 Loader probe 等待挂载审计，通过正式 pluginPackages resolver 核对全部受管包的实际版本及官方 ui-settings，检查 overlay／envrc／Team service，以及 session-tools／progressive-tools 的工具注册。
-6. 同时创建五个空闲 Agent，防止 Team 启动遍历的跨 preset 泄漏漏测。普通 preset 必须有普通 subagent/control 且没有 `spawn_teammate`；Team preset 必须有 Team 控制、wait/task 工具且没有 subagent/fork。检查 `send_message` 参数来自正确实现、工具名无重复、任何 preset 都没有 `present`。
+6. 同时创建三个空闲 Agent，防止 Team 启动遍历的跨 preset 泄漏漏测。普通 preset 必须有普通 subagent/control 且没有 `spawn_teammate`；Team preset 必须有 Team 控制、wait/task 工具且没有 subagent/fork。检查 `send_message` 参数来自正确实现、工具名无重复、任何 preset 都没有 `present`。
 7. 检查每个 Agent 的 PTC runtime 为 TypeScript／function-body，以及实际提示词 assembly 有 `run_code` 与 ACP SDK；通过真实 `run_code` 调用各自的 `list_agents`；ACP SDK 的存在从真实 assembly 校验，不在普通程序中引用受限的 `tools.context_compress`。再在一个 ACP Agent 中追加合成的工具调用日志，经真实 per-call Node 子进程执行 `return await tools.context_compress({"regions":[]});`，必须到达“submit 1-N non-overlapping regions”的参数拒绝，而不是只在独立调用 guard 被挡住；断言拒绝前后既有 Surface 节点不变、没有 compaction summary。不发起模型请求、不创建 teammate、不实际压缩上下文。
 8. 无论 probe 成功或失败，停止并等待自己启动的 Host；子进程 TMPDIR 位于隔离根内，`test` 的 finally 一并清理此次安装、会话、logs、dump、临时缓存和 tarball 副本。
 
@@ -96,6 +96,6 @@ DSH_CONFIG_BROWSER_SMOKE_ARGV='["node","/absolute/path/to/browser-smoke.mjs","{u
 4. 通过插件按钮打开官方管理器，核对出现 modal 而非切换主页面；关闭后仍能使用三页导航。
 5. 用 1280×800 的鼠标上下文确认移动导航不生效，保存两种布局的截图并收集页面错误。
 
-本阶段只实现了 browser runner 接口，没有运行 Playwright，也没有把缺失数据的 usage／activity 或 modal 场景标成已通过。IME、真实软键盘、PWA、剪贴板、系统返回与复杂审批／终端交互仍为真机人工验收。
+本次已用已发布的 23 个成品通过一次完整隔离 Host smoke：三个 preset 的 PTC／ACP、普通与 Team 工具隔离、实际包版本及官方 ui-settings 均通过；零模型请求，非法 ACP 调用在压缩前拒绝且 Surface 不变，临时 Host 与安装已清理。Playwright 基础检查通过：390×844 触屏三页切换与 aria-current、插件 modal 保持主页面且关闭后导航可用、1280×800 鼠标首页无移动底部导航，两端 pageerror／console error 均为零。没有生成带真实 token 用量的会话，usage／activity pill 不计作通过；真实 provider／Firecrawl、IME、真实软键盘、PWA、剪贴板、系统返回与复杂审批／终端交互仍未覆盖。受控组合通过不代表整份日用私有配置已验证或已应用。
 
 准备目录不是 Host 数据目录。确认无需重跑后，只删除本次 `generated/profile-smoke-input`；不要清空整个 generated 或任何日用 home。

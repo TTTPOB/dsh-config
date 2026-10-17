@@ -83,8 +83,11 @@ test('required Team packages are installed without activating the official globa
     '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-experimental-agent-team-profile',
   ] } } } }, catalog);
   assert.equal(target.profiles.web.dependencies['@deepseek-ai/dsh-experimental-agent-team'], '0.2.1-rc.1');
-  assert.ok(target.entries.some(row => row.name === '@deepseek-ai/dsh-experimental-tool-agent-team'
-    && row.scope === 'profile' && row.status === 'blocked-missing-release'));
+  const tool = catalog.packages.find(row => row.package === '@deepseek-ai/dsh-experimental-tool-agent-team');
+  assert.ok(target.entries.some(row => row.name === tool.package
+    && row.scope === 'profile' && row.status === 'verified-release' && row.target === tool.url));
+  assert.equal(target.profiles.web.dependencies[tool.package], tool.url);
+  assert.equal(target.globalWorkspace.overrides[tool.package], tool.url);
   assert.deepEqual(target.profiles.web.dsh.profile.bundles, ['@deepseek-ai/dsh-base']);
 });
 
@@ -318,7 +321,7 @@ test('declared installation files render beside shared patches and drive source 
   const { output, rendered } = renderMachine(path, 'test-installation', undefined, { generatedDir: directory });
   assert.deepEqual(readdirSync(output).sort(), ['global-workspace.yaml', 'home.patch.yml', 'web.package.json', 'web.patch.yml']);
   assert.equal(readYaml(join(output, 'global-workspace.yaml')).overrides['@deepseek-ai/dsh-example'], '0.1.7-rc.2');
-  assert.equal(parseYaml(rendered.globalWorkspace).blockExoticSubdeps, undefined);
+  assert.equal(parseYaml(rendered.globalWorkspace).blockExoticSubdeps, false);
   assert.equal(JSON.parse(readFileSync(join(output, 'web.package.json'), 'utf8')).dependencies['example-plugin'], '1.0.0');
   assert.ok(validatePatch(rendered.home).length > 0);
   const plan = resolveDependencyTargets('unused-snapshot-directory', machine.installation).entries;
@@ -331,8 +334,10 @@ test('release catalog distinguishes selected URLs, explicit registry pins and mi
   assert.equal(catalog.schemaVersion, 2);
   for (const entry of catalog.packages) {
     assert.match(entry.version, /^\d+\.\d+\.\d+/);
-    if (entry.policy === 'release' && entry.url) assert.match(entry.url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/);
-    else if (entry.policy === 'release') assert.equal(typeof entry.reason, 'string');
+    if (entry.policy === 'release') {
+      assert.equal(typeof entry.url, 'string', `Missing published source for ${entry.package}`);
+      assert.match(entry.url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/);
+    }
   }
   assert.ok(!readFileSync(join(root, 'shared/dependencies.yaml'), 'utf8').includes('file:'));
 });

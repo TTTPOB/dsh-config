@@ -407,13 +407,14 @@ test('CLI separates JSON format from verbosity and hides unchanged items and pri
   writeJson(machinePath, machine);
   const cli = flags => {
     const result = spawnSync(process.execPath, [join(root, 'scripts/dsh-config.mjs'), 'update', machinePath, ...flags], { encoding: 'utf8' });
-    assert.equal(result.status, 2, 'unpublished rc.1 assets remain explicit preview blockers');
+    assert.equal(result.status, 0, 'all managed rc.1 Release sources are published');
     assert.equal(result.stderr, '');
     return result.stdout;
   };
   const compact = JSON.parse(cli(['--json']));
   const full = JSON.parse(cli(['--verbose', '--json']));
   assert.equal(compact.summary.changed, 1);
+  assert.equal(compact.summary.blocked, 0);
   assert.equal(compact.entries.length, compact.summary.blocked + 1);
   assert.equal(compact.entries.find(row => row.name === changedName).currentSources[0].source, '0.0.1');
   assert.ok(full.entries.length > compact.entries.length);
