@@ -29,6 +29,15 @@
   config:
     default: standard-ptc
     selectedDefault: standard-ptc
+- id: session-title-llm
+  config:
+    provider: [[ shared.defaults.sessionTitle.provider | quote ]]
+    model: [[ shared.defaults.sessionTitle.model | quote ]]
+    targetWords: [[ shared.defaults.sessionTitle.targetWords ]]
+    targetCjkCharacters: [[ shared.defaults.sessionTitle.targetCjkCharacters ]]
+    maxInputBytes: [[ shared.defaults.sessionTitle.maxInputBytes ]]
+    maxOutputTokens: [[ shared.defaults.sessionTitle.maxOutputTokens ]]
+    timeoutMs: [[ shared.defaults.sessionTitle.timeoutMs ]]
 - id: agent-default-model
   config:
     provider: [[ effective.defaultModel.provider | quote ]]

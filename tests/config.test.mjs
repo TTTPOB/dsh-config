@@ -14,6 +14,18 @@ function fixture(t) {
 
 const example = join(root, 'examples/workstation-machine.yaml');
 
+for (const machine of ['workstation', 'server']) {
+  test(`${machine} titles use the shared Flash route independently of the conversation model`, () => {
+    const { rendered } = renderMachine(join(root, `examples/${machine}-machine.yaml`), 'title-model', undefined, { stage: false });
+    const rows = validatePatch(rendered.web).map(row => row.entry);
+    assert.deepEqual(rows.find(row => row.id === 'session-title-llm').config, {
+      provider: 'deepseek-official', model: 'deepseek-flash',
+      targetWords: 5, targetCjkCharacters: 10, maxInputBytes: 4096,
+      maxOutputTokens: 4096, timeoutMs: 60000,
+    });
+  });
+}
+
 test('rc.1 presets separate ordinary delegation and Team tools without present', () => {
   const { rendered } = renderMachine(example, 'rc1-presets', undefined, { stage: false });
   const rows = validatePatch(rendered.home).map(row => row.entry);
@@ -35,7 +47,7 @@ test('rc.1 presets separate ordinary delegation and Team tools without present',
   for (const id of ['tool-subagent', 'tool-subagent-fork', 'tool-subagent-control', 'tool-subagent-list-agents']) {
     assert.ok(!teamTools.some(row => row.id === id));
   }
-  assert.deepEqual(teamTools.find(row => row.id === 'tool-agent-team').config, { freshProvider: 'spawn', forkProvider: 'fork' });
+  assert.deepEqual(teamTools.find(row => row.id === 'tool-agent-team').config, { freshProvider: 'spawn', forkProvider: 'fork', modelSelectionSettings: true });
   for (const preset of presets) for (const id of ['workflow-ptc', 'tool-workflow', 'tool-ralph']) {
     assert.ok(delegation(preset.config.plugins).some(row => row.id === id));
   }
@@ -82,7 +94,10 @@ test('required Team packages are installed without activating the official globa
   const target = resolveDependencyTargets('unused', { webPackage: { dsh: { profile: { bundles: [
     '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-experimental-agent-team-profile',
   ] } } } }, catalog);
-  assert.equal(target.profiles.web.dependencies['@deepseek-ai/dsh-experimental-agent-team'], '0.2.1-rc.1');
+  const team = catalog.packages.find(row => row.package === '@deepseek-ai/dsh-experimental-agent-team' && row.scope === 'profile');
+  assert.ok(team.url);
+  assert.equal(target.profiles.web.dependencies[team.package], team.url);
+  assert.equal(target.globalWorkspace.overrides[team.package], team.url);
   const tool = catalog.packages.find(row => row.package === '@deepseek-ai/dsh-experimental-tool-agent-team');
   assert.ok(target.entries.some(row => row.name === tool.package
     && row.scope === 'profile' && row.status === 'verified-release' && row.target === tool.url));

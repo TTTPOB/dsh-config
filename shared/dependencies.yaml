@@ -1,15 +1,17 @@
 # Release URLs and compatibility records are added only after artifact validation.
 schemaVersion: 2
 verifiedCompatibility:
+  "@deepseek-ai/dsh-subagent@0.2.1-rc.1-fork2": ["0.2.1-rc.1"]
+  "@deepseek-ai/dsh-tool-subagent@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
+  "@deepseek-ai/dsh-experimental-agent-team@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
+  "@deepseek-ai/dsh-experimental-tool-agent-team@0.2.1-rc.1-fork2": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-agent@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-agent-preset-registry@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
-  "@deepseek-ai/dsh-experimental-tool-agent-team@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-host-frontend-static@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-llm-pi-ai@0.2.1-rc.1-fork2": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-session-persistence-jsonl@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-session-query@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-session-query-sqlite@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
-  "@deepseek-ai/dsh-subagent@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "dsh-active-context@0.5.1": ["0.2.1-rc.1"]
   "dsh-session-tools@0.4.0": ["0.2.1-rc.1"]
   "dsh-workspace-envrc@0.3.0": ["0.2.1-rc.1"]
@@ -25,6 +27,18 @@ allowBuilds:
   electron-winstaller: false
   msgpackr-extract: false
 packages:
+  - package: "@deepseek-ai/dsh-tool-subagent"
+    scope: global-override
+    policy: release
+    version: 0.2.1-rc.1-fork1
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork5/deepseek-ai-dsh-tool-subagent-0.2.1-rc.1-fork1.tgz
+    resetSelectors: true
+  - package: "@deepseek-ai/dsh-experimental-agent-team"
+    scope: global-override
+    policy: release
+    version: 0.2.1-rc.1-fork1
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork5/deepseek-ai-dsh-experimental-agent-team-0.2.1-rc.1-fork1.tgz
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-session"
     scope: global-override
     policy: release
@@ -142,8 +156,8 @@ packages:
   - package: "@deepseek-ai/dsh-subagent"
     scope: global-override
     policy: release
-    version: 0.2.1-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork2/deepseek-ai-dsh-subagent-0.2.1-rc.1-fork1.tgz
+    version: 0.2.1-rc.1-fork2
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork5/deepseek-ai-dsh-subagent-0.2.1-rc.1-fork2.tgz
     resetSelectors: true
   - package: "@deepseek-ai/dsh-agent"
     scope: global-override
@@ -189,22 +203,23 @@ packages:
   - package: "@deepseek-ai/dsh-experimental-tool-agent-team"
     scope: global-override
     policy: release
-    version: 0.2.1-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork2/deepseek-ai-dsh-experimental-tool-agent-team-0.2.1-rc.1-fork1.tgz
+    version: 0.2.1-rc.1-fork2
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork5/deepseek-ai-dsh-experimental-tool-agent-team-0.2.1-rc.1-fork2.tgz
     resetSelectors: true
   - package: "@deepseek-ai/dsh-experimental-agent-team"
     scope: profile
-    policy: registry
-    version: 0.2.1-rc.1
+    policy: release
+    version: 0.2.1-rc.1-fork1
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork5/deepseek-ai-dsh-experimental-agent-team-0.2.1-rc.1-fork1.tgz
     patchOnly: true
     required: true
   - package: "@deepseek-ai/dsh-experimental-tool-agent-team"
     scope: profile
     policy: release
-    version: 0.2.1-rc.1-fork1
+    version: 0.2.1-rc.1-fork2
     patchOnly: true
     required: true
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork2/deepseek-ai-dsh-experimental-tool-agent-team-0.2.1-rc.1-fork1.tgz
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork5/deepseek-ai-dsh-experimental-tool-agent-team-0.2.1-rc.1-fork2.tgz
   - package: "@deepseek-ai/dsh-experimental-client-ui-agent-team"
     scope: profile
     policy: registry

@@ -33,9 +33,9 @@ test('probe Agent creation explicitly mounts its selected preset before publicat
 });
 
 function catalog(team) {
-  return [...(team ? ['spawn_teammate', 'wait_agent', 'team_task_create', 'team_task_list', 'team_task_get', 'team_task_update'] : ['subagent', 'subagent_fork']),
+  return [...(team ? ['spawn_teammate', 'list_agent_models', 'wait_agent', 'team_task_create', 'team_task_list', 'team_task_get', 'team_task_update'] : ['subagent', 'subagent_fork']),
     'send_message', 'list_agents', 'interrupt_agent', 'run_code', 'workflow', 'ralph', 'context_compress']
-    .map(name => ({ name, parameters: { type: 'object', properties: name === 'send_message' ? { [team ? 'target' : 'agent_id']: {} } : {} } }));
+    .map(name => ({ name, parameters: { type: 'object', properties: name === 'send_message' ? { [team ? 'target' : 'agent_id']: {} } : name === 'spawn_teammate' ? { provider: {}, model: {}, reasoning_effort: {} } : {} } }));
 }
 const runtimeRows = [{ id: 'ptc-runtime',
   name: '@deepseek-ai/dsh-ptc-runtime-node', config: { executionMode: 'per-call' } }];
@@ -57,6 +57,10 @@ test('profile assertions reject Team leakage, wrong message implementation and a
   assert.equal(verifyToolCatalog('standard-ptc', catalog(false), assembly).ptc, true);
   assert.equal(verifyToolCatalog('standard-ptc-team', catalog(true), assembly).acp, true);
   assert.throws(() => verifyToolCatalog('standard-ptc', [...catalog(false), { name: 'spawn_teammate' }], assembly), /unexpected spawn_teammate/);
+  assert.throws(() => verifyToolCatalog('standard-ptc-team', catalog(true).filter(row => row.name !== 'list_agent_models'), assembly), /missing list_agent_models/);
+  const noModel = catalog(true);
+  delete noModel.find(row => row.name === 'spawn_teammate').parameters.properties.model;
+  assert.throws(() => verifyToolCatalog('standard-ptc-team', noModel, assembly), /missing spawn model field model/);
   const wrong = catalog(true);
   wrong.find(row => row.name === 'send_message').parameters = { type: 'object', properties: { agent_id: {} } };
   assert.throws(() => verifyToolCatalog('standard-ptc-team', wrong, assembly), /wrong send_message/);

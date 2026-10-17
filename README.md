@@ -43,6 +43,10 @@ node scripts/dsh-config.mjs update --machine workstation
 
 机器参数提供 `features`、`overrides.defaultModel`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。标准＋PTC 和逆向 preset 共用模板，逆向模式追加提示词插件。机器专属 provider／MCP 完整行保留为私有输入，不进行通用深合并。
 
+两机 Web 会话标题使用共用 `defaults.sessionTitle` 配置，固定为 `deepseek-official/deepseek-flash`，沿用官方标题插件自动选择最低推理档位的行为（该模型为 `off`）；标题路由不随聊天模型选择器变化。
+
+`standard-ptc-team` 的 `spawn_teammate` 支持逐次指定 `provider`、`model` 和 `reasoning_effort`，通过 `list_agent_models` 查询可用路由。Team 与普通 Subagent 共用 Host 的 `subagent-model-selection-settings`，授权策略在新 Session 中确定并持久保存；更新后新建 Team Session 使用此能力。未指定模型时继承 Lead 当前设置，切换路由而未指定 effort 时使用目标模型默认值。
+
 可选 `acp.pressureDefault: { nudgeAtRatio: 0.70, resetBelowRatio: 0.65 }` 为未列出模型设置最大上下文比例阈值；`pressureRoutes` 保持精确路由绝对 token 覆盖。`features.activeContext: true` 选择 ACP，与 `features.sessionTools` 独立；未填写或为 false 时保留 Basic。见[公开 ACP 示例](<examples/active-context-machine.yaml>)和[ACP 配置与验收](<docs/install.md#active-context-pruningacp>)。
 
 可选 `installation.globalWorkspace`／`installation.webPackage` 提供安装输入；共用清单覆盖受管项，保留无关 overrides 和机器专属依赖。受管 fork／个人插件选择精确 Release URL，明确允许的官方包、普通库与第三方插件保留精确 registry pin。缺精确资产会阻塞正式更新，不自动换版本或回退本地来源。

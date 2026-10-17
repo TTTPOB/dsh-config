@@ -4,6 +4,14 @@ defaults:
     provider: klaude-openai
     model: gpt-6.1-sol
     reasoningEffort: medium
+  sessionTitle:
+    provider: deepseek-official
+    model: deepseek-flash
+    targetWords: 5
+    targetCjkCharacters: 10
+    maxInputBytes: 4096
+    maxOutputTokens: 4096
+    timeoutMs: 60000
   compaction:
     auto: true
     thresholdRatio: 0.82

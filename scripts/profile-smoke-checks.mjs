@@ -5,11 +5,17 @@ export function verifyToolCatalog(id, schemas, assembly, { acp = true } = {}) {
   assert.equal(new Set(names).size, names.length, `${id}: duplicate tool names`);
   const team = id === 'standard-ptc-team';
   const required = team
-    ? ['spawn_teammate', 'send_message', 'list_agents', 'interrupt_agent', 'wait_agent', 'team_task_create', 'team_task_list', 'team_task_get', 'team_task_update']
+    ? ['spawn_teammate', 'list_agent_models', 'send_message', 'list_agents', 'interrupt_agent', 'wait_agent', 'team_task_create', 'team_task_list', 'team_task_get', 'team_task_update']
     : ['subagent', 'subagent_fork', 'send_message', 'list_agents', 'interrupt_agent'];
   for (const name of [...required, 'run_code', 'workflow', 'ralph']) assert.ok(names.includes(name), `${id}: missing ${name}`);
   for (const name of team ? ['subagent', 'subagent_fork'] : ['spawn_teammate', 'wait_agent', 'team_task_create']) {
     assert.ok(!names.includes(name), `${id}: unexpected ${name}`);
+  }
+  if (team) {
+    const spawn = schemas.find(tool => tool.name === 'spawn_teammate');
+    for (const field of ['provider', 'model', 'reasoning_effort']) {
+      assert.ok(spawn.parameters.properties[field], `${id}: missing spawn model field ${field}`);
+    }
   }
   const send = schemas.find(tool => tool.name === 'send_message');
   assert.ok(send.parameters.properties[team ? 'target' : 'agent_id'], `${id}: wrong send_message implementation`);
