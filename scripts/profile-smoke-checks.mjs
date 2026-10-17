@@ -12,8 +12,8 @@ export function verifyToolCatalog(id, schemas, assembly, { acp = true } = {}) {
     assert.ok(!names.includes(name), `${id}: unexpected ${name}`);
   }
   const send = schemas.find(tool => tool.name === 'send_message');
-  assert.ok(send.parameters[team ? 'target' : 'agent_id'], `${id}: wrong send_message implementation`);
-  assert.ok(!send.parameters[team ? 'agent_id' : 'target'], `${id}: mixed send_message implementations`);
+  assert.ok(send.parameters.properties[team ? 'target' : 'agent_id'], `${id}: wrong send_message implementation`);
+  assert.ok(!send.parameters.properties[team ? 'agent_id' : 'target'], `${id}: mixed send_message implementations`);
   assert.ok(assembly.tools.some(tool => tool.name === 'run_code'), `${id}: PTC transport is not model-visible`);
   if (acp) {
     assert.ok(names.includes('context_compress'), `${id}: ACP is not registered`);

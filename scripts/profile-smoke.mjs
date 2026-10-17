@@ -1,18 +1,15 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import { verifyDumpConfiguration } from './profile-smoke-checks.mjs';
+import { readDependencyCatalog } from './lib.mjs';
 
-export const allowBuilds = {
-  esbuild: true, koffi: true, 'node-pty': true,
-  '@google/genai': false, protobufjs: false, 'node-addon-require-builtin': false,
-  'electron-winstaller': false, 'msgpackr-extract': false,
-};
+export const allowBuilds = readDependencyCatalog().allowBuilds;
 
 export function prepareInstallation(testRoot, home) {
   const child = relative(testRoot, home);
@@ -20,7 +17,7 @@ export function prepareInstallation(testRoot, home) {
   const installation = join(testRoot, 'installation');
   const staged = YAML.parse(readFileSync(join(installation, 'pnpm-workspace.yaml'), 'utf8'));
   const workspace = { ...staged, packages: ['.'], blockExoticSubdeps: false,
-    autoInstallPeers: false, enableGlobalVirtualStore: false, allowBuilds: { ...staged.allowBuilds, ...allowBuilds } };
+    autoInstallPeers: true, enableGlobalVirtualStore: false, allowBuilds: { ...staged.allowBuilds, ...allowBuilds } };
   const homePatch = YAML.parse(readFileSync(join(home, 'cordis.patch.yml'), 'utf8'));
   const options = homePatch.flatMap(row => row.insert ?? [row]).find(row => row.id === 'profile-smoke-probe')?.config;
   assert.ok(options, 'Missing controlled profile-smoke-probe configuration');
@@ -30,13 +27,13 @@ export function prepareInstallation(testRoot, home) {
   writeFileSync(join(installation, 'pnpm-workspace.yaml'), YAML.stringify(workspace), { mode: 0o600 });
   const profile = join(home, 'profiles/web');
   // Profile dependencies need the same transitive overrides as the CLI installation.
-  writeFileSync(join(profile, 'pnpm-workspace.yaml'), YAML.stringify(workspace), { mode: 0o600 });
+  writeFileSync(join(profile, 'pnpm-workspace.yaml'), YAML.stringify({ ...workspace, autoInstallPeers: false }), { mode: 0o600 });
   return { installation, profile, options };
 }
 
-function run(argv, cwd, env) {
+export function runSmokeCommand(argv, cwd, env) {
   const child = spawnSync(argv[0], argv.slice(1), { cwd, env, encoding: 'utf8', timeout: 600000, maxBuffer: 32 * 1024 * 1024 });
-  if (child.error || child.status !== 0) throw new Error(`Smoke command failed: ${argv[0]} (${child.error?.code ?? child.status})\n${child.stderr}`);
+  if (child.error || child.status !== 0) throw new Error(`Smoke command failed: ${argv[0]} (${child.error?.code ?? child.status})\n${[child.stdout, child.stderr].filter(Boolean).join('\n').slice(-8000)}`);
   return child.stdout;
 }
 
@@ -70,8 +67,8 @@ export async function launchHost(argv, cwd, env) {
       child.stdout.on('data', chunk => {
         appendFileSync(logPath, chunk);
         output = (output + chunk).slice(-16384);
-        const match = output.match(/http:\/\/127\.0\.0\.1:(\d+)/);
-        if (match) { clearTimeout(timer); resolve(match[0]); }
+        const match = output.match(/dsh web:\s+(http:\/\/127\.0\.0\.1:\d+\/[^\s]*)/);
+        if (match) { clearTimeout(timer); resolve(match[1]); }
       });
       child.stderr.on('data', chunk => appendFileSync(logPath, chunk));
     });
@@ -82,6 +79,18 @@ export async function launchHost(argv, cwd, env) {
   }
 }
 
+export async function openSmokePage(url, request = fetch) {
+  const login = await request(url, { redirect: 'manual', signal: AbortSignal.timeout(30000) });
+  const cookie = login.headers?.get('set-cookie')?.split(';')[0];
+  const headers = cookie ? { cookie } : {};
+  const page = login.status === 303
+    ? await request(new URL(login.headers.get('location') ?? '/', url).href, { headers, signal: AbortSignal.timeout(30000) })
+    : login;
+  assert.equal(page.status, 200, 'Isolated Web page did not open');
+  assert.match(await page.text(), /__DSH_BOOT__/, 'Missing supported Web boot payload');
+  return headers;
+}
+
 export async function runProfileSmoke(testRoot, home, dependencies = {}) {
   testRoot = resolve(testRoot); home = resolve(home);
   assert.equal(process.env.DSH_CONFIG_TEST_ROOT, testRoot, 'Only deployment.test-owned roots may run this smoke');
@@ -90,12 +99,14 @@ export async function runProfileSmoke(testRoot, home, dependencies = {}) {
   const inherited = Object.fromEntries(['PATH', 'HOME', 'USERPROFILE', 'PNPM_HOME', 'SHELL', 'LANG', 'LC_ALL',
     'TMPDIR', 'XDG_CACHE_HOME', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'SYSTEMROOT', 'COMSPEC']
     .filter(key => process.env[key] !== undefined).map(key => [key, process.env[key]]));
-  const env = { ...inherited, DSH_HOME: home, DSH_CONFIG_TEST_ROOT: testRoot, NODE_OPTIONS: '--max-old-space-size=3072' };
-  const execute = dependencies.run ?? run;
+  const temporary = join(testRoot, 'tmp');
+  mkdirSync(temporary, { recursive: true, mode: 0o700 });
+  const env = { ...inherited, TMPDIR: temporary, DSH_HOME: home, DSH_CONFIG_TEST_ROOT: testRoot, NODE_OPTIONS: '--max-old-space-size=3072' };
+  const execute = dependencies.run ?? runSmokeCommand;
   const install = ['pnpm', '--config.verify-deps-before-run=false', '--config.enable-global-virtual-store=false',
-    'install', '--no-frozen-lockfile', '--config.auto-install-peers=false'];
-  execute(install, installation, env);
-  execute(install, profile, env);
+    'install', '--no-frozen-lockfile'];
+  execute([...install, '--config.auto-install-peers=true'], installation, env);
+  execute([...install, '--config.auto-install-peers=false'], profile, env);
   const cli = dependencies.resolveCli?.(installation) ?? (() => {
     const require = createRequire(join(installation, 'package.json'));
     const manifestPath = require.resolve('@deepseek-ai/dsh/package.json');
@@ -113,10 +124,8 @@ export async function runProfileSmoke(testRoot, home, dependencies = {}) {
   const host = await (dependencies.launch ?? launchHost)([process.execPath, cli, '--profile', 'web', '--no-open'], installation, env);
   try {
     const request = dependencies.fetch ?? fetch;
-    const page = await request(host.url, { signal: AbortSignal.timeout(30000) });
-    assert.equal(page.status, 200, 'Isolated Web page did not open');
-    assert.match(await page.text(), /__DSH_BOOT__/, 'Missing supported Web boot payload');
-    const response = await request(host.url + '/__dsh-config-smoke', { signal: AbortSignal.timeout(120000) });
+    const headers = await openSmokePage(host.url, request);
+    const response = await request(new URL('/__dsh-config-smoke', host.url).href, { headers, signal: AbortSignal.timeout(120000) });
     const result = await response.json();
     assert.equal(response.status, 200, JSON.stringify(result));
     assert.equal(result.presets.length, options.presets.length);

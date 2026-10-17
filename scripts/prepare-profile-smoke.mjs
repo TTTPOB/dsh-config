@@ -51,6 +51,11 @@ const controlledHome = rendered.home.replace('    - id: mcp-codegraph\n', '    -
 ]);
 const controlledWeb = rendered.web + YAML.stringify([
   { id: 'webserver', config: { host: '127.0.0.1', port: 0, compression: 'none' } },
+  { id: 'directory-picker', disabled: true },
+  { insert: [
+    { id: 'directory-picker-browse', name: '@deepseek-ai/dsh-host-directory-picker-browse' },
+    { id: 'ui-directory-picker-browse', name: '@deepseek-ai/dsh-client-ui-directory-picker-browse' },
+  ] },
   { insert: [{ id: 'firecrawl-fetch-smoke', name: '@firecrawl/dsh-firecrawl/fetch', config: { apiKey: 'smoke-unused-key' } }] },
 ]);
 machine.deployment = { smoke: { cwd: root, resultFile: 'profile-smoke-report.json', argv: [process.execPath, join(root, 'scripts/profile-smoke.mjs'), '{testRoot}', '{home}'],

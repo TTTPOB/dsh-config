@@ -133,6 +133,7 @@ export function readDependencyCatalog() {
   assert.equal(catalog.schemaVersion, 2, 'Dependency catalog requires schemaVersion: 2');
   if (catalog.runtimeVersion !== undefined) assert.match(catalog.runtimeVersion, exactVersion, 'Runtime version must be exact');
   assert.ok((catalog.retiredGlobalOverrides ?? []).every(name => typeof name === 'string' && name.length), 'Invalid retired overrides');
+  for (const enabled of Object.values(catalog.allowBuilds ?? {})) assert.equal(typeof enabled, 'boolean', 'Invalid build policy');
   const keys = new Set();
   for (const item of catalog.packages) {
     assert.ok(['global-override', 'profile'].includes(item.scope), 'Invalid dependency scope');
@@ -211,6 +212,7 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
     }
   };
   merge(globalWorkspace, 'overrides', 'global-override');
+  if (catalog.allowBuilds) globalWorkspace.allowBuilds = { ...globalWorkspace.allowBuilds, ...catalog.allowBuilds };
   // pnpm 11 otherwise rejects trusted Release overrides of transitive dependencies.
   if (entries.some(row => row.scope === 'global-override' && row.status === 'verified-release')) globalWorkspace.blockExoticSubdeps = false;
   for (const [profile, manifest] of Object.entries(profiles)) {

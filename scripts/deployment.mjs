@@ -37,7 +37,7 @@ export function globalInstallArguments(deployment, runtimeVersion) {
   assert.ok(isAbsolute(deployment.globalBinDir ?? ''), 'Absolute deployment.globalBinDir required for global apply');
   const globalDir = deployment.globalDir ?? dirname(dirname(deployment.globalWorkspacePath));
   assert.ok(isAbsolute(globalDir), 'Global directory must be absolute');
-  return ['pnpm', '--config.enable-global-virtual-store=false', `--config.global-dir=${globalDir}`,
+  return ['pnpm', '--config.auto-install-peers=true', '--config.enable-global-virtual-store=false', `--config.global-dir=${globalDir}`,
     `--config.global-bin-dir=${deployment.globalBinDir}`, '--ignore-workspace', 'add', '--global', `@deepseek-ai/dsh@${targetVersion}`];
 }
 

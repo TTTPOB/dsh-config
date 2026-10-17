@@ -1,6 +1,16 @@
 # Release URLs and compatibility records are added only after artifact validation.
 schemaVersion: 2
 verifiedCompatibility: {}
+allowBuilds:
+  esbuild: true
+  koffi: true
+  node-pty: true
+  '@deepseek-ai/dsh-subprocess-local': true
+  '@google/genai': false
+  protobufjs: false
+  node-addon-require-builtin: false
+  electron-winstaller: false
+  msgpackr-extract: false
 packages:
   - package: "@deepseek-ai/dsh-session"
     scope: global-override

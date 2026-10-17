@@ -81,6 +81,14 @@ test('live and offline previews select ACP from machine features without touchin
 
 const healthy = async () => ({ issues: [], blocked: 0 });
 
+test('managed runtime build policy converges without deleting unrelated approvals', () => {
+  const installation = { globalWorkspace: { allowBuilds: { unrelated: false, koffi: false } } };
+  const selected = { ...catalog, allowBuilds: { koffi: true, '@deepseek-ai/dsh-subprocess-local': true } };
+  const targets = resolveDependencyTargets('unused', installation, selected);
+  assert.deepEqual(targets.globalWorkspace.allowBuilds, { unrelated: false, koffi: true, '@deepseek-ai/dsh-subprocess-local': true });
+  assert.equal(installation.globalWorkspace.allowBuilds.koffi, false);
+});
+
 test('explicit catalog runtime upgrades an otherwise aligned installation without touching preview targets', async t => {
   const { machine, machinePath } = fixture(t);
   const selected = { ...catalog, runtimeVersion: '0.2.1-rc.1' };
@@ -94,6 +102,8 @@ test('explicit catalog runtime upgrades an otherwise aligned installation withou
   await updateMachine(machinePath, 'runtime-upgrade', true, { catalog: selected, doctor: healthy,
     runStep: argv => calls.push(argv) });
   assert.equal(calls[0].at(-1), '@deepseek-ai/dsh@0.2.1-rc.1');
+  assert.ok(calls[0].includes('--config.auto-install-peers=true'));
+  assert.ok(calls[1].includes('--config.auto-install-peers=false'));
   writeJson(machine.deployment.hostManifest, { name: '@deepseek-ai/dsh', version: '0.2.1-rc.1' });
   assert.equal((await updateMachine(machinePath, 'runtime-aligned', true, { catalog: selected,
     doctor: healthy, runStep: () => assert.fail('aligned runtime reinstalled') })).noOp, true);

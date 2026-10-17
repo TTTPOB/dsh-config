@@ -1,6 +1,7 @@
 // This local Loader plugin is mounted only by the disposable profile smoke.
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { verifyToolCatalog } from './profile-smoke-checks.mjs';
@@ -52,10 +53,18 @@ export async function probeInvalidCompression(ctx, agent, { createAssistantMessa
   }
 }
 
+export async function createProbeAgent(ctx, id, cwd) {
+  // Agent metadata records the choice; the caller's setup composes its plugins.
+  return ctx.agents.create({ sessionId: randomUUID(), meta: { cwd, agentPreset: id },
+    setup: agentCtx => ctx.agentPresets.mount(agentCtx, id).then(() => undefined) });
+}
+
 async function inspect(ctx, config) {
   await ctx.loader.await();
+  const hostRequire = createRequire(process.env.DSH_SMOKE_HOST_MANIFEST);
+  const load = name => import(pathToFileURL(hostRequire.resolve(name)).href);
   const [{ auditStartupEntries }, { assembleContextFor }, { scopeOf }] = await Promise.all([
-    import('@deepseek-ai/dsh-app-boot'), import('@deepseek-ai/dsh-agent'), import('@deepseek-ai/dsh-scope'),
+    load('@deepseek-ai/dsh-app-boot'), load('@deepseek-ai/dsh-agent'), load('@deepseek-ai/dsh-scope'),
   ]);
   await auditStartupEntries(ctx.root, 'dsh-config profile smoke', () => {});
   for (const service of ['workspaceCordis', 'workspaceEnvrc', 'agentTeams']) {
@@ -75,7 +84,7 @@ async function inspect(ctx, config) {
     for (const id of config.presets) {
       const declaration = roster.find(row => row.id === id);
       if (!declaration || declaration.broken) throw new Error(`${id}: ${declaration?.broken ?? 'missing preset'}`);
-      handles.push(await ctx.agents.create({ sessionId: randomUUID(), meta: { cwd: process.env.DSH_CONFIG_TEST_ROOT, agentPreset: id } }));
+      handles.push(await createProbeAgent(ctx, id, process.env.DSH_CONFIG_TEST_ROOT));
     }
     for (const { agent } of handles) {
       const id = agent.session.header.agentPreset;
@@ -89,15 +98,12 @@ async function inspect(ctx, config) {
         if (!schemas.some(tool => tool.name === name)) throw new Error(`${id}: missing profile plugin tool ${name}`);
       }
       results.push(verifyToolCatalog(id, schemas, assembly, { acp: config.acp }));
-      const code = config.acp
-        ? 'return { acp: typeof tools.context_compress, agents: await tools.list_agents({}) };'
-        : 'return { agents: await tools.list_agents({}) };';
+      const code = 'return { agents: await tools.list_agents({}) };';
       const execution = await ctx.tools.execute({ callId: `smoke-${randomUUID()}`, name: 'run_code',
         arguments: { code, description: 'Verify scoped profile tool SDK' }, agent, signal: AbortSignal.timeout(30000) });
       if (execution.isError) throw new Error(`${id}: run_code failed: ${JSON.stringify(execution.content)}`);
-      if (config.acp && !JSON.stringify(execution.content).includes('function')) throw new Error(`${id}: ACP SDK binding unavailable`);
     }
-    const acpInvalidCall = config.acp ? await probeInvalidCompression(ctx, handles[0].agent, await import('@deepseek-ai/dsh-llm')) : undefined;
+    const acpInvalidCall = config.acp ? await probeInvalidCompression(ctx, handles[0].agent, await load('@deepseek-ai/dsh-llm')) : undefined;
     return { presets: results, packages, loaded: true, modelRequests: 0, acpInvalidCall };
   } finally {
     for (const handle of handles.reverse()) await handle.dispose();

@@ -79,7 +79,7 @@ deployment:
 
 所有部署路径支持 `~/`、`$HOME`、`${HOME}`、`$DSH_HOME` 及其他已定义环境变量；未定义变量按字段和变量名报错。展开仅替换路径文本，不使用 shell/eval，不递归展开变量值。显式其他 profile 按 home 推导位置，不自动扫描 profile。覆盖 profile 的 `packagePath` 后，未指定的 `patchPath` 默认位于该 manifest 同目录。无需填写 pnpm 哈希 slot。显式 workspace 的 globalDir 从该 workspace 推导，或单独覆盖，避免借用另一套本机配置。
 
-全局更新后通过 pnpm 公开安装清单重新定位当前 Host，避免继续检查旧安装代际。`pnpm root -g` 的版本化全局项目目录与 `global-dir` 基目录不同。使用用户级全局 store/default cache，关闭自动安装 peers 和 global virtual store，包安装和 lockfile 由 pnpm 正规管理。
+全局更新后通过 pnpm 公开安装清单重新定位当前 Host，避免继续检查旧安装代际。`pnpm root -g` 的版本化全局项目目录与 `global-dir` 基目录不同。使用用户级全局 store/default cache，并关闭 global virtual store。CLI 根安装启用自动 peers，补齐 app-boot 等 bootstrap 依赖；消费 profile 关闭自动 peers，由正式 resolver 共享 Host 实例。清单的 `allowBuilds` 写入全局 workspace，允许经审查的 native／spawn-helper 安装步骤，保留无关审批。包安装和 lockfile 由 pnpm 正规管理。
 
 消费全局插件的其他 profile 必须先有完整的共用依赖布局，再显式纳入 `deployment.profiles` 和验收；其已声明的共用受管依赖使用同一选定版本。可用 `installation.profiles.<name>` 保存额外 profile 的安装输入；依赖清单中的 `profiles` 可限制真正 profile 特化的包，例如 mobile 仅用于 Web。不会因共用清单存在某个专属包就自动给其他机器或 profile 安装它。
 

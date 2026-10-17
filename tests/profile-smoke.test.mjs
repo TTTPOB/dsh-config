@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { root, readDependencyCatalog, readYaml, validatePatch } from '../scripts/lib.mjs';
 import { verifyToolCatalog, verifyDumpConfiguration } from '../scripts/profile-smoke-checks.mjs';
-import { runProfileSmoke, launchHost } from '../scripts/profile-smoke.mjs';
-import { probeInvalidCompression } from '../scripts/profile-smoke-probe.mjs';
+import { runProfileSmoke, launchHost, runSmokeCommand, openSmokePage } from '../scripts/profile-smoke.mjs';
+import { probeInvalidCompression, createProbeAgent } from '../scripts/profile-smoke-probe.mjs';
 
 function temporary(t) {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-profile-smoke-test-'));
@@ -15,21 +15,50 @@ function temporary(t) {
   return directory;
 }
 
+test('failed smoke commands retain package-manager diagnostics written to stdout', t => {
+  const directory = temporary(t);
+  assert.throws(() => runSmokeCommand([process.execPath, '-e', 'console.log("ERR_PNPM_fixture"); process.exit(1)'], directory, process.env), /ERR_PNPM_fixture/);
+});
+
+test('probe Agent creation explicitly mounts its selected preset before publication', async () => {
+  const scoped = {}, calls = [];
+  const ctx = { agents: { create: async options => {
+    assert.deepEqual(options.meta, { cwd: '/owned/workspace', agentPreset: 'standard-ptc-team' });
+    await options.setup(scoped); calls.push('published'); return 'handle';
+  } }, agentPresets: { mount: async (context, id) => {
+    assert.equal(context, scoped); calls.push(id);
+  } } };
+  assert.equal(await createProbeAgent(ctx, 'standard-ptc-team', '/owned/workspace'), 'handle');
+  assert.deepEqual(calls, ['standard-ptc-team', 'published']);
+});
+
 function catalog(team) {
   return [...(team ? ['spawn_teammate', 'wait_agent', 'team_task_create', 'team_task_list', 'team_task_get', 'team_task_update'] : ['subagent', 'subagent_fork']),
     'send_message', 'list_agents', 'interrupt_agent', 'run_code', 'workflow', 'ralph', 'context_compress']
-    .map(name => ({ name, parameters: name === 'send_message' ? { [team ? 'target' : 'agent_id']: {} } : {} }));
+    .map(name => ({ name, parameters: { type: 'object', properties: name === 'send_message' ? { [team ? 'target' : 'agent_id']: {} } : {} } }));
 }
 const runtimeRows = [{ id: 'ptc-runtime',
   name: '@deepseek-ai/dsh-ptc-runtime-node', config: { executionMode: 'per-call' } }];
 const assembly = { tools: [{ name: 'run_code' }], sections: [{ text: 'tools.context_compress' }] };
+
+test('Web smoke exchanges the launch token and sends its cookie to the clean index', async () => {
+  const urls = [];
+  const headers = await openSmokePage('http://127.0.0.1:49152/?token=fixture', async (url, options) => {
+    urls.push(url);
+    if (urls.length === 1) return { status: 303, headers: new Headers({ 'set-cookie': 'fixture=value; HttpOnly', location: './' }) };
+    assert.equal(options.headers.cookie, 'fixture=value');
+    return { status: 200, text: async () => '<script>window.__DSH_BOOT__={}</script>' };
+  });
+  assert.equal(urls[1], 'http://127.0.0.1:49152/');
+  assert.equal(headers.cookie, 'fixture=value');
+});
 
 test('profile assertions reject Team leakage, wrong message implementation and absent ACP SDK', () => {
   assert.equal(verifyToolCatalog('standard-ptc', catalog(false), assembly).ptc, true);
   assert.equal(verifyToolCatalog('standard-ptc-team', catalog(true), assembly).acp, true);
   assert.throws(() => verifyToolCatalog('standard-ptc', [...catalog(false), { name: 'spawn_teammate' }], assembly), /unexpected spawn_teammate/);
   const wrong = catalog(true);
-  wrong.find(row => row.name === 'send_message').parameters = { agent_id: {} };
+  wrong.find(row => row.name === 'send_message').parameters = { type: 'object', properties: { agent_id: {} } };
   assert.throws(() => verifyToolCatalog('standard-ptc-team', wrong, assembly), /wrong send_message/);
   assert.throws(() => verifyToolCatalog('standard-ptc', catalog(false), { ...assembly, sections: [] }), /PTC SDK/);
   assert.throws(() => verifyToolCatalog('standard-ptc', [...catalog(false), catalog(false)[0]], assembly), /duplicate/);
@@ -59,6 +88,7 @@ test('smoke orchestration preserves workspace overrides, never ignores build pol
     run: (argv, cwd, env) => {
       commands.push(argv);
       assert.equal(env.DSH_HOME, home);
+      assert.equal(env.TMPDIR, join(directory, 'tmp'));
       assert.equal(env.DSH_SECRET_CANARY, undefined);
       assert.ok(cwd.startsWith(directory));
       assert.ok(!argv.includes('--ignore-workspace'));
@@ -76,7 +106,9 @@ test('smoke orchestration preserves workspace overrides, never ignores build pol
     const workspace = readYaml(path);
     assert.equal(workspace.overrides.fixture, 'file:/owned/fixture.tgz');
     assert.equal(workspace.allowBuilds.koffi, true);
+    assert.equal(workspace.allowBuilds['@deepseek-ai/dsh-subprocess-local'], true);
     assert.equal(workspace.blockExoticSubdeps, false);
+    assert.equal(workspace.autoInstallPeers, path.startsWith(installation));
   }
   assert.ok(commands.some(argv => argv.includes('allow-version') && argv.includes('fixture@1.0.0-fork1')));
   await assert.rejects(runProfileSmoke(directory, home, { ...dependencies, fetch: async () => { throw new Error('probe failed'); } }), /probe failed/);
@@ -109,9 +141,9 @@ test('managed process helper stops its own child and removes signal handlers, in
   const directory = temporary(t);
   const env = { ...process.env, DSH_CONFIG_TEST_ROOT: directory };
   const listeners = process.listenerCount('SIGTERM');
-  const child = await launchHost([process.execPath, '-e', 'console.log("http://127.0.0.1:49152"); setInterval(() => {}, 1000)'], directory, env);
+  const child = await launchHost([process.execPath, '-e', 'console.log("dsh web: http://127.0.0.1:49152/?token=fixture"); setInterval(() => {}, 1000)'], directory, env);
   t.after(() => child.stop());
-  assert.equal(child.url, 'http://127.0.0.1:49152');
+  assert.equal(child.url, 'http://127.0.0.1:49152/?token=fixture');
   await child.stop();
   await child.stop();
   assert.equal(process.listenerCount('SIGTERM'), listeners);
@@ -136,7 +168,10 @@ test('preparation stages credential-free full preset input and an executable tar
   assert.equal(rows.find(row => row.id === 'mcp-codegraph').disabled, true);
   assert.ok(!rows.some(row => row.id === 'mcp-playwright'));
   assert.ok(!machine.deployment.smoke.ownsInstallation);
-  assert.equal(validatePatch(machine.deployment.smoke.webPatch).find(row => row.entry.id === 'webserver').entry.config.port, 0);
+  const webRows = validatePatch(machine.deployment.smoke.webPatch).map(row => row.entry);
+  assert.equal(webRows.find(row => row.id === 'webserver').config.port, 0);
+  assert.equal(webRows.find(row => row.id === 'directory-picker').disabled, true);
+  assert.equal(webRows.find(row => row.id === 'ui-directory-picker-browse').name, '@deepseek-ai/dsh-client-ui-directory-picker-browse');
   const argv = JSON.parse(readFileSync(join(output, 'argv.json'), 'utf8'));
   assert.equal(argv.filter(arg => arg === '--tarball').length, packages.size);
   assert.ok(!argv.includes('--apply'));
