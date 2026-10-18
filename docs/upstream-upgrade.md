@@ -23,7 +23,7 @@
 | 3. 划分交付 | 按能力组决定 DSH 子包、Pi 和插件的依赖顺序、版本、tag、测试与负责人 | 交付表覆盖依赖闭包，没有把无关包一起重发 |
 | 4. 独立实施 | 各仓库在专用 worktree／升级分支开发和测试；核对下节 fork 文件；用包管理器生成 lockfile | 无遗失的 fork workflow、测试或补丁，diff 只含本次改动 |
 | 5. 源码与成品验证 | 所有参与仓库运行其相关 typecheck／build／test／pack smoke；检查脱离源码树后的入口、共享 resolver 与受影响行为 | 每仓库有实际执行命令与结果，必要的 pre-push gate 通过；本地包只用于测试 |
-| 6. 合并发布分支 | 验证通过的升级分支合并进长期发布分支（DSH 为 `daily-driver`），推送后在该分支跑 CI；两边分叉时用合并提交，不 reset、不 force push | 发布分支 CI 通过；待发布 commit 位于发布分支上 |
+| 6. 合并发布分支 | 验证通过的升级分支合并进长期发布分支（DSH 与 Pi 均为 `daily-driver`），推送后在该分支跑 CI；两边分叉时用合并提交，不 reset、不 force push | 发布分支 CI 通过；待发布 commit 位于发布分支上 |
 | 7. Actions 发布 | 只从合并后的发布分支 commit 打 tag。先 Pi，再依赖它的 DSH 能力组，再发布消费核心资产的插件；插件间依赖也按顺序发布 | 每项有成功 Actions run、源码 commit、不可变 tag、资产包名／版本、精确 URL 和 SHA256 |
 | 8. 配置选版 | 把已下载核验的精确 Release 资产 URL 填入依赖清单，更新必要的 runtime／pins／retired overrides；先完成组合验收，再登记兼容例外 | 无猜测 URL 或缺来源阻塞；`verifiedCompatibility` 仅含 runtime 真正拒绝且行为已验证的精确 package/runtime 组合 |
 | 9. 成品组合验收 | 从正式 Release 下载全套输入，运行 prepare → check → 离线 update 预览 → 隔离 profile smoke → Playwright；profile smoke 另用 `--private workstation` 与 `--private server` 各跑一次真实私有配置 | 独立 Home／端口，实际版本和 preset／工具行为正确，每个 preset 的提示词都能渲染；手机与桌面关键路径有证据；未测项单列，测试 Host 和暂存已清理 |
@@ -85,7 +85,7 @@ pnpm-workspace.yaml / pnpm-lock.yaml（仓库实际采用的文件）
 
 ## 4. 发布规则
 
-**发布只能走各源码仓库的 GitHub Actions Release workflow，且只从长期发布分支发布。** 开发和测试可以在任意新分支完成；发布前必须合并到发布分支（DSH 为 `daily-driver`）并在该分支通过 CI。 本地可以构建、测试和 pack，但不能把本地产物上传为正式 Release。源码交付脚本即使暴露本地 `release` 命令，也不作为本工作区的发布入口。
+**发布只能走各源码仓库的 GitHub Actions Release workflow，且只从长期发布分支发布。** 开发和测试可以在任意新分支完成；发布前必须合并到发布分支（DSH 与 Pi 均为 `daily-driver`）并在该分支通过 CI。 本地可以构建、测试和 pack，但不能把本地产物上传为正式 Release。源码交付脚本即使暴露本地 `release` 命令，也不作为本工作区的发布入口。
 
 | 仓库 | tag 规则 | 注意事项 |
 |---|---|---|
