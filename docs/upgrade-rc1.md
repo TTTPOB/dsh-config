@@ -53,7 +53,12 @@ node scripts/dsh-config.mjs update "$CONFIG_ROOT/generated/profile-smoke-input/m
 
 准备入口只生成无凭据的受控输入和 [测试 argv](<../scripts/prepare-profile-smoke.mjs>)，不安装、不启动 Host。它启用 ACP、session-tools 与 prompt-sections，覆盖三个生成 preset；加入所有受管 profile 包；关闭 Codegraph MCP；使用不会发请求的 Firecrawl 占位 key；用本次生成的固定文本测试 prompt-sections。它不需要临时私有参数副本，也不读取真实凭据或日用会话。
 
-需要另外核对日用私有参数时，在私有副本中保留原字段文本且只改部署位置，使用独立 home/profile/installation。日用 MCP、provider 和认证配置不在此公开 smoke 的验收范围内，不把含凭据的完整 dump 输出到对话。
+加 `--private workstation` 或 `--private server` 时，改用该机 `private/machines/<机器>/machine.yaml` 的 overrides 与 home/Web 私有行，输出默认放在 `generated/profile-smoke-input-<机器>`。外部服务行（全部 MCP client 与 Firecrawl）被移除，其余私有行连同 `!!js` 表达式按原样加载，所以已改名的服务（例如 `ctx.webRuntime`）会在隔离 Host 启动时失败。本机存在的真实 prompt 文件也会一起使用。provider 行只加载、不发请求；不要把含凭据的完整 dump 输出到对话。
+
+```sh
+node scripts/prepare-profile-smoke.mjs "$TARBALL_DIR" --private workstation
+node scripts/prepare-profile-smoke.mjs "$TARBALL_DIR" --private server
+```
 
 ## 4. 第二阶段：执行隔离 Host smoke
 
@@ -74,7 +79,7 @@ NODE_OPTIONS=--max-old-space-size=4096 node scripts/run-profile-smoke.mjs \
 4. 通过该 CLI 的 `--dump-config` 检查三个 PTC preset、ACP 默认比例 0.70／0.65、没有精确 routes、Basic 配置完整、没有全局 Team 工具、Web 监听为 `127.0.0.1:0`。端口 `0` 由 OS 分配，不使用日用端口。
 5. 启动同一个隔离 CLI 的 Web profile。临时 Loader probe 等待挂载审计，通过正式 pluginPackages resolver 核对全部受管包的实际版本及官方 ui-settings，检查 overlay／envrc／Team service，以及 session-tools／progressive-tools 的工具注册。
 6. 同时创建三个空闲 Agent，防止 Team 启动遍历的跨 preset 泄漏漏测。普通 preset 必须有普通 subagent/control 且没有 `spawn_teammate`；Team preset 必须有 Team 控制、wait/task 工具且没有 subagent/fork。检查 `send_message` 参数来自正确实现、工具名无重复、任何 preset 都没有 `present`。
-7. 检查每个 Agent 的 PTC runtime 为 TypeScript／function-body，以及实际提示词 assembly 有 `run_code` 与 ACP SDK；通过真实 `run_code` 调用各自的 `list_agents`；ACP SDK 的存在从真实 assembly 校验，不在普通程序中引用受限的 `tools.context_compress`。ACP SDK 只从真正的 `tools:sdk` section 检查，不能由 active-context 提示文字代替。再在一个 ACP Agent 中追加合成历史与工具调用日志，经真实 per-call Node 子进程分别验证空 regions 拒绝和合法区间成功：`return await tools.context_compress({"regions":[]});` 必须到达“submit 1-N non-overlapping regions”的参数拒绝，拒绝前后既有 Surface 节点不变、没有 compaction summary；合法规范调用必须提交摘要，下一 step 的生产 pre-step 链用维护记录替换成功根 run_code call/result，Surface 上摘要只出现一次。不发起模型请求、不创建 teammate。
+7. 每个 Agent 用默认模型创建（与 Web 会话相同），probe 用真实 `renderPrompt` 渲染静态提示词，并刷新、渲染 runtime context；未注册或无值的 `{{变量}}` 会以 preset 名报错。检查每个 Agent 的 PTC runtime 为 TypeScript／function-body，以及实际提示词 assembly 有 `run_code` 与 ACP SDK；通过真实 `run_code` 调用各自的 `list_agents`；ACP SDK 的存在从真实 assembly 校验，不在普通程序中引用受限的 `tools.context_compress`。ACP SDK 只从真正的 `tools:sdk` section 检查，不能由 active-context 提示文字代替。再在一个 ACP Agent 中追加合成历史与工具调用日志，经真实 per-call Node 子进程分别验证空 regions 拒绝和合法区间成功：`return await tools.context_compress({"regions":[]});` 必须到达“submit 1-N non-overlapping regions”的参数拒绝，拒绝前后既有 Surface 节点不变、没有 compaction summary；合法规范调用必须提交摘要，下一 step 的生产 pre-step 链用维护记录替换成功根 run_code call/result，Surface 上摘要只出现一次。不发起模型请求、不创建 teammate。
 8. 无论 probe 成功或失败，停止并等待自己启动的 Host；子进程 TMPDIR 位于隔离根内，`test` 的 finally 一并清理此次安装、会话、logs、dump、临时缓存和 tarball 副本。
 
 外层 `test` 固定返回 `renderedConfigurationVerified: false`：本次验证的是明确构造的受控组合，不是整份日用私有配置。Host 挂载与工具注册成功也不等于手机布局、浏览器交互或真实 Firecrawl 请求已验收；客户端与实网行为仍由对应功能测试确认。

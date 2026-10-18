@@ -4,7 +4,7 @@
 
 ## 1. 在源码仓库验证成品
 
-在独立功能分支和持久 worktree 开发，运行受影响功能的测试，构建并打包受影响包。DSH fork 的包选择、源码准备、验证和发布命令见[源码交付指南](https://github.com/TTTPOB/deepseek-harness/blob/daily-driver/scripts/README.daily-driver.md)。独立插件使用各自仓库的构建与测试入口。
+在独立功能分支和持久 worktree 开发，运行受影响功能的测试，构建并打包受影响包。发布前必须把分支合并到长期发布分支（DSH 为 `daily-driver`），在该分支跑通 CI，只从合并后的 commit 打 tag 发布；不能从临时分支直接发布。DSH fork 的包选择、源码准备、验证和发布命令见[源码交付指南](https://github.com/TTTPOB/deepseek-harness/blob/daily-driver/scripts/README.daily-driver.md)。独立插件使用各自仓库的构建与测试入口。
 
 成品 smoke 应验证离开源码树后的实际依赖解析、built entry 和受影响行为。涉及共享 peer 时，使用正式 Host resolver；仅成功导入入口不能代替工具调用或 Loader 验收。测试按实际改动范围选择，不为每次发布新增一套脚本。
 

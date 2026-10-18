@@ -19,15 +19,16 @@
 | 步骤 | 操作与产物 | 完成判据 |
 |---|---|---|
 | 1. 固定基线 | 核实上游 tag／commit、旧 fork 基线、当前分支和干净状态；保存各仓库版本与来源表 | 明确“已安装版本”和“计划目标”，不用记忆或 `latest` 代替证据 |
-| 2. 盘点自定义 | 逐仓库列出 fork 相对旧上游基线的提交、受影响包与配套插件；用 `git merge-tree` 估冲突 | 每项自定义都有保留／上游已覆盖可撤／需适配的判断及依据 |
+| 2. 盘点自定义 | 逐仓库列出 fork 相对旧上游基线的提交、受影响包与配套插件；用 `git merge-tree` 估冲突。对比新旧上游 tag 的各 bundle `cordis.patch.yml` 与 `systemPrompt.variable` 注册，列出改名或删除的服务名（如 `webRuntime`→`webStartup`）和 prompt 变量（如 `cwd`），在 templates 与两机 `private/` 中逐项搜索 | 每项自定义都有保留／上游已覆盖可撤／需适配的判断及依据；改名清单在两机配置中已无残留 |
 | 3. 划分交付 | 按能力组决定 DSH 子包、Pi 和插件的依赖顺序、版本、tag、测试与负责人 | 交付表覆盖依赖闭包，没有把无关包一起重发 |
-| 4. 独立实施 | 各仓库在专用 worktree／升级分支实施；核对下节 fork 文件；用包管理器生成 lockfile | 无遗失的 fork workflow、测试或补丁，diff 只含本次改动 |
+| 4. 独立实施 | 各仓库在专用 worktree／升级分支开发和测试；核对下节 fork 文件；用包管理器生成 lockfile | 无遗失的 fork workflow、测试或补丁，diff 只含本次改动 |
 | 5. 源码与成品验证 | 所有参与仓库运行其相关 typecheck／build／test／pack smoke；检查脱离源码树后的入口、共享 resolver 与受影响行为 | 每仓库有实际执行命令与结果，必要的 pre-push gate 通过；本地包只用于测试 |
-| 6. Actions 发布 | 先 Pi，再依赖它的 DSH 能力组，再发布消费核心资产的插件；插件间依赖也按顺序发布 | 每项有成功 Actions run、源码 commit、不可变 tag、资产包名／版本、精确 URL 和 SHA256 |
-| 7. 配置选版 | 把已下载核验的精确 Release 资产 URL 填入依赖清单，更新必要的 runtime／pins／retired overrides；先完成组合验收，再登记兼容例外 | 无猜测 URL 或缺来源阻塞；`verifiedCompatibility` 仅含 runtime 真正拒绝且行为已验证的精确 package/runtime 组合 |
-| 8. 成品组合验收 | 从正式 Release 下载全套输入，运行 prepare → check → 离线 update 预览 → 隔离 profile smoke → Playwright | 独立 Home／端口，实际版本和 preset／工具行为正确；手机与桌面关键路径有证据；未测项单列，测试 Host 和暂存已清理 |
-| 9. 真实只读预览 | 在目标机器执行 doctor 与不带 `--apply` 的 live update，审查版本／来源、移除项、配置变化和阻塞 | 保存脱敏摘要；明确“预览未应用”，不把离线或隔离结果当作真实部署 |
-| 10. 用户切换与收尾 | 向用户交付选定提交、预览、风险和恢复入口；用户按安装指南 apply 并安排 Host 激活，验收后清理临时 worktree／分支 | 分别报告已发布／已安装／已激活状态；有实际 doctor 与原服务／页面验收才宣称部署完成 |
+| 6. 合并发布分支 | 验证通过的升级分支合并进长期发布分支（DSH 为 `daily-driver`），推送后在该分支跑 CI；两边分叉时用合并提交，不 reset、不 force push | 发布分支 CI 通过；待发布 commit 位于发布分支上 |
+| 7. Actions 发布 | 只从合并后的发布分支 commit 打 tag。先 Pi，再依赖它的 DSH 能力组，再发布消费核心资产的插件；插件间依赖也按顺序发布 | 每项有成功 Actions run、源码 commit、不可变 tag、资产包名／版本、精确 URL 和 SHA256 |
+| 8. 配置选版 | 把已下载核验的精确 Release 资产 URL 填入依赖清单，更新必要的 runtime／pins／retired overrides；先完成组合验收，再登记兼容例外 | 无猜测 URL 或缺来源阻塞；`verifiedCompatibility` 仅含 runtime 真正拒绝且行为已验证的精确 package/runtime 组合 |
+| 9. 成品组合验收 | 从正式 Release 下载全套输入，运行 prepare → check → 离线 update 预览 → 隔离 profile smoke → Playwright；profile smoke 另用 `--private workstation` 与 `--private server` 各跑一次真实私有配置 | 独立 Home／端口，实际版本和 preset／工具行为正确，每个 preset 的提示词都能渲染；手机与桌面关键路径有证据；未测项单列，测试 Host 和暂存已清理 |
+| 10. 真实只读预览 | 在目标机器执行 doctor 与不带 `--apply` 的 live update，审查版本／来源、移除项、配置变化和阻塞 | 保存脱敏摘要；明确“预览未应用”，不把离线或隔离结果当作真实部署 |
+| 11. 用户切换与收尾 | 向用户交付选定提交、预览、风险和恢复入口；用户按安装指南 apply 并安排 Host 激活，验收后清理临时 worktree／分支 | 分别报告已发布／已安装／已激活状态；有实际 doctor 与原服务／页面验收才宣称部署完成 |
 
 真实工作机的只读命令从工作区根执行：
 
@@ -84,7 +85,7 @@ pnpm-workspace.yaml / pnpm-lock.yaml（仓库实际采用的文件）
 
 ## 4. 发布规则
 
-**发布只能走各源码仓库的 GitHub Actions Release workflow。** 本地可以构建、测试和 pack，但不能把本地产物上传为正式 Release。源码交付脚本即使暴露本地 `release` 命令，也不作为本工作区的发布入口。
+**发布只能走各源码仓库的 GitHub Actions Release workflow，且只从长期发布分支发布。** 开发和测试可以在任意新分支完成；发布前必须合并到发布分支（DSH 为 `daily-driver`）并在该分支通过 CI。 本地可以构建、测试和 pack，但不能把本地产物上传为正式 Release。源码交付脚本即使暴露本地 `release` 命令，也不作为本工作区的发布入口。
 
 | 仓库 | tag 规则 | 注意事项 |
 |---|---|---|
