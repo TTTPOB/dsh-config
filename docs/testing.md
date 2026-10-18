@@ -2,6 +2,25 @@
 
 源码仓库负责构建、功能回归和成品 smoke；本仓库负责把选定成品接入个人配置的隔离测试。正式安装使用精确 Release URL，本地 tarball 只用于测试副本。
 
+## 新功能从开发到上线
+
+1. **在新分支开发。** 在源码仓库跑相关测试，再用与 CI 相同的命令打包验证，例如 DSH 的 `node scripts/daily-driver.mjs prepare|verify|build|smoke <capability>`（见下节）。
+2. **用本地成品跑组合 smoke。** 下载当前全部 Release 资产到一个目录，再用 `--local` 换入刚打包、尚未发布的包，对两台机器的真实私有配置各跑一次：
+
+   ```sh
+   node scripts/prepare-profile-smoke.mjs "$TARBALL_DIR" --private workstation \
+     --local @deepseek-ai/dsh-subagent=/absolute/dist/deepseek-ai-dsh-subagent-<版本>.tgz
+   NODE_OPTIONS=--max-old-space-size=4096 node scripts/run-profile-smoke.mjs generated/profile-smoke-input-workstation/argv.json
+   ```
+
+   `--local` 可重复使用，包必须是依赖清单里的受管包，版本以 tarball 为准，依赖清单本身不改。
+3. **合并回发布分支并 push。** DSH 合并到 `daily-driver`，push 后自动跑 `Daily-driver verify`（全部 capability）；插件合并到各自的发布分支。
+4. **CI 通过后发布。** 在合并后的 commit 上打新 tag，由 Release workflow 产出资产，见[上游升级手册](<upstream-upgrade.md#4-发布规则>)。
+5. **更新本仓库。** 把精确 Release URL 写入[依赖清单](<../shared/dependencies.yaml>)，跑测试和 `check`，提交并 push，然后跑不带 `--apply` 的 `update --machine <机器>` 预览。
+6. **用户 apply 并重启 Host**，再运行 `doctor` 验收。
+
+只改配置时跳过第 1–4 步。
+
 ## 1. 在源码仓库验证成品
 
 在独立功能分支和持久 worktree 开发，运行受影响功能的测试，构建并打包受影响包。发布前必须把分支合并到长期发布分支（DSH 为 `daily-driver`），在该分支跑通 CI，只从合并后的 commit 打 tag 发布；不能从临时分支直接发布。DSH fork 的包选择、源码准备、验证和发布命令见[源码交付指南](https://github.com/TTTPOB/deepseek-harness/blob/daily-driver/scripts/README.daily-driver.md)。独立插件使用各自仓库的构建与测试入口。

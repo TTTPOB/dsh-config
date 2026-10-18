@@ -212,4 +212,21 @@ test('preparation stages credential-free full preset input and an executable tar
   const argv = JSON.parse(readFileSync(join(output, 'argv.json'), 'utf8'));
   assert.equal(argv.filter(arg => arg === '--tarball').length, packages.size);
   assert.ok(!argv.includes('--apply'));
+
+  // An unpublished local build replaces its Release asset only in this smoke input.
+  const [name] = packages.keys();
+  writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name, version: '9.9.9-local' }));
+  const local = join(directory, 'local.tgz');
+  execFileSync('tar', ['-czf', local, '-C', directory, 'package']);
+  const localOutput = join(directory, 'local-output');
+  execFileSync(process.execPath, [join(root, 'scripts/prepare-profile-smoke.mjs'), assets, localOutput, '--local', `${name}=${local}`], { encoding: 'utf8' });
+  const localArgv = JSON.parse(readFileSync(join(localOutput, 'argv.json'), 'utf8'));
+  assert.ok(localArgv.includes(`${name}=${local}`));
+  assert.equal(localArgv.filter(arg => arg === '--tarball').length, packages.size);
+  const probe = validatePatch(readYaml(join(localOutput, 'machine.yaml')).deployment.smoke.homePatch)
+    .map(row => row.entry).find(row => row.id === 'profile-smoke-probe');
+  assert.ok(probe.config.expectedPackages.filter(item => item.name === name).every(item => item.version === '9.9.9-local'));
+  assert.ok(probe.config.compatibility.includes(`${name}@9.9.9-local`));
+  assert.equal(readDependencyCatalog().packages.find(item => item.package === name).version, packages.get(name).version);
+  assert.throws(() => execFileSync(process.execPath, [join(root, 'scripts/prepare-profile-smoke.mjs'), assets, localOutput, '--local', `unmanaged=${local}`], { stdio: 'pipe' }), /contains/);
 });
