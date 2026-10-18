@@ -138,7 +138,7 @@ dsh plugin --profile web allow-version PACKAGE@VERSION \
 
 ## 4. 在外部维护窗口应用
 
-所有精确资产齐全、预览已审查、相关成品 smoke 通过后，由外部维护流程停止受影响的 Host。不得从承载开发会话的 Host 内启停自身。
+所有精确资产齐全、预览已审查、相关成品 smoke 通过后，由外部维护流程停止受影响的 Host。不得从承载开发会话的 Host 内直接启停自身；需要 Host 内的 agent 或无人值守切换时，使用下文的[临时 systemd 任务](#用临时-systemd-任务无人值守切换)。
 
 ```sh
 node scripts/dsh-config.mjs update --machine workstation --apply
@@ -153,6 +153,35 @@ Apply 在 stderr 即时报告 pre-install doctor、global install、profile inst
 由用户按原方式启动原 Host，核对最终组合及受影响功能。`--dump-config` 可能展开凭据，应私下检查，避免把完整输出发布到日志或对话。UI 包更新还需核对原 Host 发布的 graph、实际服务脚本和认证页面加载，再在目标浏览器／手机验收。另起测试服务器、磁盘版本或最新 manifest 都不能证明日用页面已应用新版。
 
 两机可以分开维护；先验证本机，再让服务器选择同一稳定提交和它自己的参数。远端执行 update 直接消费 Release URL，不通过 SCP tarball 维持长期依赖。只停止目标 DSH 服务，避免 `pkill node` 影响其他用户服务。
+
+### 用临时 systemd 任务无人值守切换
+
+人不在机器旁时，可以让 agent 完成停止、apply、重启。Host 内的 agent 不能直接执行 `systemctl --user stop dsh-web.service`：Host 停止时会结束自己启动的子进程，切换会在中途断掉。改为用 `systemd-run --user` 创建一个临时任务，它不在 Host 的进程树里，Host 停止后继续运行。
+
+[host-switch.sh](<../scripts/host-switch.sh>) 按顺序执行：
+
+1. 停止 `dsh-web.service`；停不下来就直接退出，什么都不改。
+2. 运行 `update --machine <机器> --apply`，apply 自动保留本次备份。
+3. 启动 `dsh-web.service`，最多等待 60 秒，直到 Web 端口回应任意 500 以下的 HTTP 状态码。
+4. apply 失败或超时没有回应时，停止服务，用 `dsh-config rollback --machine <机器> --backup <本次备份>` 恢复备份中的配置、安装声明和 lockfile，删除 apply 新建的文件，按备份记录的版本重装 runtime，再启动服务。
+
+先运行不带 `--apply` 的预览，确认变化符合预期，再在工作区根目录启动临时任务：
+
+```sh
+node dsh-config/scripts/dsh-config.mjs update --machine workstation
+systemd-run --user --unit=dsh-switch --collect --same-dir \
+  --setenv=PATH --setenv=HTTP_PROXY --setenv=HTTPS_PROXY --setenv=NO_PROXY \
+  dsh-config/scripts/host-switch.sh workstation
+journalctl --user -u dsh-switch -f
+```
+
+只写变量名的 `--setenv` 从当前 shell 带入 PATH（node、pnpm）和代理；机器没有代理时删掉代理三项。脚本读取三个可选变量：`DSH_SERVICE`（默认 `dsh-web.service`）、`DSH_HEALTH_URL`（默认 `http://127.0.0.1:53083/`）、`DSH_HEALTH_TIMEOUT`（秒，默认 60）。端口不同的机器用 `--setenv=DSH_HEALTH_URL=http://127.0.0.1:<端口>/` 指定。
+
+注意：
+
+- 从 Host 内的 agent 发起时，agent 所在会话会随 Host 停止而中断；Host 重启后打开会话，结果以 `journalctl --user -u dsh-switch` 为准。
+- 健康检查只说明 Web 端口能回应，不说明插件和功能都正常；人回来后仍要运行 `doctor` 并打开页面验收。
+- 回滚只恢复安装与配置，不回滚会话和数据。`rollback` 需要备份里的 `runtime.json`，只有加入该命令之后的 apply 备份才有这个文件。
 
 ### 客户端更新链与热加载边界
 

@@ -254,8 +254,8 @@ export function resolvesFromProfile(target, entries, profile) {
 export function parseCommandArguments(args) {
   args = [...args];
   const command = args.shift();
-  const usage = 'Usage: dsh-config <render|check|doctor|test|update> --machine <name> [--apply|--offline] [--json] [--verbose] [--tarball package=/absolute/file.tgz]';
-  if (!['render', 'check', 'doctor', 'test', 'update'].includes(command)) throw new Error(usage);
+  const usage = 'Usage: dsh-config <render|check|doctor|test|update|rollback> --machine <name> [--apply|--offline] [--json] [--verbose] [--tarball package=/absolute/file.tgz] [--backup /absolute/backup-dir]';
+  if (!['render', 'check', 'doctor', 'test', 'update', 'rollback'].includes(command)) throw new Error(usage);
   const selector = args.shift();
   const machineArgument = selector === '--machine' ? args.shift() : selector;
   if (selector === '--machine' && !/^[a-zA-Z0-9_-]+$/.test(machineArgument ?? '')) throw new Error(usage);
@@ -269,9 +269,11 @@ export function parseCommandArguments(args) {
     else if (flag === '--json' && ['doctor', 'update'].includes(command)) options.json = true;
     else if (flag === '--verbose' && ['doctor', 'update'].includes(command)) options.verbose = true;
     else if (flag === '--tarball' && command === 'test') (options.tarballs ??= []).push(args.shift());
+    else if (flag === '--backup' && command === 'rollback') options.backup = args.shift();
     else throw new Error(usage);
   }
   if (options.apply && options.offline) throw new Error('--offline cannot be combined with --apply');
+  if (command === 'rollback' && !isAbsolute(options.backup ?? '')) throw new Error(usage);
   if (machineArgument.includes('..') && !isAbsolute(machineArgument)) throw new Error(usage);
   return { command, machineArgument, ...options };
 }

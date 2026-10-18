@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, statSync, readdirS
 import { tmpdir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
 import { root, readYaml, resolveDependencyTargets, parseCommandArguments, renderMachine as render } from '../scripts/lib.mjs';
-import { deploymentTargets, updateMachine as update, isolatedTest, runStep, grantVerifiedCompatibility } from '../scripts/deployment.mjs';
+import { deploymentTargets, updateMachine as update, rollbackMachine, isolatedTest, runStep, grantVerifiedCompatibility } from '../scripts/deployment.mjs';
 import { selectReport, formatUpdate, formatDoctor } from '../scripts/report.mjs';
 
 const url = 'https://github.com/example/plugin/releases/download/v2.0.0/plugin-2.0.0.tgz';
@@ -259,6 +259,31 @@ test('apply backs up manifests and lockfiles; a second aligned apply does no ins
   assert.equal(readYaml(machine.deployment.profiles.web.packagePath).dependencies['live-profile-plugin'], '4.0.0');
 });
 
+test('rollback restores the apply backup, removes files that apply created and reinstalls the recorded runtime', async t => {
+  const { machine, machinePath, home } = fixture(t);
+  const lock = join(home, 'profiles/web/pnpm-lock.yaml');
+  writeFileSync(lock, 'original-lock\n');
+  const before = { workspace: read(machine.deployment.globalWorkspacePath), profile: read(machine.deployment.profiles.web.packagePath), patch: read(join(home, 'cordis.patch.yml')) };
+  const selected = { ...catalog, runtimeVersion: '0.2.1-rc.1' };
+  const applied = await updateMachine(machinePath, 'rollback-apply', true, { catalog: selected, doctor: healthy, runStep: () => {} });
+  writeFileSync(lock, 'new-lock\n');
+  const created = join(home, 'profiles/web/compatibility.json');
+  writeFileSync(created, '{}\n');
+  assert.notEqual(read(machine.deployment.profiles.web.packagePath), before.profile);
+  const calls = [];
+  const result = await rollbackMachine(machinePath, applied.backup, { generatedDir: join(dirname(machinePath), 'generated'), runStep: (argv, cwd) => calls.push({ argv, cwd }) });
+  assert.equal(result.runtimeVersion, '0.1.7-rc.2');
+  assert.equal(read(machine.deployment.globalWorkspacePath), before.workspace);
+  assert.equal(read(machine.deployment.profiles.web.packagePath), before.profile);
+  assert.equal(read(join(home, 'cordis.patch.yml')), before.patch);
+  assert.equal(read(lock), 'original-lock\n');
+  assert.ok(!existsSync(created));
+  assert.ok(calls[0].argv.includes('@deepseek-ai/dsh@0.1.7-rc.2'));
+  assert.equal(calls.length, 2);
+  assert.throws(() => parseCommandArguments(['rollback', '--machine', 'workstation']), /Usage/);
+  assert.equal(parseCommandArguments(['rollback', '--machine', 'workstation', '--backup', '/abs/backup']).backup, '/abs/backup');
+});
+
 test('apply with omitted deployment discovers fixture targets and remains idempotent', async t => {
   const { machine, machinePath, home, directory } = fixture(t);
   const paths = machine.deployment;
@@ -444,7 +469,7 @@ test('doctor summary retains actionable failures while verbose adds successful p
 });
 
 test('CLI rejects plan without a compatibility alias', () => {
-  assert.throws(() => parseCommandArguments(['plan', '--machine', 'server']), /Usage: dsh-config <render\|check\|doctor\|test\|update>/);
+  assert.throws(() => parseCommandArguments(['plan', '--machine', 'server']), /Usage: dsh-config <render\|check\|doctor\|test\|update\|rollback>/);
 });
 
 test('CLI accepts apply only for update and local tarballs only for test', () => {

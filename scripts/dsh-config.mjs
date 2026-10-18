@@ -2,11 +2,11 @@
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { renderMachine, resolveMachineArgument, parseCommandArguments, validatePatch, readYaml, resolveDependencyTargets } from './lib.mjs';
-import { deploymentTargets, doctor, isolatedTest, updateMachine, normalizeDeployment } from './deployment.mjs';
+import { deploymentTargets, doctor, isolatedTest, updateMachine, rollbackMachine, normalizeDeployment } from './deployment.mjs';
 import { formatDoctor, formatUpdate, selectReport } from './report.mjs';
 
 try {
-  const { command, machineArgument, apply, offline, json, verbose, tarballs } = parseCommandArguments(process.argv.slice(2));
+  const { command, machineArgument, apply, offline, json, verbose, tarballs, backup } = parseCommandArguments(process.argv.slice(2));
   const { path, label } = resolveMachineArgument(machineArgument);
   if (!existsSync(path)) throw new Error('Machine configuration not found; provide --machine with an existing private machine name or a machine YAML path');
   const snapshotDir = join(dirname(path), 'snapshot');
@@ -25,6 +25,8 @@ try {
     const report = selectReport(await updateMachine(path, label, apply, { offline }), verbose);
     console.log(json ? JSON.stringify(report, null, 2) : formatUpdate(report, verbose));
     if (report.blocked) process.exitCode = 2;
+  } else if (command === 'rollback') {
+    console.log(JSON.stringify(await rollbackMachine(path, backup), null, 2));
   } else if (command === 'test') {
     console.log(JSON.stringify(isolatedTest(path, label, tarballs), null, 2));
   } else if (command === 'doctor') {

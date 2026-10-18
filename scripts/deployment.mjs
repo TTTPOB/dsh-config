@@ -189,6 +189,32 @@ export async function grantVerifiedCompatibility(machine, targets, report, catal
   return granted;
 }
 
+async function installDeclared(deployment, globalArguments, execute) {
+  await execute(globalArguments, dirname(deployment.globalWorkspacePath), { ...process.env, PATH: deployment.globalBinDir + delimiter + process.env.PATH });
+  for (const profile of Object.values(deployment.profiles)) await execute(['pnpm', 'install', '--no-frozen-lockfile', '--ignore-workspace', '--config.auto-install-peers=false', '--config.enable-global-virtual-store=false'], dirname(profile.packagePath));
+}
+
+/**
+ * Restore the files of one apply backup and reinstall the runtime it recorded. Files absent before
+ * that apply are removed. The caller keeps the Host stopped and starts it afterwards.
+ */
+export async function rollbackMachine(machinePath, backup, dependencies = {}) {
+  const machine = readYaml(machinePath);
+  machine.deployment = normalizeDeployment(machine.deployment, dependencies.discovery);
+  const deployment = validateDeployment(machine.deployment);
+  const files = json(join(backup, 'files.json'));
+  const { installedVersion } = json(join(backup, 'runtime.json'));
+  for (const [index, path] of files.entries()) {
+    const saved = join(backup, String(index));
+    if (existsSync(saved)) copyFileSync(saved, path);
+    else rmSync(path, { force: true });
+  }
+  const generatedDir = dependencies.generatedDir ?? join(root, 'generated');
+  const execute = dependencies.runStep ?? ((argv, cwd, env) => runStep(argv, cwd, env, { logDir: generatedDir }));
+  await installDeclared(deployment, globalInstallArguments(deployment, installedVersion), execute);
+  return { backup, restoredFiles: files.length, runtimeVersion: installedVersion, activation: 'rolled-back; start the Host and verify it' };
+}
+
 export async function updateMachine(machinePath, label, apply = false, dependencies = {}) {
   const machine = readYaml(machinePath);
   const catalog = dependencies.catalog ?? readDependencyCatalog();
@@ -244,12 +270,13 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
     ...Object.values(deployment.profiles).map(location => join(dirname(location.packagePath), 'compatibility.json'))])];
   for (const [index, path] of backupFiles.entries()) if (existsSync(path)) copyFileSync(path, join(backup, String(index)));
   writeFileSync(join(backup, 'files.json'), JSON.stringify(backupFiles), { mode: 0o600 });
+  const installedVersion = preview.runtime?.installedVersion ?? json(resolveInstalledHost(deployment)).version;
+  writeFileSync(join(backup, 'runtime.json'), JSON.stringify({ installedVersion }), { mode: 0o600 });
   const execute = dependencies.runStep ?? ((argv, cwd, env) => runStep(argv, cwd, env, { logDir: generatedDir }));
   try {
     if (needsInstall) {
       for (const [path, contents] of manifests) writeFileSync(path, contents, { mode: 0o600 });
-      await execute(installArguments, dirname(deployment.globalWorkspacePath), { ...process.env, PATH: deployment.globalBinDir + delimiter + process.env.PATH });
-      for (const profile of Object.values(deployment.profiles)) await execute(['pnpm', 'install', '--no-frozen-lockfile', '--ignore-workspace', '--config.auto-install-peers=false', '--config.enable-global-virtual-store=false'], dirname(profile.packagePath));
+      await installDeclared(deployment, installArguments, execute);
     }
     console.error('[apply] post-install doctor started');
     let report = needsInstall ? await inspect(machine, targets) : before;
