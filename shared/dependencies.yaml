@@ -1,6 +1,7 @@
 # Release URLs and compatibility records are added only after artifact validation.
 schemaVersion: 2
 verifiedCompatibility:
+  "dsh-mcp-panel@0.6.24-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-subagent@0.2.1-rc.1-fork2": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-tool-subagent@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-experimental-agent-team@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
@@ -173,8 +174,9 @@ packages:
     resetSelectors: true
   - package: dsh-mcp-panel
     scope: profile
-    policy: registry
-    version: 0.6.24
+    policy: release
+    version: 0.6.24-fork1
+    url: https://github.com/TTTPOB/dsh-mcp-panel/releases/download/v0.6.24-fork1/dsh-mcp-panel-0.6.24-fork1.tgz
   - package: "@deepseek-ai/libreoffice-kit"
     scope: global-override
     policy: registry
