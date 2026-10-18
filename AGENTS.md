@@ -12,3 +12,11 @@
 - Run focused tests, example renders, and current machine checks when private inputs exist. Inspect staged content before publishing; do not encode real machine identifiers in public checking rules.
 - A DSH patch targets a row by `id` and **replaces that row's entire `config` value**, never deep-merging keys; any row this repository renders must restate every key it still needs. Insert new rows with `- insert:`, and swap a provider by disabling the original row by `id` and inserting the replacement — two providers cannot register the same service key.
 - Do not add a generic YAML deep merge engine. Whole private plugin rows currently preserve machine-specific provider/MCP configuration; extract smaller parameters only with focused rendering tests.
+
+## Branch and delivery
+
+- The long-term branch is `main` on TTTPOB remote `origin` (github.com/TTTPOB/dsh-config); local `main` tracks `origin/main`, never a third-party upstream.
+- Develop and test on a separate branch or worktree.
+- Merge verified configuration changes into `main`, commit, and push; this repository has no Release workflow or Release assets.
+- Follow [docs/testing.md](docs/testing.md) for the cross-repository feature flow and source-repository CI/Release gates.
+- On a workstation with about 13 GB RAM, run focused configuration checks locally; leave heavy whole-repository source checks to their CI.
