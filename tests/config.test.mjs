@@ -17,11 +17,12 @@ const example = join(root, 'examples/workstation-machine.yaml');
 for (const machine of ['workstation', 'server']) {
   test(`${machine} titles use the shared Flash route independently of the conversation model`, () => {
     const { rendered } = renderMachine(join(root, `examples/${machine}-machine.yaml`), 'title-model', undefined, { stage: false });
-    const rows = validatePatch(rendered.web).map(row => row.entry);
+    const rows = validatePatch(rendered.home).map(row => row.entry);
+    assert.ok(!validatePatch(rendered.web).some(row => row.entry.id === 'session-title-llm'));
     assert.deepEqual(rows.find(row => row.id === 'session-title-llm').config, {
       provider: 'deepseek-official', model: 'deepseek-flash',
-      targetWords: 5, targetCjkCharacters: 10, maxInputBytes: 4096,
-      maxOutputTokens: 4096, timeoutMs: 60000,
+      targetWords: 5, targetCjkCharacters: 10, maxInputBytes: 65536,
+      maxOutputTokens: 64, timeoutMs: 60000,
     });
   });
 }

@@ -43,7 +43,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 机器参数提供 `features`、`overrides.defaultModel`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。机器专属 provider／MCP 完整行保留为私有输入，不进行通用深合并。
 
-两机 Web 会话标题使用共用 `defaults.sessionTitle` 配置，固定为 `deepseek-official/deepseek-flash`，沿用官方标题插件自动选择最低推理档位的行为（该模型为 `off`）；标题路由不随聊天模型选择器变化。
+两机会话标题在 Home patch 中统一使用共用 `defaults.sessionTitle` 配置，Web profile 不重复声明，私有输入不再保留旧标题覆盖。标题固定为 `deepseek-official/deepseek-flash`，输入上限 65536 字节、输出上限 64 tokens、超时 60000 毫秒；沿用官方标题插件自动选择最低推理档位的行为（该模型为 `off`），不随聊天模型选择器变化。
 
 `standard-ptc-team` 的 `spawn_teammate` 支持逐次指定 `provider`、`model` 和 `reasoning_effort`，通过 `list_agent_models` 查询可用路由。Team 与普通 Subagent 共用 Host 的 `subagent-model-selection-settings`，授权策略在新 Session 中确定并持久保存；更新后新建 Team Session 使用此能力。未指定模型时继承 Lead 当前设置，切换路由而未指定 effort 时使用目标模型默认值。
 

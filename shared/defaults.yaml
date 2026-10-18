@@ -9,8 +9,8 @@ defaults:
     model: deepseek-flash
     targetWords: 5
     targetCjkCharacters: 10
-    maxInputBytes: 4096
-    maxOutputTokens: 4096
+    maxInputBytes: 65536
+    maxOutputTokens: 64
     timeoutMs: 60000
   compaction:
     auto: true

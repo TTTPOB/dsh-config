@@ -266,4 +266,13 @@
 [% if machine.features.promptOverlay %]
 [[ preset("preset-standard-ptc-redteam", "standard-ptc-redteam", "日用+逆向", "与「日用」完全一致，仅额外挂载本地提示词模块（自定义提示词内核 + 覆盖 Harness 身份槽位）。", 6, true, machine.promptSections) ]]
 [% endif %]
+- id: session-title-llm
+  config:
+    provider: [[ shared.defaults.sessionTitle.provider | quote ]]
+    model: [[ shared.defaults.sessionTitle.model | quote ]]
+    targetWords: [[ shared.defaults.sessionTitle.targetWords ]]
+    targetCjkCharacters: [[ shared.defaults.sessionTitle.targetCjkCharacters ]]
+    maxInputBytes: [[ shared.defaults.sessionTitle.maxInputBytes ]]
+    maxOutputTokens: [[ shared.defaults.sessionTitle.maxOutputTokens ]]
+    timeoutMs: [[ shared.defaults.sessionTitle.timeoutMs ]]
 [[ machine.homePrivate ]]
