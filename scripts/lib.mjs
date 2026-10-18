@@ -38,7 +38,7 @@ export function withoutExternalPrivateRows(text) {
     insert.items = insert.items.filter(entry => !external(entry));
     return insert.items.length > 0;
   });
-  return document.toString();
+  return document.contents.items.length ? document.toString() : '- insert: []\n';
 }
 
 export function readYaml(path) {

@@ -80,6 +80,12 @@ test('prompt rendering failures name the preset that would fail its first model 
   assert.throws(() => verifyPromptRendering('standard-ptc', () => ({ prompt: '', context: '' })), /empty/);
 });
 
+test('private smoke rows remain appendable when every private row is external', () => {
+  const onlyExternal = '- insert:\n    - id: fixture\n      name: \"@deepseek-ai/dsh-mcp-client\"\n';
+  const kept = withoutExternalPrivateRows(onlyExternal);
+  assert.deepEqual(validatePatch('- insert: []\n' + kept), []);
+});
+
 test('private smoke rows drop external services and keep every local row with its expressions', () => {
   const text = [
     '- insert:',
