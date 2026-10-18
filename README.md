@@ -41,7 +41,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 `private/`、`generated/` 和真实参数均被 Git 忽略。公开示例没有真实端点或凭据；新机器从示例开始，私有参数通过私有通道传递。会话、数据库、索引、缓存和 storages 不同步。
 
-机器参数提供 `features`、`overrides.defaultModel`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。标准＋PTC 和逆向 preset 共用模板，逆向模式追加提示词插件。机器专属 provider／MCP 完整行保留为私有输入，不进行通用深合并。
+机器参数提供 `features`、`overrides.defaultModel`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。机器专属 provider／MCP 完整行保留为私有输入，不进行通用深合并。
 
 两机 Web 会话标题使用共用 `defaults.sessionTitle` 配置，固定为 `deepseek-official/deepseek-flash`，沿用官方标题插件自动选择最低推理档位的行为（该模型为 `off`）；标题路由不随聊天模型选择器变化。
 

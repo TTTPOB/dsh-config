@@ -4,9 +4,9 @@
 
 ## 1. 组合与依赖
 
-- 标准＋PTC、可选逆向 preset 使用 `mode: ptc`。Home patch 按 id 整行重述 base 的 Node provider `ptc-runtime` 配置，设置 `executionMode: per-call` 并重述 rc.1 的资源默认值。rc.1 的 Node provider 固定 `language: typescript`，非 persistent 模式返回 `programFormat: function-body`；因此 `run_code` 是支持 `return` 的异步函数体，不是 Python 或 REPL。每个 Agent 的 runtime 都在 smoke 中再次断言。
+- 日用、可选的日用+逆向 preset 使用 `mode: ptc`。Home patch 按 id 整行重述 base 的 Node provider `ptc-runtime` 配置，设置 `executionMode: per-call` 并重述 rc.1 的资源默认值。rc.1 的 Node provider 固定 `language: typescript`，非 persistent 模式返回 `programFormat: function-body`；因此 `run_code` 是支持 `return` 的异步函数体，不是 Python 或 REPL。每个 Agent 的 runtime 都在 smoke 中再次断言。
 - 所有自定义 preset 都不挂载 `present`。Spawn 与 fork 子代理沿用父会话的工具组合，因此同样没有 `present`，不需要单独的子代理 preset。
-- “标准+PTC+Team”只挂 Team 委托与控制工具，保留 Workflow／Ralph。普通 preset 保留普通子代理工具，没有 `spawn_teammate`。Team service 与 UI 是全局单例，模型工具只在 Team preset 中注册。
+- “日用+Team”只挂 Team 委托与控制工具，保留 Workflow／Ralph。普通 preset 保留普通子代理工具，没有 `spawn_teammate`。Team service 与 UI 是全局单例，模型工具只在 Team preset 中注册。
 - Team 工具依赖 `@deepseek-ai/dsh-experimental-tool-agent-team@0.2.1-rc.1-fork1` 的作用域修复；官方 rc.1 工具的启动遍历会向其他顶层 Agent 注册工具。必须同时验证普通与 Team Agent，不能只测 Team。
 - 官方 `@deepseek-ai/dsh-experimental-agent-team-profile` 是随 CLI 生产依赖交付、也单独发布到 registry 的组合包，默认未启用。它会全局插入 Team 工具并禁用普通控制行，因此本配置显式声明 service、tools、UI，不启用其 bundle patch。官方 service/UI 使用精确 registry 版本，工具 fork 同时登记 global override 与 profile Release dependency，确保 profile 解析也命中修复版。
 

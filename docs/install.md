@@ -49,7 +49,7 @@ features:
 
 完整的无私有参数示例见[active-context-machine.yaml](<../examples/active-context-machine.yaml>)。选择后，依赖计划为 Web 添加 ACP，并更新已显式声明 ACP 的其他 profile，按共用清单选择精确来源。ACP 使用 Query capture 和 tokenMeter，不要求启用 session-tools；历史检索工具由 `sessionTools` 独立选择并显式准备 profile 依赖。其他 profile 仍须准备完整依赖布局和验收。
 
-模板在标准＋PTC 及可选逆向 preset 的同一 compaction isolation group 中禁用 Basic 行，插入 ACP 行。ACP 的 `basic` 对象完整重述共用原生策略，保留 `/compact`、tool-result pruner 和 overflow 兜底；机器参数可选的 `acp.pressureDefault` 原样传给各个 ACP preset，默认比例直接相对模型最大 `contextWindow`：S = floor(C × nudgeAtRatio)，R = floor(C × resetBelowRatio)。加载时要求 `0 <= resetBelowRatio < nudgeAtRatio < 1`。`acp.pressureRoutes` 仍支持精确 provider/model 的绝对 `nudgeAtTokens`／`resetBelowTokens` 覆盖，优先于默认比例；两者都未配置时不提前提醒。容量未知或运行时 `R < S < H` 不成立会按 provider/model 警告一次并跳过，原生兜底继续。配置示例：
+模板在日用及可选的日用+逆向 preset 的同一 compaction isolation group 中禁用 Basic 行，插入 ACP 行。ACP 的 `basic` 对象完整重述共用原生策略，保留 `/compact`、tool-result pruner 和 overflow 兜底；机器参数可选的 `acp.pressureDefault` 原样传给各个 ACP preset，默认比例直接相对模型最大 `contextWindow`：S = floor(C × nudgeAtRatio)，R = floor(C × resetBelowRatio)。加载时要求 `0 <= resetBelowRatio < nudgeAtRatio < 1`。`acp.pressureRoutes` 仍支持精确 provider/model 的绝对 `nudgeAtTokens`／`resetBelowTokens` 覆盖，优先于默认比例；两者都未配置时不提前提醒。容量未知或运行时 `R < S < H` 不成立会按 provider/model 警告一次并跳过，原生兜底继续。配置示例：
 
 ```yaml
 acp:

@@ -256,14 +256,14 @@
               shadowHarnessIdentity: true
 [% endif %]
 [% endmacro %]
-[[ preset("preset-standard-ptc", "standard-ptc", "标准+PTC", "功能完整的编码 Agent，支持文件编辑、Shell、网页检索、Skills、计划、子代理和工作流。", 5, false, none) ]]
-[[ preset("preset-standard-ptc-team", "standard-ptc-team", "标准+PTC+Team", "使用 Agent Teams 协作，保留工作流与 Ralph，不挂载普通子代理控制工具。", 7, false, none, true) ]]
+[[ preset("preset-standard-ptc", "standard-ptc", "日用", "功能完整的编码 Agent，支持文件编辑、Shell、网页检索、Skills、计划、子代理和工作流。", 5, false, none) ]]
+[[ preset("preset-standard-ptc-team", "standard-ptc-team", "日用+Team", "使用 Agent Teams 协作，保留工作流与 Ralph，不挂载普通子代理控制工具。", 7, false, none, true) ]]
 [% if machine.features.sessionTools %]
 - insert:
     - id: session-tools
       name: dsh-session-tools
 [% endif %]
 [% if machine.features.promptOverlay %]
-[[ preset("preset-standard-ptc-redteam", "standard-ptc-redteam", "标准+PTC（逆向模式）", "与「标准+PTC」完全一致，仅额外挂载 dsh-prompt-overlay（自定义提示词内核 + 覆盖 Harness 身份槽位）。", 6, true, machine.promptSections) ]]
+[[ preset("preset-standard-ptc-redteam", "standard-ptc-redteam", "日用+逆向", "与「日用」完全一致，仅额外挂载本地提示词模块（自定义提示词内核 + 覆盖 Harness 身份槽位）。", 6, true, machine.promptSections) ]]
 [% endif %]
 [[ machine.homePrivate ]]
