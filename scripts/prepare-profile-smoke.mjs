@@ -1,14 +1,20 @@
 #!/usr/bin/env node
-// Prepare public, credential-free smoke input; this command does not install or start a Host.
+// Prepare smoke input without installing or starting a Host. By default the input is public and
+// credential-free; --private <machine> loads that machine's private rows except external services.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import YAML from 'yaml';
-import { root, readYaml, readDependencyCatalog, renderMachine, validatePatch, resolvesFromProfile } from './lib.mjs';
+import { root, readYaml, readDependencyCatalog, renderMachine, validatePatch, resolvesFromProfile,
+  withoutExternalPrivateRows } from './lib.mjs';
 
-const tarballDir = resolve(process.argv[2]);
-const output = resolve(process.argv[3] ?? join(root, 'generated/profile-smoke-input'));
+const args = process.argv.slice(2);
+const privateIndex = args.indexOf('--private');
+const privateMachine = privateIndex < 0 ? undefined : args.splice(privateIndex, 2)[1];
+assert.ok(privateIndex < 0 || ['workstation', 'server'].includes(privateMachine), '--private expects workstation or server');
+const tarballDir = resolve(args[0]);
+const output = resolve(args[1] ?? join(root, `generated/profile-smoke-input${privateMachine ? `-${privateMachine}` : ''}`));
 const catalog = readDependencyCatalog();
 const assets = new Map();
 for (const file of readdirSync(tarballDir).filter(name => name.endsWith('.tgz'))) {
@@ -33,6 +39,17 @@ machine.promptSections = { modulePath: join(root, 'plugins/prompt-sections.mjs')
 writeFileSync(machine.promptSections.promptFile, 'This is a disposable profile composition smoke.\n', { mode: 0o600 });
 writeFileSync(machine.promptSections.identityFile, 'You are a profile composition test agent.\n', { mode: 0o600 });
 machine.homePrivate = '- insert: []\n'; machine.webPrivate = '- insert: []\n';
+if (privateMachine) {
+  const real = readYaml(join(root, 'private/machines', privateMachine, 'machine.yaml'));
+  machine.overrides = real.overrides;
+  machine.homePrivate = withoutExternalPrivateRows(real.homePrivate);
+  machine.webPrivate = withoutExternalPrivateRows(real.webPrivate);
+  // Real prompt files catch retired {{variables}}; paths from another machine keep the smoke files.
+  for (const field of ['promptFile', 'identityFile']) {
+    const path = real.promptSections?.[field];
+    if (path && existsSync(path)) machine.promptSections[field] = path;
+  }
+}
 machine.installation = { globalWorkspace: { packages: ['.'] }, webPackage: { private: true,
   dependencies: Object.fromEntries(catalog.packages.filter(item => item.scope === 'profile').map(item => [item.package, item.version])),
   dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dsh-web-mobile', 'dsh-mcp-panel'] } } } };
@@ -43,7 +60,7 @@ const homeRows = validatePatch(rendered.home).map(row => row.entry);
 const presets = homeRows.filter(row => row.name === '@deepseek-ai/dsh-agent-preset').map(row => row.config.id);
 const expectedEntries = catalog.packages.map(item => ({ name: item.package, version: item.version, scope: item.scope,
   ...(item.scope === 'profile' ? { profile: 'web' } : {}) }));
-const config = { runtimeVersion: catalog.runtimeVersion, presets, acp: true,
+const config = { runtimeVersion: catalog.runtimeVersion, presets, acp: true, privateMachine: privateMachine ?? null,
   pressureDefault: machine.acp.pressureDefault, expectedBasic: readYaml(join(root, 'shared/defaults.yaml')).defaults.compaction,
   expectedPackages: [...expectedEntries.map(item => ({ ...item, profileOwned: resolvesFromProfile(item, expectedEntries, 'web') })),
     { name: '@deepseek-ai/dsh-client-ui-settings', version: catalog.runtimeVersion, scope: 'global-override' }],

@@ -30,6 +30,18 @@ export function verifyToolCatalog(id, schemas, assembly, { acp = true } = {}) {
   return { id, tools: names.sort(), ptc: true, acp };
 }
 
+// Model requests render the prompt only after assembly; unknown {{variables}} fail there.
+export function verifyPromptRendering(id, render) {
+  let rendered;
+  try {
+    rendered = render();
+  } catch (error) {
+    throw new Error(`${id}: system prompt rendering failed: ${error.message}`);
+  }
+  assert.ok(rendered.prompt.length > 0, `${id}: rendered system prompt is empty`);
+  return { promptChars: rendered.prompt.length, contextChars: rendered.context.length };
+}
+
 export function verifyDumpConfiguration(rows, expectedPresets, pressureDefault, expectedBasic) {
   const entries = rows.flatMap(row => row.insert ?? [row]);
   for (const id of expectedPresets) {

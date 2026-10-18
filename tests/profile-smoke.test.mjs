@@ -4,8 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { root, readDependencyCatalog, readYaml, validatePatch } from '../scripts/lib.mjs';
-import { verifyToolCatalog, verifyDumpConfiguration } from '../scripts/profile-smoke-checks.mjs';
+import { root, readDependencyCatalog, readYaml, validatePatch, withoutExternalPrivateRows } from '../scripts/lib.mjs';
+import { verifyToolCatalog, verifyDumpConfiguration, verifyPromptRendering } from '../scripts/profile-smoke-checks.mjs';
 import { runProfileSmoke, launchHost, runSmokeCommand, openSmokePage } from '../scripts/profile-smoke.mjs';
 import { probeInvalidCompression, createProbeAgent } from '../scripts/profile-smoke-probe.mjs';
 
@@ -22,8 +22,9 @@ test('failed smoke commands retain package-manager diagnostics written to stdout
 
 test('probe Agent creation explicitly mounts its selected preset before publication', async () => {
   const scoped = {}, calls = [];
-  const ctx = { agents: { create: async options => {
+  const ctx = { agentDefaultModel: { currentSelection: () => ({ provider: 'fixture', model: 'fixture-model', reasoningEffort: 'low' }) }, agents: { create: async options => {
     assert.deepEqual(options.meta, { cwd: '/owned/workspace', agentPreset: 'standard-ptc-team' });
+    assert.deepEqual(options.agentOptions, { provider: 'fixture', model: 'fixture-model' });
     await options.setup(scoped); calls.push('published'); return 'handle';
   } }, agentPresets: { mount: async (context, id) => {
     assert.equal(context, scoped); calls.push(id);
@@ -70,6 +71,34 @@ test('profile assertions reject Team leakage, wrong message implementation and a
     { name: 'tools:sdk', text: 'tools.list_agents' },
   ] }), /PTC SDK/);
   assert.throws(() => verifyToolCatalog('standard-ptc', [...catalog(false), catalog(false)[0]], assembly), /duplicate/);
+});
+
+test('prompt rendering failures name the preset that would fail its first model request', () => {
+  assert.deepEqual(verifyPromptRendering('standard-ptc', () => ({ prompt: 'rendered', context: '' })), { promptChars: 8, contextChars: 0 });
+  assert.throws(() => verifyPromptRendering('standard-ptc', () => { throw new Error('unknown prompt variable "cwd"'); }),
+    /standard-ptc: system prompt rendering failed: unknown prompt variable "cwd"/);
+  assert.throws(() => verifyPromptRendering('standard-ptc', () => ({ prompt: '', context: '' })), /empty/);
+});
+
+test('private smoke rows drop external services and keep every local row with its expressions', () => {
+  const text = [
+    '- insert:',
+    '    - id: mcp-fixture',
+    "      name: '@deepseek-ai/dsh-mcp-client'",
+    '    - id: web-fetch-fixture',
+    "      name: '@firecrawl/dsh-firecrawl/fetch'",
+    '- insert:',
+    '    - id: mcp-only',
+    "      name: '@deepseek-ai/dsh-mcp-client'",
+    '    - id: local-fixture',
+    "      name: '@deepseek-ai/dsh-client-ui-chat'",
+    '- id: connection',
+    '  config:',
+    '    trustedHosts: !!js ctx.webStartup.trustedHosts',
+  ].join('\n');
+  const kept = withoutExternalPrivateRows(text);
+  assert.deepEqual(validatePatch(kept).map(row => row.entry.id), ['local-fixture', 'connection']);
+  assert.match(kept, /trustedHosts: !!js ctx\.webStartup\.trustedHosts/);
 });
 
 test('dump assertions require the isolated bind and reject global Team tools', () => {

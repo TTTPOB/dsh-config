@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
-import { verifyToolCatalog } from './profile-smoke-checks.mjs';
+import { verifyPromptRendering, verifyToolCatalog } from './profile-smoke-checks.mjs';
 
 export const name = 'dsh-config-profile-smoke';
-export const inject = ['loader', 'webServer', 'agents', 'agentPresets', 'tools', 'systemPrompt', 'ptcRuntime', 'pluginPackages'];
+export const inject = ['loader', 'webServer', 'agents', 'agentPresets', 'agentDefaultModel', 'tools', 'systemPrompt', 'ptcRuntime', 'pluginPackages'];
 
 export function apply(ctx, config) {
   let result;
@@ -103,8 +103,10 @@ async function probeSuccessfulCompression(ctx, agent, { createAssistantMessage, 
 }
 
 export async function createProbeAgent(ctx, id, cwd) {
-  // Agent metadata records the choice; the caller's setup composes its plugins.
-  return ctx.agents.create({ sessionId: randomUUID(), meta: { cwd, agentPreset: id },
+  // Agent metadata records the choice; the caller's setup composes its plugins. Like a Web
+  // session, the Agent starts on the default model so {{provider}}/{{model}} render.
+  const { provider, model } = ctx.agentDefaultModel.currentSelection();
+  return ctx.agents.create({ sessionId: randomUUID(), agentOptions: { provider, model }, meta: { cwd, agentPreset: id },
     setup: agentCtx => ctx.agentPresets.mount(agentCtx, id).then(() => undefined) });
 }
 
@@ -112,8 +114,9 @@ async function inspect(ctx, config) {
   await ctx.loader.await();
   const hostRequire = createRequire(process.env.DSH_SMOKE_HOST_MANIFEST);
   const load = name => import(pathToFileURL(hostRequire.resolve(name)).href);
-  const [{ auditStartupEntries }, { assembleContextFor }, { scopeOf }] = await Promise.all([
+  const [{ auditStartupEntries }, { assembleContextFor }, { scopeOf }, { renderPrompt, renderContextSnapshot }] = await Promise.all([
     load('@deepseek-ai/dsh-app-boot'), load('@deepseek-ai/dsh-agent'), load('@deepseek-ai/dsh-scope'),
+    load('@deepseek-ai/dsh-system-prompt'),
   ]);
   await auditStartupEntries(ctx.root, 'dsh-config profile smoke', () => {});
   for (const service of ['workspaceCordis', 'workspaceEnvrc', 'agentTeams']) {
@@ -146,7 +149,10 @@ async function inspect(ctx, config) {
       for (const name of ['session_list', 'session_event_list', 'session_event_read', 'search_tools', 'describe_tools']) {
         if (!schemas.some(tool => tool.name === name)) throw new Error(`${id}: missing profile plugin tool ${name}`);
       }
-      results.push(verifyToolCatalog(id, schemas, assembly, { acp: config.acp }));
+      // Mirror the Agent step: render the static prompt, then refresh and render runtime context.
+      const prompt = verifyPromptRendering(id, () => ({ prompt: renderPrompt(assembly),
+        context: renderContextSnapshot(ctx.systemPrompt.refreshContext(assembly, assembleContextFor(agent))) }));
+      results.push({ ...verifyToolCatalog(id, schemas, assembly, { acp: config.acp }), prompt });
       const code = 'return { agents: await tools.list_agents({}) };';
       const execution = await ctx.tools.execute({ callId: `smoke-${randomUUID()}`, name: 'run_code',
         arguments: { code, description: 'Verify scoped profile tool SDK' }, agent, signal: AbortSignal.timeout(30000) });
@@ -155,7 +161,8 @@ async function inspect(ctx, config) {
     const messages = config.acp ? await load('@deepseek-ai/dsh-llm') : undefined;
     const acpInvalidCall = config.acp ? await probeInvalidCompression(ctx, handles[0].agent, messages) : undefined;
     const acpSuccessfulCall = config.acp ? await probeSuccessfulCompression(ctx, handles[0].agent, messages) : undefined;
-    return { presets: results, packages, loaded: true, modelRequests: 0, acpInvalidCall, acpSuccessfulCall };
+    return { presets: results, packages, loaded: true, modelRequests: 0, privateMachine: config.privateMachine ?? null,
+      acpInvalidCall, acpSuccessfulCall };
   } finally {
     for (const handle of handles.reverse()) await handle.dispose();
   }

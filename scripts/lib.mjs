@@ -27,6 +27,20 @@ export function parseYaml(text) {
   return document.toJS();
 }
 
+// External services stay out of disposable smokes; every other private row loads as written.
+export function withoutExternalPrivateRows(text) {
+  const document = YAML.parseDocument(text, { customTags: [{ tag: jsTag.tag, resolve: expression => expression }] });
+  assert.ok(!document.errors.length && YAML.isSeq(document.contents), 'Invalid private patch YAML');
+  const external = entry => /^(@deepseek-ai\/dsh-mcp-client|@firecrawl\/)/.test(String(entry.get('name') ?? ''));
+  document.contents.items = document.contents.items.filter(row => {
+    const insert = row.get('insert');
+    if (!YAML.isSeq(insert)) return true;
+    insert.items = insert.items.filter(entry => !external(entry));
+    return insert.items.length > 0;
+  });
+  return document.toString();
+}
+
 export function readYaml(path) {
   return parseYaml(readFileSync(path, 'utf8'));
 }
