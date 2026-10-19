@@ -14,6 +14,25 @@ function fixture(t) {
 
 const example = join(root, 'examples/workstation-machine.yaml');
 
+test('OpenUI is activated once in Web without leaking into headless profiles', () => {
+  for (const machine of ['workstation', 'server']) {
+    const { rendered } = renderMachine(join(root, `examples/${machine}-machine.yaml`), 'openui', undefined, { stage: false });
+    const web = validatePatch(rendered.web).map(row => row.entry);
+    const home = validatePatch(rendered.home).map(row => row.entry);
+    assert.equal(web.filter(row => row.name === 'dsh-openui').length, 1);
+    assert.ok(!home.some(row => row.name === 'dsh-openui'));
+    const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
+    const selected = catalog.packages.find(row => row.package === 'dsh-openui');
+    const target = resolveDependencyTargets('unused', {
+      webPackage: { dsh: { profile: { bundles: ['dsh-openui'] } } },
+      profiles: { headless: {} },
+    }, catalog);
+    assert.equal(target.profiles.web.dependencies['dsh-openui'], selected.url);
+    assert.ok(!target.profiles.web.dsh.profile.bundles.includes('dsh-openui'));
+    assert.ok(!target.profiles.headless.dependencies['dsh-openui']);
+  }
+});
+
 for (const machine of ['workstation', 'server']) {
   test(`${machine} titles use the shared Flash route independently of the conversation model`, () => {
     const { rendered } = renderMachine(join(root, `examples/${machine}-machine.yaml`), 'title-model', undefined, { stage: false });
