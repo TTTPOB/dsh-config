@@ -1,9 +1,6 @@
 - insert:
-    - id: dsh-openui
-      name: dsh-openui
-[% if machine.features.openui == false %]
-      disabled: true
-[% endif %]
+    - id: dsh-visualize
+      name: "@nagi-ovo/dsh-visualize"
 - id: web
   config:
     searchProvider: deepseek-official

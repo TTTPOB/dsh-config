@@ -43,9 +43,9 @@ node scripts/dsh-config.mjs update --machine workstation
 
 机器参数提供 `features`、`overrides.defaultModel`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。机器专属 provider／MCP 完整行保留为私有输入，不进行通用深合并。
 
-### 可视化插件试用
+### 可视化插件
 
-`features.openui` 默认启用；设为 `false` 时，仅停用该机器 Web 配置中的 OpenUI 行，保留安装包以便切回。替代插件在机器自己的 `webPrivate` 中插入，依赖在 `installation.webPackage.dependencies` 中显式声明。依赖清单中的可选 `@nagi-ovo/dsh-visualize` 使用上游 npm 精确版本，仅更新已声明它的 Web profile，不为其他机器安装或启用。
+Web profile 统一启用 `@nagi-ovo/dsh-visualize`，使用依赖清单中的 npm 精确版本；其他 profile 不自动安装。插件由共用 Web patch 激活，不重复加载 bundle。OpenUI 不再由配置安装或激活，已安装的旧包在维护窗口通过 pnpm 卸载。
 
 ### 按机器禁用 preset 插件行
 

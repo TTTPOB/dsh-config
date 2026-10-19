@@ -172,19 +172,12 @@ packages:
     version: 0.2.1-rc.1-fork1
     url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork2/deepseek-ai-dsh-agent-preset-registry-0.2.1-rc.1-fork1.tgz
     resetSelectors: true
-  - package: dsh-openui
-    scope: profile
-    policy: release
-    version: 0.1.1
-    url: https://github.com/TTTPOB/dsh-openui/releases/download/v0.1.1/dsh-openui-0.1.1.tgz
-    profiles: [web]
-    required: true
-    patchOnly: true
   - package: "@nagi-ovo/dsh-visualize"
     scope: profile
     policy: registry
     version: 0.1.7
     profiles: [web]
+    required: true
     patchOnly: true
   - package: dsh-mcp-panel
     scope: profile

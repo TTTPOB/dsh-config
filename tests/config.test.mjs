@@ -14,45 +14,25 @@ function fixture(t) {
 
 const example = join(root, 'examples/workstation-machine.yaml');
 
-test('OpenUI is activated once in Web without leaking into headless profiles', () => {
+test('Visualize is installed and activated once in Web only, replacing OpenUI', () => {
   for (const machine of ['workstation', 'server']) {
-    const { rendered } = renderMachine(join(root, `examples/${machine}-machine.yaml`), 'openui', undefined, { stage: false });
+    const { rendered } = renderMachine(join(root, 'examples/' + machine + '-machine.yaml'), 'visualize', undefined, { stage: false });
     const web = validatePatch(rendered.web).map(row => row.entry);
     const home = validatePatch(rendered.home).map(row => row.entry);
-    assert.equal(web.filter(row => row.name === 'dsh-openui').length, 1);
-    assert.ok(!home.some(row => row.name === 'dsh-openui'));
+    assert.equal(web.filter(row => row.name === '@nagi-ovo/dsh-visualize').length, 1);
+    assert.ok(!web.some(row => row.name === 'dsh-openui'));
+    assert.ok(!home.some(row => row.name === '@nagi-ovo/dsh-visualize'));
     const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
-    const selected = catalog.packages.find(row => row.package === 'dsh-openui');
+    assert.ok(!catalog.packages.some(row => row.package === 'dsh-openui'));
+    const selected = catalog.packages.find(row => row.package === '@nagi-ovo/dsh-visualize');
     const target = resolveDependencyTargets('unused', {
-      webPackage: { dsh: { profile: { bundles: ['dsh-openui'] } } },
+      webPackage: { dsh: { profile: { bundles: ['@nagi-ovo/dsh-visualize'] } } },
       profiles: { headless: {} },
     }, catalog);
-    assert.equal(target.profiles.web.dependencies['dsh-openui'], selected.url);
-    assert.ok(!target.profiles.web.dsh.profile.bundles.includes('dsh-openui'));
-    assert.ok(!target.profiles.headless.dependencies['dsh-openui']);
+    assert.equal(target.profiles.web.dependencies[selected.package], selected.version);
+    assert.ok(!target.profiles.web.dsh.profile.bundles.includes(selected.package));
+    assert.ok(!target.profiles.headless.dependencies[selected.package]);
   }
-});
-
-test('one machine can replace OpenUI without installing visualization elsewhere', t => {
-  const machine = readYaml(example);
-  machine.features.openui = false;
-  machine.webPrivate += '\n- insert:\n    - id: dsh-visualize\n      name: "@nagi-ovo/dsh-visualize"\n';
-  machine.installation ??= {};
-  machine.installation.webPackage ??= { private: true };
-  machine.installation.webPackage.dependencies ??= {};
-  machine.installation.webPackage.dependencies['@nagi-ovo/dsh-visualize'] = '0.1.7';
-  const path = join(fixture(t), 'visualization.yaml');
-  writeFileSync(path, JSON.stringify(machine));
-  const { rendered } = renderMachine(path, 'visualization', undefined, { stage: false });
-  const rows = validatePatch(rendered.web).map(row => row.entry);
-  assert.equal(rows.find(row => row.id === 'dsh-openui').disabled, true);
-  assert.equal(rows.filter(row => row.name === '@nagi-ovo/dsh-visualize' && !row.disabled).length, 1);
-  const manifest = JSON.parse(rendered.webPackage);
-  assert.equal(manifest.dependencies['@nagi-ovo/dsh-visualize'], '0.1.7');
-  const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
-  assert.equal(resolveDependencyTargets('unused', {}, catalog).profiles.web.dependencies['@nagi-ovo/dsh-visualize'], undefined);
-  machine.features.openui = 'false';
-  assert.throws(() => validateMachine(machine), /Invalid feature: openui/);
 });
 
 for (const machine of ['workstation', 'server']) {
