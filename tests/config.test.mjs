@@ -116,7 +116,7 @@ test('profile-owned official forks resolve from the actual consumer even when a 
 });
 
 test('machine selector resolves private directories and preserves file path input', () => {
-  for (const machine of ['workstation', 'server', 'research-box_2']) {
+  for (const machine of ['workstation', 'server', 'nas', 'research-box_2']) {
     assert.deepEqual(parseCommandArguments(['render', '--machine', machine]), { command: 'render', machineArgument: machine });
     assert.deepEqual(resolveMachineArgument(machine), { path: join(root, 'private/machines', machine, 'machine.yaml'), label: machine });
   }

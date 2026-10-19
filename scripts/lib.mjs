@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import YAML from 'yaml';
 import nunjucks from 'nunjucks';
+import { validatePresetRows, applyPresetRowOverrides } from './preset-rows.mjs';
 
 const templates = new nunjucks.Environment(new nunjucks.FileSystemLoader(fileURLToPath(new URL('../templates/', import.meta.url))), {
   autoescape: false,
@@ -78,6 +79,7 @@ export function validateMachine(machine) {
     }
   }
   assert.ok(machine.overrides && typeof machine.overrides === 'object', 'Missing overrides');
+  validatePresetRows(machine.overrides.presetRows);
   for (const key of ['homePrivate', 'webPrivate']) {
     assert.equal(typeof machine[key], 'string', `Missing literal YAML: ${key}`);
     assert.ok(Array.isArray(parseYaml(machine[key])), `Expected patch array: ${key}`);
@@ -129,7 +131,7 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
   }
   const templateData = { shared, machine, effective: { defaultModel } };
   const rendered = {
-    home: templates.render('home.patch.yml.njk', templateData),
+    home: applyPresetRowOverrides(templates.render('home.patch.yml.njk', templateData), machine.overrides.presetRows),
     web: templates.render('web.patch.yml.njk', templateData),
     globalWorkspace: JSON.stringify(machine.installation.globalWorkspace, null, 2) + '\n',
     webPackage: JSON.stringify(machine.installation.webPackage, null, 2) + '\n',

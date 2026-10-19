@@ -14,7 +14,7 @@ import { root, readYaml, readDependencyCatalog, renderMachine, validatePatch, re
 const args = process.argv.slice(2);
 const privateIndex = args.indexOf('--private');
 const privateMachine = privateIndex < 0 ? undefined : args.splice(privateIndex, 2)[1];
-assert.ok(privateIndex < 0 || ['workstation', 'server'].includes(privateMachine), '--private expects workstation or server');
+assert.ok(privateIndex < 0 || ['workstation', 'server', 'nas'].includes(privateMachine), '--private expects workstation, server or nas');
 const locals = new Map();
 for (let index; (index = args.indexOf('--local')) >= 0;) {
   const spec = args.splice(index, 2)[1] ?? '';

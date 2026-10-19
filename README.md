@@ -20,7 +20,7 @@ pnpm check --machine workstation
 node scripts/dsh-config.mjs update --machine workstation
 ```
 
-服务器使用自己的 `--machine server`。机器名只选择 `private/machines/<name>/machine.yaml`，不连接远程机器。也可以直接传参数文件路径。生成结果位于 `generated/<name>/`，保留为私有文件。
+服务器使用自己的 `--machine server`，NAS 使用 `--machine nas`。机器名只选择 `private/machines/<name>/machine.yaml`，不连接远程机器。也可以直接传参数文件路径。生成结果位于 `generated/<name>/`，保留为私有文件。
 
 - [正式安装与更新](docs/install.md)：机器参数、目标来源、doctor、显式 apply、精确豁免和维护切换。Doctor/update 默认突出变化与问题，`--verbose` 展开完整明细，`--json` 独立切换输出格式。
 - [隔离成品测试](docs/testing.md)：源码聚焦验证、本地 tarball 测试副本及已有 smoke。
@@ -42,6 +42,28 @@ node scripts/dsh-config.mjs update --machine workstation
 `private/`、`generated/` 和真实参数均被 Git 忽略。公开示例没有真实端点或凭据；新机器从示例开始，私有参数通过私有通道传递。会话、数据库、索引、缓存和 storages 不同步。
 
 机器参数提供 `features`、`overrides.defaultModel`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。机器专属 provider／MCP 完整行保留为私有输入，不进行通用深合并。
+
+### 按机器禁用 preset 插件行
+
+在 NAS 私有参数 `private/machines/nas/machine.yaml` 中配置：
+
+```yaml
+overrides:
+  presetRows:
+    all:
+      tool-web: { disabled: true }
+      delegation/tool-ralph: { disabled: true }
+    presets:
+      standard-ptc-team:
+        tool-web: { disabled: false }
+        delegation/tool-agent-team: { disabled: true }
+```
+
+`all` 应用于每个已生成 preset；`presets` 以 preset 的 `config.id` 为键，特化值优先于 `all`，即使两个 selector 用不同写法指向同一行。上例在日用和逆向禁用内置网页工具，在 Team 中重新启用；三个 preset 都禁用 Ralph，只有 Team 禁用 Team 工具。日用、Team、可选逆向继续使用同一模板宏。
+
+selector 可以是 preset 内递归唯一的 entry `id`，或从根开始、以 `/` 分隔的完整 group 路径，例如 `delegation/tool-ralph`；group 行本身也可禁用。路径只写 group/entry id，不写 `config` 或 `plugins`。每个 selector 在每个适用 preset 内必须恰好匹配一行；Team 专属项放在 Team 的特化配置里。未知 preset、未匹配或歧义 selector、同一层多个 selector 指向同一行、非布尔 `disabled` 和额外字段均报错。
+
+每项仅允许 `{ disabled: true | false }`，不合并或替换 `config`。未指定行保持原值，包括原有 `!!js` 表达式；显式布尔值可覆盖该行的表达式。未配置本功能时输出保持不变。NAS 参数就绪后，用 `node scripts/dsh-config.mjs check --machine nas` 做只读结构检查；`render --machine nas` 写入私有暂存，不部署或连接 NAS。
 
 两机会话标题在 Home patch 中统一使用共用 `defaults.sessionTitle` 配置，Web profile 不重复声明，私有输入不再保留旧标题覆盖。标题固定为 `deepseek-official/deepseek-flash`，输入上限 65536 字节、输出上限 64 tokens、超时 60000 毫秒；沿用官方标题插件自动选择最低推理档位的行为（该模型为 `off`），不随聊天模型选择器变化。
 
