@@ -180,6 +180,12 @@ packages:
     profiles: [web]
     required: true
     patchOnly: true
+  - package: "@nagi-ovo/dsh-visualize"
+    scope: profile
+    policy: registry
+    version: 0.1.7
+    profiles: [web]
+    patchOnly: true
   - package: dsh-mcp-panel
     scope: profile
     policy: release

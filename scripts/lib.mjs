@@ -52,6 +52,7 @@ export function validateMachine(machine) {
     assert.equal(typeof machine.features?.[key], 'boolean', `Missing feature: ${key}`);
   }
   if (machine.features.activeContext !== undefined) assert.equal(typeof machine.features.activeContext, 'boolean', 'Invalid feature: activeContext');
+  if (machine.features.openui !== undefined) assert.equal(typeof machine.features.openui, 'boolean', 'Invalid feature: openui');
   if (machine.acp?.pressureDefault !== undefined) {
     assert.equal(machine.features.activeContext, true, 'pressureDefault requires activeContext');
     const { nudgeAtRatio, resetBelowRatio } = machine.acp.pressureDefault;
