@@ -175,8 +175,8 @@ packages:
   - package: dsh-openui
     scope: profile
     policy: release
-    version: 0.1.0
-    url: https://github.com/TTTPOB/dsh-openui/releases/download/v0.1.0/dsh-openui-0.1.0.tgz
+    version: 0.1.1
+    url: https://github.com/TTTPOB/dsh-openui/releases/download/v0.1.1/dsh-openui-0.1.1.tgz
     profiles: [web]
     required: true
     patchOnly: true
