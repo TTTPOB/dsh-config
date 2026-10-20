@@ -26,7 +26,7 @@ pnpm check --machine workstation
 
 清单中 `patchOnly: true` 的包保留 profile dependency，但移除重复的 profile bundle 激活；MCP Panel、mobile 等仍通过 bundle 贡献客户端行的包不受影响。共用插件与 preset 声明在 `$DSH_HOME/cordis.patch.yml`；真正 profile 特化的配置留在对应 profile patch。依赖安装在 profile 不表示配置属于该 profile。覆盖既有行的 `config` 是整个对象替换；保留该行需要的全部配置键和 `!!js` 表达式。
 
-模板不渲染界面拥有的字段（`.volatile()`）：设置页只能写这些字段，并写进 profile patch，模板再钉住它们就只会在下一次 apply 被覆盖。归属划分与列表见 [README 的配置归属](<../README.md#配置归属模板界面与机器>)。apply 写 patch 时保留 live 中模板不产生的行，删除只由机器参数 `rowOps.<layer>.retire` 生效；预览会列出保留行与生效的移除锚点。
+模板不渲染界面拥有的字段（`.volatile()`）：设置页只能写这些字段，并写进 profile patch，模板再钉住它们就只会在下一次 apply 被覆盖。归属划分与列表见 [README 的配置归属](<../README.md#配置归属模板界面与机器>)。apply 写 patch 时保留 live 中模板不产生的行，删除只由机器参数 `rowOps.<layer>.retire` 生效；锚点的作用范围、分层与限制见 [README 的 rowOps.retire](<../README.md#按-id-保留与删除顶层行rowopsretire>)。预览会列出保留行与生效的移除锚点。
 
 ### 本地 ESM 插件
 

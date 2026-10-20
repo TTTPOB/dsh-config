@@ -42,7 +42,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 `private/`、`generated/` 和真实参数均被 Git 忽略。公开示例没有真实端点或凭据；新机器从示例开始，私有参数通过私有通道传递。会话、数据库、索引、缓存和 storages 不同步。
 
-机器参数提供 `features`、`mcp`、`subagentModels`、`providers`、`rowOps`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。对话默认模型不在机器参数里：它属于会话与界面的状态。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。provider 目录由 [shared/providers.yaml](shared/providers.yaml) 共用，机器只写 add／set／remove 差异；专属 MCP 行仍保留为私有输入，不进行通用深合并。
+机器参数提供 `features`、`mcp`、`subagentModels`、`providers`、`rowOps`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。对话默认模型不在机器参数里：它属于会话与界面的状态。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。provider 目录由 [shared/providers.yaml](shared/providers.yaml) 共用，机器只写 add／set／remove 差异：set 只覆盖该 provider 的顶层键，嵌套值（如 models）整体替换；专属 MCP 行仍保留为私有输入，不进行通用深合并。
 
 ### 本地 JS 插件
 
@@ -66,7 +66,32 @@ DSH 的设置页只能写带 `.volatile()` 的字段，并写进 **profile patch
 
 `llm-pi-ai` 与 `llm-deepseek` 位于 base bundle，放进 home patch 对每个 profile 都成立。Models 页仍可管理凭据（写入 `$DSH_HOME/.credentials.yaml`，不在 patch 里），但已由模板声明的 provider 与模型目录是只读的；要改就改模板。
 
-`update --apply` 写 patch 时是**保守覆盖**：先写模板产生的行，再把 live 文件里模板不产生的行原样追加保留（界面新增的行、手工实验的行因此不会丢），最后删除 `rowOps.<layer>.retire` 列出的行。`retire` 是唯一删除锚点：把行从模板删掉只会让它变成"保留行"，必须显式 retire 才会真正消失；把行从 profile 搬到 home 也必须 retire 源层副本。预览会列出保留行与生效的移除锚点。
+`update --apply` 写 patch 时是**保守覆盖**：先写模板产生的行，再把 live 文件里模板不产生的行原样追加保留（界面新增的行、手工实验的行因此不会丢），最后删除 `rowOps.<layer>.retire` 列出的行。预览会列出保留行与生效的移除锚点。
+
+### 按 id 保留与删除顶层行（rowOps.retire）
+
+模板只拥有它自己渲染的行；其余行在 apply 后继续留在文件里。需要让某行**真正消失**时，在机器参数里登记 id：
+
+```yaml
+rowOps:
+  web:
+    retire:
+      - llm-pi-ai          # 已搬到 home patch，profile 侧留着会是死行
+      - agent-loop
+```
+
+| 属性 | 行为 |
+|---|---|
+| 作用阶段 | 渲染时从模板输出里删（render/check 就能看到结果）；apply 时再从保留的 live 行里删 |
+| 作用范围 | 仅顶层 patch 行：插件 insert 条目、`- id: x` 覆盖行、`{id, insert:[...]}` 分组行都可按 id 命中；**不进入 preset 的嵌套插件行** |
+| 分层 | `rowOps.home` 与 `rowOps.web` 独立；同一 id 在两层各有一份时必须 retire 源层 |
+| 匹配 | 精确 id，不支持路径、前缀或 glob |
+| 幂等 | id 不存在时是 no-op，墓碑可以保留 |
+| 不能表达 | `disabled`（用模板或 `presetRows` 表达）；嵌套行删除（用 `presetRows` 的 selector） |
+
+两条使用规则：**从模板删行**只让它变成"保留行"，必须再加 retire 才会消失；**把行从 profile 搬到 home**（或反向）必须在源层 retire，否则旧副本会作为保留行长期存在。
+
+`rowOps` 与 [preset 行禁用](#按机器禁用-preset-插件行)是两套独立词表：前者按顶层行 id 删除，后者按 preset 内的 selector 设 `disabled`，互不影响。
 
 ### 按机器禁用 preset 插件行
 
