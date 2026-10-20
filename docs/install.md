@@ -171,11 +171,26 @@ Apply 在 stderr 即时报告 pre-install doctor、global install、profile inst
 node dsh-config/scripts/dsh-config.mjs update --machine workstation
 systemd-run --user --unit=dsh-switch --collect --same-dir \
   --setenv=PATH --setenv=HTTP_PROXY --setenv=HTTPS_PROXY --setenv=NO_PROXY \
+  --setenv=http_proxy --setenv=https_proxy --setenv=no_proxy \
   dsh-config/scripts/host-switch.sh workstation
 journalctl --user -u dsh-switch -f
 ```
 
-只写变量名的 `--setenv` 从当前 shell 带入 PATH（node、pnpm）和代理；机器没有代理时删掉代理三项。脚本读取三个可选变量：`DSH_SERVICE`（默认 `dsh-web.service`）、`DSH_HEALTH_URL`（默认 `http://127.0.0.1:53083/`）、`DSH_HEALTH_TIMEOUT`（秒，默认 60）。端口不同的机器用 `--setenv=DSH_HEALTH_URL=http://127.0.0.1:<端口>/` 指定。
+只写变量名的 `--setenv` 从当前 shell 带入 PATH（node、pnpm）和代理；同时传递大小写代理变量，不要假定 pnpm／网络客户端会把大写变量当作小写变量使用。机器没有代理时删掉六个代理参数。临时 systemd 任务不会自动继承登录 shell 的代理配置，漏传可能让 GitHub 请求一直等到网络超时。
+
+脚本为 apply 与 rollback 显式设置 `CI=true`，允许无人值守时 pnpm 重建需要替换的 modules 目录，避免无 TTY 时中止安装。脚本将 apply 的进度与结果实时写到 stderr，同时暂存输出以提取本次 backup；即使使用 `--wait --pipe`，也不必等 apply 结束才能看到进度。apply 在备份完整、尚未修改安装时就报告 backup，因此整次超时仍能尝试回滚。回滚从备份记录恢复文件与精确 runtime 版本，不要求损坏的全局安装仍能被 `pnpm list -g` 找到；新备份还记录已经解析的安装路径。回滚失败仍会尝试启动服务，但不会声称“已恢复原安装”，备份保留供人工处理。
+
+可用 `--setenv=变量名=值` 配置以下可选变量：
+
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `DSH_SERVICE` | `dsh-web.service` | 目标服务 |
+| `DSH_HEALTH_URL` | `http://127.0.0.1:53083/` | 本机健康检查地址，始终绕过代理；端口不同的机器须覆盖 |
+| `DSH_HEALTH_TIMEOUT` | `60` | 每次启动后的健康等待秒数 |
+| `DSH_APPLY_TIMEOUT` | `180` | 整次 apply 上限秒数，包含 doctor 与安装 |
+| `DSH_ROLLBACK_TIMEOUT` | `180` | 整次 rollback 上限秒数 |
+
+所有超时必须为正整数秒。脚本依赖 GNU `timeout`：apply／rollback 各自运行在独立进程组中，到时向整组发送 TERM，再等最多 5 秒后发送 KILL，避免残留 pnpm 子进程与恢复操作同时修改安装。慢网络确实需要更长窗口时显式增加期限；实时进度不代表网络请求已经成功。
 
 注意：
 

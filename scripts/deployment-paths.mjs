@@ -21,7 +21,7 @@ export function expandDeploymentPath(value, field, env = process.env, userHome =
 }
 
 // This helper is used only for local live inspection/apply, never offline rendering.
-export function normalizeDeployment(input = {}, { env = process.env, userHome = homedir(), query = pnpm } = {}) {
+export function normalizeDeployment(input = {}, { env = process.env, userHome = homedir(), query = pnpm, discoverHost = true } = {}) {
   const path = (value, field) => expandDeploymentPath(value, field, env, userHome);
   const home = path(input.home ?? env.DSH_HOME ?? join(userHome, '.dsh'), 'home');
   const globalWorkspacePath = path(input.globalWorkspacePath ?? join(query(['root', '-g']), 'pnpm-workspace.yaml'), 'globalWorkspacePath');
@@ -36,7 +36,7 @@ export function normalizeDeployment(input = {}, { env = process.env, userHome = 
   }
   globalDir = path(globalDir, 'globalDir');
   let hostManifest = input.hostManifest;
-  if (hostManifest === undefined) {
+  if (hostManifest === undefined && discoverHost) {
     const projects = JSON.parse(query([`--config.global-dir=${globalDir}`, '--ignore-workspace', 'list', '-g', '--depth', '0', '--json']));
     const anchors = projects.map(project => project.dependencies?.['@deepseek-ai/dsh']?.path).filter(Boolean);
     if (anchors.length !== 1) throw new Error('Deployment discovery requires one installed @deepseek-ai/dsh from pnpm list -g; install DSH or override deployment.hostManifest');
@@ -50,6 +50,6 @@ export function normalizeDeployment(input = {}, { env = process.env, userHome = 
       patchPath: path(profile.patchPath ?? join(dirname(packagePath), 'cordis.patch.yml'), `profiles.${name}.patchPath`) };
   }
   return { ...input, home, globalWorkspacePath, globalBinDir, globalDir,
-    hostManifest: path(hostManifest, 'hostManifest'),
+    hostManifest: hostManifest === undefined ? undefined : path(hostManifest, 'hostManifest'),
     homePatchPath: path(input.homePatchPath ?? join(home, 'cordis.patch.yml'), 'homePatchPath'), profiles };
 }

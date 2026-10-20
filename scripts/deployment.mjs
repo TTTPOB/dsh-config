@@ -28,11 +28,15 @@ export function resolveInstalledHost(deployment) {
   return realpathSync(join(anchors[0], 'package.json'));
 }
 
-export function globalInstallArguments(deployment, runtimeVersion) {
-  const manifest = json(resolveInstalledHost(deployment));
-  assert.equal(manifest.name, '@deepseek-ai/dsh', 'Global installation anchor must be official DSH');
-  assert.match(manifest.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'Global runtime version must be exact');
-  const targetVersion = runtimeVersion ?? manifest.version;
+export function globalInstallArguments(deployment, runtimeVersion, { recovery = false } = {}) {
+  // Recovery trusts the backup version, not a potentially removed current installation.
+  let targetVersion = runtimeVersion;
+  if (!recovery) {
+    const manifest = json(resolveInstalledHost(deployment));
+    assert.equal(manifest.name, '@deepseek-ai/dsh', 'Global installation anchor must be official DSH');
+    assert.match(manifest.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'Global runtime version must be exact');
+    targetVersion ??= manifest.version;
+  }
   assert.match(targetVersion, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'Target runtime version must be exact');
   assert.ok(isAbsolute(deployment.globalBinDir ?? ''), 'Absolute deployment.globalBinDir required for global apply');
   const globalDir = deployment.globalDir ?? dirname(dirname(deployment.globalWorkspacePath));
@@ -41,9 +45,9 @@ export function globalInstallArguments(deployment, runtimeVersion) {
     `--config.global-bin-dir=${deployment.globalBinDir}`, '--ignore-workspace', 'add', '--global', `@deepseek-ai/dsh@${targetVersion}`];
 }
 
-export function validateDeployment(deployment) {
+export function validateDeployment(deployment, { requireHost = true } = {}) {
   assert.ok(deployment, 'machine.deployment is required');
-  for (const key of ['globalWorkspacePath', 'hostManifest', 'home']) assert.ok(isAbsolute(deployment[key] ?? ''), `Missing absolute deployment.${key}`);
+  for (const key of ['globalWorkspacePath', 'home', ...(requireHost ? ['hostManifest'] : [])]) assert.ok(isAbsolute(deployment[key] ?? ''), `Missing absolute deployment.${key}`);
   assert.ok(deployment.profiles?.web, 'deployment.profiles.web is required');
   for (const [name, profile] of Object.entries(deployment.profiles)) {
     assert.match(name, /^[a-zA-Z0-9_-]+$/, 'Invalid deployment profile');
@@ -200,10 +204,11 @@ async function installDeclared(deployment, globalArguments, execute) {
  */
 export async function rollbackMachine(machinePath, backup, dependencies = {}) {
   const machine = readYaml(machinePath);
-  machine.deployment = normalizeDeployment(machine.deployment, dependencies.discovery);
-  const deployment = validateDeployment(machine.deployment);
+  const { installedVersion, deployment: savedDeployment } = json(join(backup, 'runtime.json'));
+  // New backups preserve resolved locations; older backups can discover paths without DSH installed.
+  const deployment = validateDeployment(savedDeployment ?? normalizeDeployment(machine.deployment,
+    { ...dependencies.discovery, discoverHost: false }), { requireHost: false });
   const files = json(join(backup, 'files.json'));
-  const { installedVersion } = json(join(backup, 'runtime.json'));
   for (const [index, path] of files.entries()) {
     const saved = join(backup, String(index));
     if (existsSync(saved)) copyFileSync(saved, path);
@@ -211,7 +216,7 @@ export async function rollbackMachine(machinePath, backup, dependencies = {}) {
   }
   const generatedDir = dependencies.generatedDir ?? join(root, 'generated');
   const execute = dependencies.runStep ?? ((argv, cwd, env) => runStep(argv, cwd, env, { logDir: generatedDir }));
-  await installDeclared(deployment, globalInstallArguments(deployment, installedVersion), execute);
+  await installDeclared(deployment, globalInstallArguments(deployment, installedVersion, { recovery: true }), execute);
   return { backup, restoredFiles: files.length, runtimeVersion: installedVersion, activation: 'rolled-back; start the Host and verify it' };
 }
 
@@ -271,7 +276,9 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   for (const [index, path] of backupFiles.entries()) if (existsSync(path)) copyFileSync(path, join(backup, String(index)));
   writeFileSync(join(backup, 'files.json'), JSON.stringify(backupFiles), { mode: 0o600 });
   const installedVersion = preview.runtime?.installedVersion ?? json(resolveInstalledHost(deployment)).version;
-  writeFileSync(join(backup, 'runtime.json'), JSON.stringify({ installedVersion }), { mode: 0o600 });
+  writeFileSync(join(backup, 'runtime.json'), JSON.stringify({ installedVersion, deployment }), { mode: 0o600 });
+  // Report a usable backup before mutation so an external timeout can still recover.
+  console.error(`[apply] backup ready: ${backup}`);
   const execute = dependencies.runStep ?? ((argv, cwd, env) => runStep(argv, cwd, env, { logDir: generatedDir }));
   try {
     if (needsInstall) {

@@ -259,6 +259,50 @@ test('apply backs up manifests and lockfiles; a second aligned apply does no ins
   assert.equal(readYaml(machine.deployment.profiles.web.packagePath).dependencies['live-profile-plugin'], '4.0.0');
 });
 
+test('apply announces a complete backup before changing installation files', async t => {
+  const { machine, machinePath } = fixture(t);
+  const original = read(machine.deployment.globalWorkspacePath);
+  let announced;
+  t.mock.method(console, 'error', message => {
+    if (!message.startsWith('[apply] backup ready: ')) return;
+    announced = message.slice('[apply] backup ready: '.length);
+    const runtime = JSON.parse(read(join(announced, 'runtime.json')));
+    assert.equal(runtime.installedVersion, '0.1.7-rc.2');
+    assert.equal(runtime.deployment.globalWorkspacePath, machine.deployment.globalWorkspacePath);
+    assert.ok(JSON.parse(read(join(announced, 'files.json'))).length > 0);
+    assert.equal(read(machine.deployment.globalWorkspacePath), original);
+  });
+  const result = await updateMachine(machinePath, 'backup-ready', true, {
+    catalog, doctor: healthy, runStep: () => assert.ok(announced, 'installer ran before backup was announced'),
+  });
+  assert.equal(result.backup, announced);
+});
+
+for (const legacy of [false, true]) {
+  test('rollback recovers a missing global DSH without installed-package discovery; legacy=' + legacy, async t => {
+    const { machine, machinePath } = fixture(t);
+    const original = read(machine.deployment.globalWorkspacePath);
+    const applied = await updateMachine(machinePath, 'missing-runtime', true, { catalog, doctor: healthy, runStep: () => {} });
+    if (legacy) {
+      const runtimePath = join(applied.backup, 'runtime.json');
+      writeJson(runtimePath, { installedVersion: JSON.parse(read(runtimePath)).installedVersion });
+    }
+    rmSync(machine.deployment.hostManifest);
+    delete machine.deployment.hostManifest;
+    writeJson(machinePath, machine);
+    const calls = [];
+    await rollbackMachine(machinePath, applied.backup, {
+      discovery: { query: () => assert.fail('rollback must not require a currently installed DSH') },
+      runStep: (argv, cwd) => {
+        assert.equal(read(machine.deployment.globalWorkspacePath), original, 'restore declarations before reinstall');
+        calls.push({ argv, cwd });
+      },
+    });
+    assert.ok(calls[0].argv.includes('@deepseek-ai/dsh@0.1.7-rc.2'));
+    assert.equal(calls.length, 2);
+  });
+}
+
 test('rollback restores the apply backup, removes files that apply created and reinstalls the recorded runtime', async t => {
   const { machine, machinePath, home } = fixture(t);
   const lock = join(home, 'profiles/web/pnpm-lock.yaml');
