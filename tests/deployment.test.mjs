@@ -569,3 +569,25 @@ test('CLI accepts apply only for update and local tarballs only for test', () =>
   assert.throws(() => parseCommandArguments(['doctor', '--machine', 'server', '--apply']));
   assert.throws(() => parseCommandArguments(['update', '--machine', 'server', '--tarball', 'plugin=/example/plugin.tgz']));
 });
+test('apply keeps hand-edited rows, removes retired ids and stays idempotent', async t => {
+  const { directory, home, machine, machinePath } = fixture(t);
+  const options = { catalog, doctor: healthy, runStep: () => {} };
+  await updateMachine(machinePath, 'preserve-baseline', true, options);
+  const webPatch = join(home, 'profiles/web/cordis.patch.yml');
+  writeFileSync(webPatch, read(webPatch).replace(/\s+$/, '') + '\n- id: picked-in-ui\n  config:\n    value: 1\n- id: stale-row\n  disabled: true\n');
+  machine.rowOps = { web: { retire: ['stale-row'] } };
+  writeJson(machinePath, machine);
+  const preview = await updateMachine(machinePath, 'preserve-preview', false, options);
+  const file = preview.files.find(row => row.path === webPatch);
+  assert.deepEqual(file.preserved, ['picked-in-ui']);
+  assert.deepEqual(file.retired, ['stale-row']);
+  assert.match(formatUpdate(selectReport(preview)), /保留行/);
+  const applied = await updateMachine(machinePath, 'preserve-apply', true, options);
+  assert.ok(!applied.noOp);
+  const text = read(webPatch);
+  assert.match(text, /id: picked-in-ui/);
+  assert.doesNotMatch(text, /id: stale-row/);
+  const stable = await updateMachine(machinePath, 'preserve-stable', true, options);
+  assert.equal(stable.noOp, true);
+  assert.equal(read(webPatch), text);
+});

@@ -1,0 +1,109 @@
+# Shared pi-ai provider catalog.
+# Pure data: no !!js expressions here; credentials are referenced by apiKeyEnv.
+# A machine adds a provider, overrides its top-level keys (set) or removes it in
+# machine.yaml; a nested value such as models replaces the shared value whole.
+# baseURL is machine-owned: each machine supplies it under providers.set (private input).
+providers:
+  klaude-openai:
+    compat:
+      supportsStrictMode: true
+      supportsToolSearch: true
+      systemPromptFormat: instructions
+    displayName: Klaude OpenAI Gateway
+    apiKeyEnv: KLAUDE_OPENAI_API_KEY
+    retryPolicy:
+      mode: normal
+      maxRetries: 5
+    errorCodeRules:
+      - match: "^upstream_error:"
+        code: SERVER
+    api: openai-responses
+    models:
+      - id: gpt-6-astra
+        name: GPT-6 Astra
+        contextWindow: 500000
+        maxTokens: 32000
+        input:
+          - text
+          - image
+        reasoningEfforts:
+          low: low
+          medium: medium
+          high: high
+          xhigh: xhigh
+          max: max
+      - id: gpt-6-luna
+        name: GPT-6 Luna
+        contextWindow: 272000
+        maxTokens: 32000
+        input:
+          - text
+          - image
+        reasoningEfforts:
+          low: low
+          medium: medium
+          high: high
+          xhigh: xhigh
+          max: max
+      - id: gpt-6.1-sol
+        name: GPT-6.1 Sol
+        contextWindow: 500000
+        maxTokens: 32000
+        input:
+          - text
+          - image
+        reasoningEfforts:
+          low: low
+          medium: medium
+          high: high
+          xhigh: xhigh
+          max: max
+  klaude-cl:
+    apiKeyEnv: KLAUDE_CL_API_KEY
+    errorCodeRules:
+      - match: "^upstream_error:"
+        code: SERVER
+    api: openai-responses
+    compat:
+      supportsToolSearch: true
+      systemPromptFormat: instructions
+    models:
+      - id: claude-haiku-5-5
+        name: Claude Haiku 5.5
+        contextWindow: 500000
+        maxTokens: 32000
+        input:
+          - text
+          - image
+        reasoningEfforts:
+          low: low
+          medium: medium
+          high: high
+          xhigh: xhigh
+          max: max
+      - id: claude-opus-5-5
+        name: Claude Opus 5.5
+        contextWindow: 500000
+        maxTokens: 32000
+        input:
+          - text
+          - image
+        reasoningEfforts:
+          low: low
+          medium: medium
+          high: high
+          xhigh: xhigh
+          max: max
+      - id: claude-sonnet-5-5
+        name: Claude Sonnet 5.5
+        contextWindow: 500000
+        maxTokens: 32000
+        input:
+          - text
+          - image
+        reasoningEfforts:
+          low: low
+          medium: medium
+          high: high
+          xhigh: xhigh
+          max: max

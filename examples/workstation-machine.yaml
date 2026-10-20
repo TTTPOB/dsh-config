@@ -4,6 +4,23 @@ features:
   activeContext: false
   promptOverlay: false
 overrides: {}
+providers:
+  set:
+    klaude-openai:
+      baseURL: https://klaude.example.invalid/v1
+    klaude-cl:
+      baseURL: https://klaude.example.invalid
+mcp:
+  siyuan:
+    url: https://siyuan.example.invalid/mcp
+    headersFile: /path/to/credentials/siyuan-headers.json
+  academicSource:
+    url: https://academic-source.example.invalid/mcp
+    apiKeyFile: /path/to/credentials/academic-source-key
+subagentModels:
+  - provider: deepseek-official
+    model: deepseek-flash
+
 homePrivate: |
   - insert:
       - id: mcp-playwright

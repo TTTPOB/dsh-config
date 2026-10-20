@@ -32,6 +32,7 @@ node scripts/dsh-config.mjs update --machine workstation
 | 位置 | 内容 |
 |---|---|
 | [shared/defaults.yaml](shared/defaults.yaml) | 共用默认配置 |
+| [shared/providers.yaml](shared/providers.yaml) | 三机共用的 pi-ai provider 目录（纯数据，无 `!!js`） |
 | [shared/dependencies.yaml](shared/dependencies.yaml) | 唯一选定版本、来源策略、安装归属和缺资产原因 |
 | `templates/` | home/Web patch 文本模板；安装声明由脚本直接序列化 |
 | `private/machines/<name>/machine.yaml` | 各机私有差异与部署位置 |
@@ -41,7 +42,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 `private/`、`generated/` 和真实参数均被 Git 忽略。公开示例没有真实端点或凭据；新机器从示例开始，私有参数通过私有通道传递。会话、数据库、索引、缓存和 storages 不同步。
 
-机器参数提供 `features`、`overrides.defaultModel`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。机器专属 provider／MCP 完整行保留为私有输入，不进行通用深合并。
+机器参数提供 `features`、`mcp`、`subagentModels`、`providers`、`rowOps`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。对话默认模型不在机器参数里：它属于会话与界面的状态。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。provider 目录由 [shared/providers.yaml](shared/providers.yaml) 共用，机器只写 add／set／remove 差异；专属 MCP 行仍保留为私有输入，不进行通用深合并。
 
 ### 本地 JS 插件
 
@@ -52,6 +53,20 @@ node scripts/dsh-config.mjs update --machine workstation
 ### 可视化插件
 
 Web profile 统一启用 `@nagi-ovo/dsh-visualize`，使用依赖清单中的 npm 精确版本；其他 profile 不自动安装。插件由共用 Web patch 激活，不重复加载 bundle。OpenUI 不再由配置安装或激活，已安装的旧包在维护窗口通过 pnpm 卸载。
+
+### 配置归属：模板、界面与机器
+
+DSH 的设置页只能写带 `.volatile()` 的字段，并写进 **profile patch**（`profiles/<name>/cordis.patch.yml`）。因此本仓库遵循一条硬规则：**模板绝不渲染界面拥有的字段**，否则下一次 `update --apply` 会静默覆盖界面里的选择。
+
+| 归属 | 内容 | 落点 |
+|---|---|---|
+| 模板独占 | 插件行、preset 定义、compaction、MCP 清单、`llm-pi-ai` providers、`llm-deepseek` 模型目录、`agent-loop`、`subagent-model-selection-settings` | `$DSH_HOME/cordis.patch.yml` |
+| 界面独占 | `agent-default-model`、`agent-preset-registry.selectedDefault`、`ui-conversation.busyEnter`、`ui-settings-general.welcomeNoticeVersion`、`ui-chat`、`ui-theme`、`locale` 等 | profile patch，由界面写入 |
+| 机器参数 | 共享目录的差异：provider 增删、MCP 端点与凭证路径、允许的子代理模型 | `private/machines/<name>/machine.yaml` |
+
+`llm-pi-ai` 与 `llm-deepseek` 位于 base bundle，放进 home patch 对每个 profile 都成立。Models 页仍可管理凭据（写入 `$DSH_HOME/.credentials.yaml`，不在 patch 里），但已由模板声明的 provider 与模型目录是只读的；要改就改模板。
+
+`update --apply` 写 patch 时是**保守覆盖**：先写模板产生的行，再把 live 文件里模板不产生的行原样追加保留（界面新增的行、手工实验的行因此不会丢），最后删除 `rowOps.<layer>.retire` 列出的行。`retire` 是唯一删除锚点：把行从模板删掉只会让它变成"保留行"，必须显式 retire 才会真正消失；把行从 profile 搬到 home 也必须 retire 源层副本。预览会列出保留行与生效的移除锚点。
 
 ### 按机器禁用 preset 插件行
 

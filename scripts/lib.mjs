@@ -20,6 +20,12 @@ const jsTag = {
   resolve: expression => ({ __jsExpr: expression }),
 };
 
+// Editing documents must round-trip expressions as their source text, not as marker objects.
+const rawJsTag = {
+  tag: jsTag.tag,
+  resolve: expression => expression,
+};
+
 // Expressions are data, never executable code in this repository.
 export function parseYaml(text) {
   const document = YAML.parseDocument(text, { customTags: [jsTag] });
@@ -82,6 +88,32 @@ export function validateMachine(machine) {
   assert.ok(machine.overrides && typeof machine.overrides === 'object', 'Missing overrides');
   validatePresetRows(machine.overrides.presetRows);
   planLocalPlugins(machine.localPlugins);
+  if (machine.rowOps !== undefined) {
+    assert.ok(machine.rowOps && typeof machine.rowOps === 'object' && !Array.isArray(machine.rowOps), 'rowOps must be an object');
+    for (const [layer, ops] of Object.entries(machine.rowOps)) {
+      assert.ok(['home', 'web'].includes(layer), `Invalid rowOps layer: ${layer}`);
+      assert.ok(ops && typeof ops === 'object' && !Array.isArray(ops), `rowOps.${layer} must be an object`);
+      for (const [key, ids] of Object.entries(ops)) {
+        assert.ok(['retire'].includes(key), `Invalid rowOps op: ${key}`);
+        assert.ok(Array.isArray(ids) && ids.every(id => typeof id === 'string' && id.length), `rowOps.${layer}.${key} must be row ids`);
+      }
+    }
+  }
+  for (const [key, fields] of Object.entries({ siyuan: ['url', 'headersFile'], academicSource: ['url', 'apiKeyFile'] })) {
+    for (const field of fields) {
+      assert.ok(typeof machine.mcp?.[key]?.[field] === 'string' && machine.mcp[key][field].length, `Missing machine mcp input: ${key}.${field}`);
+    }
+  }
+  assert.ok(Array.isArray(machine.subagentModels) && machine.subagentModels.length
+    && machine.subagentModels.every(route => typeof route.provider === 'string' && route.provider.length && typeof route.model === 'string' && route.model.length),
+  'subagentModels requires provider/model routes');
+  if (machine.providers !== undefined) {
+    assert.ok(machine.providers && typeof machine.providers === 'object' && !Array.isArray(machine.providers), 'providers must be an object');
+    for (const [key, value] of Object.entries(machine.providers)) {
+      assert.ok(['add', 'set', 'remove'].includes(key), `Invalid providers op: ${key}`);
+      assert.ok(key === 'remove' ? Array.isArray(value) : value && typeof value === 'object', `Invalid providers.${key}`);
+    }
+  }
   for (const key of ['homePrivate', 'webPrivate']) {
     assert.equal(typeof machine[key], 'string', `Missing literal YAML: ${key}`);
     assert.ok(Array.isArray(parseYaml(machine[key])), `Expected patch array: ${key}`);
@@ -117,6 +149,91 @@ export function validatePatch(text) {
   return rows;
 }
 
+// A patch row's identity list: insert rows carry one id per entry.
+function rowIdentity(row) {
+  if (Array.isArray(row?.insert)) return row.insert.map(entry => entry?.id).filter(id => typeof id === 'string');
+  return typeof row?.id === 'string' ? [row.id] : [];
+}
+
+/** Shared provider catalog plus this machine's deltas; whole-object replacement only. */
+export function resolveProviders(sharedProviders, deltas = {}) {
+  const providers = structuredClone(sharedProviders ?? {});
+  for (const name of deltas.remove ?? []) {
+    assert.ok(providers[name] !== undefined, 'providers.remove names an unknown provider: ' + name);
+    delete providers[name];
+  }
+  for (const [name, value] of Object.entries(deltas.set ?? {})) {
+    assert.ok(providers[name] !== undefined, 'providers.set names an unknown provider: ' + name);
+    // Top-level keys only: a nested value such as models replaces the shared value whole.
+    providers[name] = { ...providers[name], ...structuredClone(value) };
+  }
+  for (const [name, value] of Object.entries(deltas.add ?? {})) {
+    assert.ok(providers[name] === undefined, 'providers.add duplicates a shared provider: ' + name);
+    providers[name] = structuredClone(value);
+  }
+  return providers;
+}
+
+/** Indent a serialized YAML block so it nests under a template node. */
+export function indentYaml(value, spaces) {
+  const pad = ' '.repeat(spaces);
+  return YAML.stringify(value).trimEnd().split('\n').map(line => line ? pad + line : line).join('\n');
+}
+
+/** Remove top-level rows whose identity is listed, preserving expression tags. */
+export function dropRows(text, ids) {
+  if (!ids?.length) return text;
+  const document = YAML.parseDocument(text, { customTags: [rawJsTag] });
+  assert.ok(!document.errors.length && YAML.isSeq(document.contents), 'Invalid patch YAML');
+  const drop = new Set(ids);
+  document.contents.items = document.contents.items.filter(row => !rowIdentity(row.toJSON()).some(id => drop.has(id)));
+  return document.toString();
+}
+
+/**
+ * Append live rows the template does not produce, so hand-edited or UI-owned rows survive
+ * an apply. Row ids listed in retire are removed instead. Returns the ids it kept and removed.
+ */
+export function preserveLiveRows(renderedText, liveText, retire = []) {
+  const rendered = parseYaml(renderedText);
+  assert.ok(Array.isArray(rendered), 'Expected rendered patch list');
+  const renderedIds = new Set(rendered.flatMap(rowIdentity));
+  for (const id of retire) assert.ok(!renderedIds.has(id), 'retire names a rendered row: ' + id);
+  if (liveText === undefined || liveText.trim() === '') return { text: renderedText, preserved: [], retired: [] };
+  const live = YAML.parseDocument(liveText, { customTags: [rawJsTag] });
+  if (live.errors.length) throw new Error('Invalid live patch YAML');
+  if (!YAML.isSeq(live.contents)) return { text: renderedText, preserved: [], retired: [] };
+  const retired = [];
+  const preserved = [];
+  const kept = [];
+  for (const row of live.contents.items) {
+    if (!YAML.isMap(row)) { kept.push(row); continue; }
+    const id = row.get('id');
+    if (id !== undefined && !row.has('insert')) {
+      if (retire.includes(id)) { retired.push(id); continue; }
+      if (renderedIds.has(id)) continue;
+      preserved.push(id); kept.push(row); continue;
+    }
+    if (YAML.isSeq(row.get('insert'))) {
+      if (id !== undefined && retire.includes(id)) { retired.push(id); continue; }
+      const entries = row.get('insert');
+      entries.items = entries.items.filter(entry => {
+        const entryId = YAML.isMap(entry) ? entry.get('id') : undefined;
+        if (entryId === undefined) return true;
+        if (retire.includes(entryId)) { retired.push(entryId); return false; }
+        if (renderedIds.has(entryId)) return false;
+        preserved.push(entryId); return true;
+      });
+      if (entries.items.length) kept.push(row);
+      continue;
+    }
+    kept.push(row);
+  }
+  live.contents.items = kept;
+  const text = kept.length ? renderedText.replace(/\s+$/, '') + '\n' + live.toString() : renderedText;
+  return { text, preserved, retired };
+}
+
 export function renderMachine(machinePath, label, catalog, { stage = true, generatedDir } = {}) {
   assert.match(label, /^[a-zA-Z0-9_-]+$/, 'Invalid output label');
   const machine = validateMachine(readYaml(machinePath));
@@ -124,17 +241,15 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
   machine.installation = { globalWorkspace: targets.globalWorkspace, webPackage: targets.profiles.web };
   const output = join(generatedDir ?? join(root, 'generated'), label);
   const shared = readYaml(join(root, 'shared/defaults.yaml'));
-  const defaultModel = machine.overrides.defaultModel ?? shared.defaults.model;
-  for (const key of ['provider', 'model', 'reasoningEffort']) {
-    assert.equal(typeof defaultModel[key], 'string', `Missing model field: ${key}`);
-  }
   for (const [key, value] of Object.entries(machine.installation)) {
     assert.ok(value && typeof value === 'object' && !Array.isArray(value), `Missing installation object: ${key}`);
   }
-  const templateData = { shared, machine, effective: { defaultModel } };
+  const providers = resolveProviders(readYaml(join(root, 'shared/providers.yaml')).providers, machine.providers);
+  const templateData = { shared, machine, providersYaml: indentYaml(providers, 6) };
+  const rowOps = machine.rowOps ?? {};
   const rendered = {
-    home: applyPresetRowOverrides(templates.render('home.patch.yml.njk', templateData), machine.overrides.presetRows),
-    web: templates.render('web.patch.yml.njk', templateData),
+    home: dropRows(applyPresetRowOverrides(templates.render('home.patch.yml.njk', templateData), machine.overrides.presetRows), rowOps.home?.retire),
+    web: dropRows(templates.render('web.patch.yml.njk', templateData), rowOps.web?.retire),
     globalWorkspace: JSON.stringify(machine.installation.globalWorkspace, null, 2) + '\n',
     webPackage: JSON.stringify(machine.installation.webPackage, null, 2) + '\n',
   };

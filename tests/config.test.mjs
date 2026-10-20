@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { root, parseYaml, readYaml, validateMachine, validatePatch, renderMachine, resolveDependencyTargets, parseCommandArguments, resolveMachineArgument, resolvesFromProfile } from '../scripts/lib.mjs';
+import { root, parseYaml, readYaml, validateMachine, validatePatch, renderMachine, resolveDependencyTargets, parseCommandArguments, resolveMachineArgument, resolvesFromProfile, preserveLiveRows } from '../scripts/lib.mjs';
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-config-test-'));
@@ -169,14 +169,14 @@ test('keeps template-like text in literal machine rows without evaluating it', t
   const machine = readYaml(example);
   const literal = '[[ secret ]] [% if true %] [# comment #] {{cwd}} <>& "quoted"';
   machine.homePrivate = `- id: x\n  config:\n    value: ${JSON.stringify(literal)}\n`;
-  machine.overrides.defaultModel = { provider: literal, model: literal, reasoningEffort: literal };
   assert.equal(validateMachine(machine), machine);
   const directory = fixture(t);
   const path = join(directory, 'literal-delimiters.yaml');
   writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
   const { rendered } = renderMachine(path, 'test-literal-delimiters', undefined, { generatedDir: directory });
   assert.equal(validatePatch(rendered.home).find(row => row.entry.id === 'x').entry.config.value, literal);
-  assert.deepEqual(validatePatch(rendered.web).find(row => row.entry.id === 'agent-default-model').entry.config, machine.overrides.defaultModel);
+  // The conversation default belongs to the UI model picker; the template no longer pins it.
+  assert.ok(!validatePatch(rendered.web).some(row => row.entry.id === 'agent-default-model'));
 });
 
 test('rejects duplicate ids and expressions in metadata', () => {
@@ -428,4 +428,61 @@ test('check renders current input without requiring or creating staged patches',
   machine.features.sessionTools = 'invalid-current-input';
   writeFileSync(path, JSON.stringify(machine));
   assert.equal(run().status, 1);
+});
+test('UI-owned configuration is never rendered, so live picks survive an apply', t => {
+  const { rendered } = renderMachine(example, 'ui-owned', undefined, { generatedDir: fixture(t) });
+  const web = validatePatch(rendered.web).map(row => row.entry);
+  for (const id of ['agent-default-model', 'ui-settings-general', 'ui-conversation', 'ui-chat']) {
+    assert.ok(!web.some(row => row.id === id), 'UI-owned row is rendered: ' + id);
+  }
+  const registry = web.find(row => row.id === 'agent-preset-registry');
+  assert.equal(registry.config.selectedDefault, undefined);
+  assert.equal(registry.config.default, 'standard-ptc');
+});
+
+test('shared provider catalog and home-owned rows render once', t => {
+  const machine = readYaml(example);
+  machine.providers = { add: { extra: { api: 'openai-responses', baseURL: 'https://extra.example.invalid/v1', models: [{ id: 'm', name: 'M', contextWindow: 1000, maxTokens: 100 }] } } };
+  const directory = fixture(t);
+  const path = join(directory, 'providers.yaml');
+  writeFileSync(path, JSON.stringify(machine));
+  const { rendered } = renderMachine(path, 'providers', undefined, { generatedDir: directory });
+  const home = validatePatch(rendered.home).map(row => row.entry);
+  const pi = home.find(row => row.id === 'llm-pi-ai');
+  assert.deepEqual(Object.keys(pi.config.providers).sort(), ['extra', 'klaude-cl', 'klaude-openai']);
+  const deepseek = home.find(row => row.id === 'llm-deepseek');
+  assert.deepEqual(deepseek.config.models, [{ id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash', contextWindow: 1000000, inputModalities: ['text', 'image'], systemPromptUpdate: 'in-history', toolUpdate: 'addition-only' }]);
+  assert.equal(deepseek.config.models[0].imagePixelBudget, undefined);
+  assert.equal(deepseek.config.models[0].imageMaxBytes, undefined);
+  assert.ok(!validatePatch(rendered.web).some(row => row.id === 'llm-pi-ai' || row.id === 'llm-deepseek'));
+});
+
+test('retire removes a rendered row and ignores ids the template does not render', t => {
+  const machine = readYaml(example);
+  const directory = fixture(t);
+  const path = join(directory, 'retire.yaml');
+  machine.rowOps = { web: { retire: ['agent-preset-registry', 'already-gone'] } };
+  writeFileSync(path, JSON.stringify(machine));
+  const { rendered } = renderMachine(path, 'retire', undefined, { generatedDir: directory });
+  assert.ok(!validatePatch(rendered.web).some(row => row.entry.id === 'agent-preset-registry'));
+  assert.throws(() => validateMachine({ ...machine, rowOps: { web: { remove: ['x'] } } }));
+});
+
+test('apply keeps rows the template does not produce and drops retired ids', () => {
+  const rendered = ['- id: a', '  config:', '    x: 1', ''].join('\n');
+  const live = ['- id: a', '  config:', '    x: 1', '- id: picked', '  config:', '    source: ui', '- id: stale', '  disabled: true', ''].join('\n');
+  const first = preserveLiveRows(rendered, live, ['stale']);
+  assert.deepEqual(first.preserved, ['picked']);
+  assert.deepEqual(first.retired, ['stale']);
+  assert.deepEqual(validatePatch(first.text).map(row => row.entry.id), ['a', 'picked']);
+  // A second pass is stable: the preserved row is already a live row the template does not render.
+  assert.equal(preserveLiveRows(rendered, first.text, ['stale']).text, first.text);
+  // Without a live file nothing is invented.
+  assert.equal(preserveLiveRows(rendered, undefined, []).text, rendered);
+});
+
+test('preserved rows keep their expressions verbatim', () => {
+  const result = preserveLiveRows('- id: a\n', '- id: kept\n  config:\n    path: !!js dshHomePath("x")\n', []);
+  assert.match(result.text, /!!js dshHomePath\("x"\)/);
+  assert.deepEqual(result.preserved, ['kept']);
 });

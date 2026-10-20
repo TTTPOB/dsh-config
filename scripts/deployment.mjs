@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import YAML from 'yaml';
 import { summarizeFiles, formatDoctor } from './report.mjs';
-import { root, readYaml, readDependencyCatalog, resolveDependencyTargets, renderMachine, validatePatch, resolvesFromProfile } from './lib.mjs';
+import { root, readYaml, readDependencyCatalog, resolveDependencyTargets, renderMachine, validatePatch, resolvesFromProfile, preserveLiveRows } from './lib.mjs';
 
 import { normalizeDeployment } from './deployment-paths.mjs';
 export { normalizeDeployment } from './deployment-paths.mjs';
@@ -252,13 +252,20 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
       return [deployment.profiles[name].packagePath, JSON.stringify(manifest, null, 2) + '\n'];
     }),
   ];
+  // A rendered patch owns its rows; anything else already in the live file is kept,
+  // so hand-edited and UI-owned rows survive an apply. retire ids are removed instead.
   const patches = [
-    [deployment.homePatchPath ?? join(deployment.home, 'cordis.patch.yml'), rendered.home],
-    [deployment.profiles.web.patchPath ?? join(dirname(deployment.profiles.web.packagePath), 'cordis.patch.yml'), rendered.web],
-  ];
-  const plannedPaths = [...manifests, ...patches, ...localPlugins.map(file => [file.path])].map(([path]) => path);
+    [deployment.homePatchPath ?? join(deployment.home, 'cordis.patch.yml'), rendered.home, machine.rowOps?.home?.retire ?? []],
+    [deployment.profiles.web.patchPath ?? join(dirname(deployment.profiles.web.packagePath), 'cordis.patch.yml'), rendered.web, machine.rowOps?.web?.retire ?? []],
+  ].map(([path, contents, retire]) => {
+    const live = existsSync(path) ? readFileSync(path, 'utf8') : undefined;
+    const { text, preserved, retired } = preserveLiveRows(contents, live, retire);
+    validatePatch(text);
+    return { path, text, preserved, retired };
+  });
+  const plannedPaths = [...manifests, ...patches.map(patch => [patch.path]), ...localPlugins.map(file => [file.path])].map(([path]) => path);
   assert.equal(new Set(plannedPaths).size, plannedPaths.length, 'Duplicate deployment file target');
-  preview.files = summarizeFiles(manifests, patches, localPlugins);
+  preview.files = summarizeFiles(manifests, patches.map(patch => [patch.path, patch.text, { preserved: patch.preserved, retired: patch.retired }]), localPlugins);
   if (!apply) return preview;
   const inspect = dependencies.doctor ?? doctor;
   console.error('[apply] pre-install doctor started');
@@ -273,7 +280,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   const generatedDir = dependencies.generatedDir ?? join(root, 'generated');
   mkdirSync(generatedDir, { recursive: true, mode: 0o700 });
   const backup = mkdtempSync(join(generatedDir, `${label}-backup-`));
-  const files = [...manifests, ...patches, ...localPlugins.map(file => [file.path, file.contents])];
+  const files = [...manifests, ...patches.map(patch => [patch.path, patch.text]), ...localPlugins.map(file => [file.path, file.contents])];
   const backupFiles = [...new Set([...files.map(([path]) => path),
     ...manifests.map(([path]) => join(dirname(path), 'pnpm-lock.yaml')),
     join(dirname(deployment.globalWorkspacePath), 'package.json'),
@@ -310,7 +317,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
       writeFileSync(path, contents, { mode: 0o600 });
     }
-    for (const [path, contents] of patches) writeFileSync(path, contents, { mode: 0o600 });
+    for (const { path, text } of patches) writeFileSync(path, text, { mode: 0o600 });
   } catch (error) {
     throw new Error(`${error.message}; backup retained: ${backup}. Installation may have changed; Host was not started or stopped.`);
   }

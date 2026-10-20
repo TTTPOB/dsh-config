@@ -1,9 +1,6 @@
 schemaVersion: 1
 defaults:
-  model:
-    provider: klaude-openai
-    model: gpt-6.1-sol
-    reasoningEffort: medium
+  # The default conversation model belongs to the UI model picker and is never rendered.
   sessionTitle:
     provider: deepseek-official
     model: deepseek-flash

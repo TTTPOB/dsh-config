@@ -71,6 +71,38 @@
         disposalTimeoutMs: 5000
     - id: ui-agent-team
       name: "@deepseek-ai/dsh-experimental-client-ui-agent-team"
+- id: llm-pi-ai
+  config:
+    providers:
+[[ providersYaml ]]
+- id: llm-deepseek
+  config:
+    models:
+      - id: deepseek-flash
+        name: DeepSeek-V4.1-Flash
+        contextWindow: 1000000
+        inputModalities:
+          - text
+          - image
+        systemPromptUpdate: in-history
+        toolUpdate: addition-only
+- id: agent-loop
+  config:
+    maxParallelToolCalls: 2
+- id: subagent-model-selection-settings
+  config:
+    enabled: true
+    allowedModels: [[ machine.subagentModels | dump ]]
+- insert:
+    - id: mcp-siyuan
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: siyuan
+        transport: streamable-http
+        url: [[ machine.mcp.siyuan.url | quote ]]
+        headers: !!js JSON.parse(process.getBuiltinModule('fs').readFileSync([[ machine.mcp.siyuan.headersFile | quote ]], 'utf8'))
+        toolCallTimeoutMs: 60000
+        failOnStartupError: false
 [% macro preset(entryId, presetId, name, description, order, overlay, promptSections, team=false) %]
 - insert:
     - id: [[ entryId | quote ]]

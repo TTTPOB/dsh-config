@@ -9,13 +9,17 @@ export function summarizeFiles(manifests, patches, localPlugins = []) {
       changed: !existsSync(path) || !isDeepStrictEqual(readYaml(path), parseYaml(contents)) })),
     ...localPlugins.map(({ path, source, contents }) => ({ path, source, kind: 'local-plugin',
       changed: !existsSync(path) || readFileSync(path, 'utf8') !== contents })),
-    ...patches.map(([path, contents]) => {
+    ...patches.map(([path, contents, meta]) => {
       const previous = existsSync(path) ? readFileSync(path, 'utf8') : '';
-      const changed = previous !== contents;
-      if (!changed) return { path, kind: 'configuration', changed };
+      // Compare meaning, not formatting: preserved rows are re-emitted by the YAML writer.
+      const changed = !isDeepStrictEqual(parseYaml(previous || '[]'), parseYaml(contents));
+      const preserved = meta?.preserved ?? [];
+      const retired = meta?.retired ?? [];
+      const extra = { ...(preserved.length ? { preserved } : {}), ...(retired.length ? { retired } : {}) };
+      if (!changed) return { path, kind: 'configuration', changed, ...extra };
       const before = new Map(validatePatch(previous || '[]').map(row => [row.entry.id, row]));
       const after = new Map(validatePatch(contents).map(row => [row.entry.id, row]));
-      return { path, kind: 'configuration', changed,
+      return { path, kind: 'configuration', changed, ...extra,
         added: [...after.keys()].filter(id => !before.has(id)),
         removed: [...before.keys()].filter(id => !after.has(id)),
         modified: [...after.keys()].filter(id => before.has(id) && !isDeepStrictEqual(before.get(id), after.get(id))),
@@ -68,6 +72,8 @@ export function formatUpdate(report, verbose = false) {
     if (file.kind === 'configuration' && !file.added.length && !file.removed.length && !file.modified.length) {
       lines.push(file.orderChanged ? '  行顺序变化' : '  仅文本格式变化');
     }
+    if (file.preserved?.length) lines.push('  保留行（模板不产生，原样留在文件中）: ' + file.preserved.join(', '));
+    if (file.retired?.length) lines.push('  移除锚点生效: ' + file.retired.join(', '));
   }
   for (const file of files.filter(row => row.planned)) lines.push('计划本地插件: ' + file.source + ' → ' + file.path);
   if (report.input === 'offline') lines.push('离线计划：与声明／快照比较，未检查本机安装与配置。');
