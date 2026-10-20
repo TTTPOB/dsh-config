@@ -29,7 +29,7 @@ test('Visualize is installed and activated once in Web only, replacing OpenUI', 
       webPackage: { dsh: { profile: { bundles: ['@nagi-ovo/dsh-visualize'] } } },
       profiles: { headless: {} },
     }, catalog);
-    assert.equal(target.profiles.web.dependencies[selected.package], selected.version);
+    assert.equal(target.profiles.web.dependencies[selected.package], selected.url ?? selected.version);
     assert.ok(!target.profiles.web.dsh.profile.bundles.includes(selected.package));
     assert.ok(!target.profiles.headless.dependencies[selected.package]);
   }
