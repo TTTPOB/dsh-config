@@ -116,8 +116,8 @@ packages:
     scope: profile
     patchOnly: true
     policy: release
-    version: 0.4.0
-    url: https://github.com/TTTPOB/dsh-progressive-tools/releases/download/v0.4.0/dsh-progressive-tools-0.4.0.tgz
+    version: 0.5.0
+    url: https://github.com/TTTPOB/dsh-progressive-tools/releases/download/v0.5.0/dsh-progressive-tools-0.5.0.tgz
   - package: dsh-session-tools
     scope: profile
     policy: release

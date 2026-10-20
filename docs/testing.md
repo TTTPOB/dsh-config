@@ -62,6 +62,8 @@ node --test tests/deployment-paths.test.mjs tests/deployment.test.mjs tests/conf
 
 ACP 配置回归使用[公开示例](<../examples/active-context-machine.yaml>)，检查每个生成 preset 的 Basic 行已禁用、ACP 在同一 isolation group、原生策略完整、默认提醒比例为最大上下文的 70%／65%、提醒 routes 为空。成品烟测由 ACP 源码仓库提供，使用 capture-capable Query 与 ACP tarball、仅安装 ACP 的 profile、干净 peer 布局和正式 Host resolver／Loader，直接以原文端点验证压缩；本地 tarball 只进入隔离测试，不写入正式来源。
 
+本地 ESM 插件另有[源模块 HTTP 测试](<../tests/siyuan-tools.test.mjs>)、[声明与渲染测试](<../tests/local-plugins.test.mjs>)及[部署回滚测试](<../tests/deployment.test.mjs>)。HTTP 测试向 loopback mock 上传真实 bytes、检查双端路由、凭据读取与 UA，并验证失败不重试；不访问真实思源。设置 DSH_CLI_PACKAGE 为已安装 CLI 的 manifest 绝对路径后，思源测试会复用该 runtime 的正式 Loader 加载临时复制模块，验证作用域注册及撤销，不启动日用 Host。未设置时明确 skip 此集成用例。
+
 ## 4. 定位失败
 
 | 现象 | 检查位置 |

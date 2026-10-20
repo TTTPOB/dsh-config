@@ -72,6 +72,7 @@ async function check(rows) {
     checked++;
   }
 }
-const { rendered } = renderMachine(machinePath, 'runtime-schema-check', undefined, { stage: false });
+const { rendered, localPlugins } = renderMachine(machinePath, 'runtime-schema-check', undefined, { stage: false });
+for (const file of localPlugins) sources[file.path] = file.source;
 await check([...validatePatch(rendered.home), ...validatePatch(rendered.web)].map(row => row.entry));
 console.log(`Runtime Config schemas passed: ${checked} rows, ${schemas.size} schemas; plugin activation is verified separately by profile smoke.`);

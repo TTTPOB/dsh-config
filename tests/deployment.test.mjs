@@ -81,6 +81,49 @@ test('live and offline previews select ACP from machine features without touchin
 
 const healthy = async () => ({ issues: [], blocked: 0 });
 
+test('local modules appear in both previews, apply without installation, and rollback restores or removes source', async t => {
+  const { directory, home, machine, machinePath } = fixture(t);
+  const options = { catalog, doctor: healthy, runStep: () => {} };
+  await updateMachine(machinePath, 'baseline', true, options);
+  const oldPatch = read(join(home, 'cordis.patch.yml'));
+  for (const existing of [true, false]) {
+    const modulePath = join(home, 'plugins', existing ? 'existing.mjs' : 'new.mjs');
+    mkdirSync(dirname(modulePath), { recursive: true });
+    if (existing) writeFileSync(modulePath, '// original module\n');
+    const endpoint = { baseURL: 'https://notes.example.invalid', headersFile: join(directory, 'unread-headers.json') };
+    machine.localPlugins = [{ id: 'siyuan-tools', module: 'siyuan-tools.mjs', modulePath, config: { self: endpoint, peer: endpoint } }];
+    writeJson(machinePath, machine);
+    for (const offline of [false, true]) {
+      const preview = await updateMachine(machinePath, 'module-preview', false, { catalog, offline });
+      const planned = preview.files.find(file => file.path === modulePath);
+      assert.equal(planned.kind, 'local-plugin');
+      assert.equal(planned.source, join(root, 'plugins/siyuan-tools.mjs'));
+      assert.equal(offline ? planned.planned : planned.changed, true);
+      assert.match(formatUpdate(selectReport(preview)), /本地插件/);
+      assert.equal(read(join(home, 'cordis.patch.yml')), oldPatch);
+      assert.equal(existsSync(modulePath), existing);
+      if (existing) assert.equal(read(modulePath), '// original module\n');
+    }
+    const applied = await updateMachine(machinePath, 'module-apply', true, { ...options, runStep: () => assert.fail('source-only apply must not install') });
+    assert.equal(read(modulePath), read(join(root, 'plugins/siyuan-tools.mjs')));
+    assert.ok(JSON.parse(read(join(applied.backup, 'files.json'))).includes(modulePath));
+    const noOp = await updateMachine(machinePath, 'module-noop', true, options);
+    assert.equal(noOp.noOp, true);
+    await rollbackMachine(machinePath, applied.backup, { runStep: () => {}, generatedDir: join(directory, 'generated') });
+    assert.equal(read(join(home, 'cordis.patch.yml')), oldPatch);
+    assert.equal(existsSync(modulePath), existing);
+    if (existing) assert.equal(read(modulePath), '// original module\n');
+  }
+});
+
+test('unknown local modules fail live and offline previews without creating output', async t => {
+  const { directory, machine, machinePath } = fixture(t);
+  machine.localPlugins = [{ id: 'missing', module: 'missing.mjs', modulePath: join(directory, 'missing.mjs'), config: {} }];
+  writeJson(machinePath, machine);
+  for (const offline of [true, false]) await assert.rejects(updateMachine(machinePath, 'unknown-module', false, { catalog, offline }), /Unknown or missing local plugin module/);
+  assert.ok(!existsSync(join(directory, 'generated')));
+});
+
 test('managed runtime build policy converges without deleting unrelated approvals', () => {
   const installation = { globalWorkspace: { allowBuilds: { unrelated: false, koffi: false } } };
   const selected = { ...catalog, allowBuilds: { koffi: true, '@deepseek-ai/dsh-subprocess-local': true } };

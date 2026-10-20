@@ -238,10 +238,13 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
       preview.runtime.changed = preview.runtime.installedVersion !== catalog.runtimeVersion;
     }
   }
-  if (!live) return preview;
+  const { rendered, localPlugins } = renderMachine(machinePath, label, catalog, { stage: false, generatedDir: dependencies.generatedDir });
+  if (!live) {
+    preview.files = localPlugins.map(({ path, source }) => ({ path, source, kind: 'local-plugin', planned: true }));
+    return preview;
+  }
   if (apply && blocked.length) throw new Error(`Apply blocked: ${blocked.length} exact Release assets are missing; no files changed.`);
   const deployment = validateDeployment(machine.deployment);
-  const { rendered } = renderMachine(machinePath, label, catalog, { stage: false, generatedDir: dependencies.generatedDir });
   const manifests = [
     [deployment.globalWorkspacePath, YAML.stringify(targets.globalWorkspace)],
     ...Object.entries(targets.profiles).map(([name, manifest]) => {
@@ -253,14 +256,16 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
     [deployment.homePatchPath ?? join(deployment.home, 'cordis.patch.yml'), rendered.home],
     [deployment.profiles.web.patchPath ?? join(dirname(deployment.profiles.web.packagePath), 'cordis.patch.yml'), rendered.web],
   ];
-  preview.files = summarizeFiles(manifests, patches);
+  const plannedPaths = [...manifests, ...patches, ...localPlugins.map(file => [file.path])].map(([path]) => path);
+  assert.equal(new Set(plannedPaths).size, plannedPaths.length, 'Duplicate deployment file target');
+  preview.files = summarizeFiles(manifests, patches, localPlugins);
   if (!apply) return preview;
   const inspect = dependencies.doctor ?? doctor;
   console.error('[apply] pre-install doctor started');
   const before = await inspect(machine, targets);
   console.error(`[apply] pre-install doctor finished: blocked=${before.blocked}`);
   const manifestChanged = preview.files.some(file => file.kind === 'installation' && file.changed);
-  const patchesChanged = preview.files.some(file => file.kind === 'configuration' && file.changed);
+  const patchesChanged = preview.files.some(file => file.kind !== 'installation' && file.changed);
   const needsInstall = preview.runtime?.changed || manifestChanged || before.issues.some(issue => ['missing-installed-package', 'installed-version-mismatch', 'declared-source-mismatch', 'missing-built-entry', 'invalid-built-entry'].includes(issue.status));
   let granted = [];
   if (!needsInstall && !patchesChanged && !before.blocked) return { ...preview, apply: true, noOp: true, granted, activation: 'No target changes; Host activation was not checked.' };
@@ -268,7 +273,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   const generatedDir = dependencies.generatedDir ?? join(root, 'generated');
   mkdirSync(generatedDir, { recursive: true, mode: 0o700 });
   const backup = mkdtempSync(join(generatedDir, `${label}-backup-`));
-  const files = [...manifests, ...patches];
+  const files = [...manifests, ...patches, ...localPlugins.map(file => [file.path, file.contents])];
   const backupFiles = [...new Set([...files.map(([path]) => path),
     ...manifests.map(([path]) => join(dirname(path), 'pnpm-lock.yaml')),
     join(dirname(deployment.globalWorkspacePath), 'package.json'),
@@ -299,6 +304,11 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
     if (report.blocked) {
       writeFileSync(join(backup, 'doctor.json'), JSON.stringify(report, null, 2), { mode: 0o600 });
       throw new Error(`Post-install doctor blocked configuration application:\n${formatDoctor({ ...report, next: doctorNext(report.issues) })}\nFull report: ${join(backup, 'doctor.json')}`);
+    }
+    // Publish source files before the patch that references them.
+    for (const { path, contents } of localPlugins) {
+      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+      writeFileSync(path, contents, { mode: 0o600 });
     }
     for (const [path, contents] of patches) writeFileSync(path, contents, { mode: 0o600 });
   } catch (error) {

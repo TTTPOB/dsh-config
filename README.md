@@ -43,6 +43,12 @@ node scripts/dsh-config.mjs update --machine workstation
 
 机器参数提供 `features`、`overrides.defaultModel`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。机器专属 provider／MCP 完整行保留为私有输入，不进行通用深合并。
 
+### 本地 JS 插件
+
+机器参数 localPlugins 将仓库内小型 ESM 模块纳入 render/check 和 update 文件计划；显式 apply 与配置 patch 一同备份、写入和回滚，不增加 npm 依赖。见[安装声明](<docs/install.md#本地-esm-插件>)、[中性示例](<examples/local-plugins-machine.yaml>)和[思源上传／双端同步工具](<plugins/siyuan-tools.md>)。源码不包含机器端点或凭据，认证继续引用目标机器已有 headers JSON。
+
+共用 progressive-tools 配置使用有序 toolDisclosureRules：普通工具 eager，mcp__* 和 siyuan_* deferred。对应资产版本由[依赖清单](<shared/dependencies.yaml>)选定。
+
 ### 可视化插件
 
 Web profile 统一启用 `@nagi-ovo/dsh-visualize`，使用依赖清单中的 npm 精确版本；其他 profile 不自动安装。插件由共用 Web patch 激活，不重复加载 bundle。OpenUI 不再由配置安装或激活，已安装的旧包在维护窗口通过 pnpm 卸载。

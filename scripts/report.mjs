@@ -3,10 +3,12 @@ import { isDeepStrictEqual } from 'node:util';
 import { readYaml, parseYaml, validatePatch } from './lib.mjs';
 
 // Report row identities, never configuration values that may contain credentials.
-export function summarizeFiles(manifests, patches) {
+export function summarizeFiles(manifests, patches, localPlugins = []) {
   return [
     ...manifests.map(([path, contents]) => ({ path, kind: 'installation',
       changed: !existsSync(path) || !isDeepStrictEqual(readYaml(path), parseYaml(contents)) })),
+    ...localPlugins.map(({ path, source, contents }) => ({ path, source, kind: 'local-plugin',
+      changed: !existsSync(path) || readFileSync(path, 'utf8') !== contents })),
     ...patches.map(([path, contents]) => {
       const previous = existsSync(path) ? readFileSync(path, 'utf8') : '';
       const changed = previous !== contents;
@@ -36,7 +38,7 @@ export function selectReport(report, verbose = false) {
     };
     return { ...report, summary,
       entries: verbose ? report.entries : report.entries.filter(row => row.changed || row.status.startsWith('blocked')),
-      ...(report.files ? { files: verbose ? report.files : report.files.filter(row => row.changed) } : {}),
+      ...(report.files ? { files: verbose ? report.files : report.files.filter(row => row.changed || row.planned) } : {}),
     };
   }
   const { checks, hostManifest, ...summary } = report;
@@ -59,7 +61,7 @@ export function formatUpdate(report, verbose = false) {
     lines.push(`  新: ${row.target}`);
   }
   for (const file of files.filter(row => row.changed)) {
-    lines.push(`~ ${file.kind === 'configuration' ? '配置' : '安装声明'}: ${file.path}`);
+    lines.push(`~ ${file.kind === 'configuration' ? '配置' : file.kind === 'local-plugin' ? '本地插件' : '安装声明'}: ${file.path}`);
     for (const [key, label] of [['added', '新增'], ['removed', '移除'], ['modified', '修改']]) {
       if (file[key]?.length) lines.push(`  ${label}行: ${file[key].join(', ')}`);
     }
@@ -67,6 +69,7 @@ export function formatUpdate(report, verbose = false) {
       lines.push(file.orderChanged ? '  行顺序变化' : '  仅文本格式变化');
     }
   }
+  for (const file of files.filter(row => row.planned)) lines.push('计划本地插件: ' + file.source + ' → ' + file.path);
   if (report.input === 'offline') lines.push('离线计划：与声明／快照比较，未检查本机安装与配置。');
   else lines.push('依赖差异与本机声明比较；实际安装版本和入口由 doctor 验收。');
   if (report.granted?.length) lines.push(`已授权 ${report.granted.length} 个清单验证的精确兼容组合。`);
@@ -74,7 +77,7 @@ export function formatUpdate(report, verbose = false) {
   if (report.apply) lines.push(report.noOp ? '未执行安装或写入；未检查 Host 激活状态。' : '已安装，未确认激活；未启停 Host。');
   if (verbose) {
     for (const row of report.entries.filter(row => !row.changed && !row.status.startsWith('blocked'))) lines.push(`= [${scopeOf(row)}] ${row.name}: ${row.target ?? row.status}`);
-    for (const file of files.filter(row => !row.changed)) lines.push(`= 文件不变: ${file.path}`);
+    for (const file of files.filter(row => row.changed === false)) lines.push(`= 文件不变: ${file.path}`);
   }
   lines.push('更多明细：--verbose；JSON 格式：--json');
   return lines.join('\n');

@@ -1,0 +1,22 @@
+schemaVersion: 1
+features:
+  sessionTools: false
+  activeContext: false
+  promptOverlay: false
+overrides: {}
+homePrivate: |
+  - insert: []
+webPrivate: |
+  - insert: []
+localPlugins:
+  - id: siyuan-tools
+    module: siyuan-tools.mjs
+    modulePath: /path/to/harness-home/plugins/siyuan-tools.mjs
+    config:
+      self:
+        baseURL: https://notes-self.example.invalid
+        headersFile: /path/to/credentials/self-headers.json
+      peer:
+        baseURL: https://notes-peer.example.invalid
+        headersFile: /path/to/credentials/peer-headers.json
+      timeoutMs: 60000

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import YAML from 'yaml';
 import nunjucks from 'nunjucks';
 import { validatePresetRows, applyPresetRowOverrides } from './preset-rows.mjs';
+import { planLocalPlugins } from './local-plugins.mjs';
 
 const templates = new nunjucks.Environment(new nunjucks.FileSystemLoader(fileURLToPath(new URL('../templates/', import.meta.url))), {
   autoescape: false,
@@ -80,6 +81,7 @@ export function validateMachine(machine) {
   }
   assert.ok(machine.overrides && typeof machine.overrides === 'object', 'Missing overrides');
   validatePresetRows(machine.overrides.presetRows);
+  planLocalPlugins(machine.localPlugins);
   for (const key of ['homePrivate', 'webPrivate']) {
     assert.equal(typeof machine[key], 'string', `Missing literal YAML: ${key}`);
     assert.ok(Array.isArray(parseYaml(machine[key])), `Expected patch array: ${key}`);
@@ -136,6 +138,8 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
     globalWorkspace: JSON.stringify(machine.installation.globalWorkspace, null, 2) + '\n',
     webPackage: JSON.stringify(machine.installation.webPackage, null, 2) + '\n',
   };
+  const localPlugins = planLocalPlugins(machine.localPlugins);
+  if (localPlugins.length) rendered.home += '\n' + YAML.stringify([{ insert: localPlugins.map(file => file.row) }]);
   // Validate every patch before writing any staged output.
   validatePatch(rendered.home);
   validatePatch(rendered.web);
@@ -145,7 +149,12 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
       writeFileSync(join(output, file), rendered[key], { mode: 0o600 });
     }
   }
-  return { output, rendered };
+  if (stage) for (const file of localPlugins) {
+    const path = join(output, file.stagePath);
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    writeFileSync(path, file.contents, { mode: 0o600 });
+  }
+  return { output, rendered, localPlugins };
 }
 
 const releaseUrl = /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/;

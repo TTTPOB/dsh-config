@@ -23,8 +23,10 @@
     - id: progressive-tools
       name: dsh-progressive-tools
       config:
-        deferTools: mcp
-        eagerTools: []
+        toolDisclosureRules:
+          - { glob: '*', disclosure: eager }
+          - { glob: 'mcp__*', disclosure: deferred }
+          - { glob: 'siyuan_*', disclosure: deferred }
         maxSearchResults: 10
         maxDescribeTools: 5
         maxSummaryChars: 240

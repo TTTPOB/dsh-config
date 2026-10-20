@@ -26,6 +26,21 @@ pnpm check --machine workstation
 
 清单中 `patchOnly: true` 的包保留 profile dependency，但移除重复的 profile bundle 激活；MCP Panel、mobile 等仍通过 bundle 贡献客户端行的包不受影响。共用插件与 preset 声明在 `$DSH_HOME/cordis.patch.yml`；真正 profile 特化的配置留在对应 profile patch。依赖安装在 profile 不表示配置属于该 profile。覆盖既有行的 `config` 是整个对象替换；保留该行需要的全部配置键和 `!!js` 表达式。
 
+### 本地 ESM 插件
+
+小型无 npm 依赖的模块可通过机器参数 localPlugins 声明，完整示例见[本地插件示例](<../examples/local-plugins-machine.yaml>)；思源三工具及凭据格式见[思源工具](<../plugins/siyuan-tools.md>)。
+
+每项只接受 id、module、modulePath、config：
+
+- id 是 home patch 顶层唯一行 ID；自动生成 insert 行，不要在其他 patch 中重复声明。
+- module 是仓库 plugins 目录内已存在的 .mjs 文件名，例如 siyuan-tools.mjs；未知、缺失或包含目录穿越的模块报错。
+- modulePath 是执行目标上的绝对 .mjs 文件路径，同时写入 Loader 行的 name；不会隐式展开环境变量或波浪号。
+- config 是完整的字面对象，原样传给插件，不做深合并或 !!js 求值。省略 localPlugins 等同于空数组。
+
+render 将源文件复制到生成目录的 plugins/<id>.mjs，patch 中仍引用最终 modulePath；check 只在内存中验证与规划，不导入模块、不读取凭据。live update preview 按字节比较源码目标，并在 files 中报告 kind: local-plugin；offline 只列 source → path 计划（planned: true），不读取真实目标。预览不会创建模块目标或目标父目录。
+
+显式 apply 将模块与现有 patch 一同纳入文件备份：先写源文件，再写引用它的 patch；模块单独变化也会应用，无需重复安装 npm 包。rollback 恢复原源码，若原文件不存在则删除本次新增文件。删除声明只撤销生成的插件行，不自动删除旧源码文件。凭据文件、用户数据和安装目录中的其他文件不在模块同步范围。
+
 ### pnpm 11 安装规则
 
 这些规则同时适用于正式安装声明、隔离安装与发布消费者测试；Pi 源码仓库继续使用它自身的 npm 工具链。
