@@ -73,6 +73,9 @@ test('rc.1 presets separate ordinary delegation and Team tools without present',
   for (const preset of presets) for (const id of ['workflow-ptc', 'tool-workflow', 'tool-ralph']) {
     assert.ok(delegation(preset.config.plugins).some(row => row.id === id));
   }
+  assert.deepEqual(rows.find(row => row.id === 'tools').config, {
+    mode: 'native', maxParallelSubCalls: 10, ptcNativeTools: ['context_compress'],
+  });
   assert.equal(rows.find(row => row.id === 'ptc-runtime').config.executionMode, 'per-call');
   assert.ok(!rows.some(row => row.id === 'ptc-runtime-personal'));
   assert.equal(rows.filter(row => row.id === 'agent-team').length, 1);

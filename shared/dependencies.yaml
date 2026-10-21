@@ -1,6 +1,8 @@
 # Release URLs and compatibility records are added only after artifact validation.
 schemaVersion: 2
 verifiedCompatibility:
+  "dsh-progressive-tools@0.5.1": ["0.2.1-rc.1"]
+  "@deepseek-ai/dsh-tools@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "dsh-mcp-panel@0.6.24-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-subagent@0.2.1-rc.1-fork2": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-tool-subagent@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
@@ -13,7 +15,7 @@ verifiedCompatibility:
   "@deepseek-ai/dsh-session-persistence-jsonl@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-session-query@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-session-query-sqlite@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
-  "dsh-active-context@0.5.1": ["0.2.1-rc.1"]
+  "dsh-active-context@0.5.2": ["0.2.1-rc.1"]
   "dsh-session-tools@0.4.0": ["0.2.1-rc.1"]
   "dsh-workspace-envrc@0.3.0": ["0.2.1-rc.1"]
   "dsh-workspace-overlay@0.3.0": ["0.2.1-rc.1"]
@@ -28,6 +30,12 @@ allowBuilds:
   electron-winstaller: false
   msgpackr-extract: false
 packages:
+  - package: "@deepseek-ai/dsh-tools"
+    scope: global-override
+    policy: release
+    version: 0.2.1-rc.1-fork1
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork6/deepseek-ai-dsh-tools-0.2.1-rc.1-fork1.tgz
+    resetSelectors: true
   - package: "@deepseek-ai/dsh-tool-subagent"
     scope: global-override
     policy: release
@@ -116,8 +124,8 @@ packages:
     scope: profile
     patchOnly: true
     policy: release
-    version: 0.5.0
-    url: https://github.com/TTTPOB/dsh-progressive-tools/releases/download/v0.5.0/dsh-progressive-tools-0.5.0.tgz
+    version: 0.5.1
+    url: https://github.com/TTTPOB/dsh-progressive-tools/releases/download/v0.5.1/dsh-progressive-tools-0.5.1.tgz
   - package: dsh-session-tools
     scope: profile
     policy: release
@@ -128,8 +136,8 @@ packages:
     scope: profile
     patchOnly: true
     policy: release
-    version: 0.5.1
-    url: https://github.com/TTTPOB/dsh-active-context/releases/download/v0.5.1/dsh-active-context-0.5.1.tgz
+    version: 0.5.2
+    url: https://github.com/TTTPOB/dsh-active-context/releases/download/v0.5.2/dsh-active-context-0.5.2.tgz
   - package: dsh-workspace-envrc
     scope: profile
     patchOnly: true
