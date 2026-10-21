@@ -105,8 +105,8 @@ packages:
   - package: "@earendil-works/pi-ai"
     scope: global-override
     policy: release
-    version: 1.1.0-fork1
-    url: https://github.com/TTTPOB/pi/releases/download/pi-ai-v1.1.0-fork1/earendil-works-pi-ai-1.1.0-fork1.tgz
+    version: 1.1.0-fork2
+    url: https://github.com/TTTPOB/pi/releases/download/pi-ai-v1.1.0-fork2/earendil-works-pi-ai-1.1.0-fork2.tgz
     resetSelectors: true
   - package: dsh-web-mobile
     scope: profile
