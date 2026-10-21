@@ -208,7 +208,7 @@ test('preparation stages credential-free full preset input and an executable tar
   const machine = readYaml(join(output, 'machine.yaml'));
   const rows = validatePatch(machine.deployment.smoke.homePatch).map(row => row.entry);
   assert.equal(rows.filter(row => row.name === '@deepseek-ai/dsh-agent-preset').length, 3);
-  assert.equal(rows.find(row => row.id === 'mcp-codegraph').disabled, true);
+  assert.ok(!rows.some(row => row.id === 'mcp-codegraph'));
   assert.ok(!rows.some(row => row.id === 'mcp-playwright'));
   assert.ok(!machine.deployment.smoke.ownsInstallation);
   const webRows = validatePatch(machine.deployment.smoke.webPatch).map(row => row.entry);

@@ -84,7 +84,7 @@ const config = { runtimeVersion: catalog.runtimeVersion, presets, acp: true, pri
   expectedPackages: [...expectedEntries.map(item => ({ ...item, profileOwned: resolvesFromProfile(item, expectedEntries, 'web') })),
     { name: '@deepseek-ai/dsh-client-ui-settings', version: catalog.runtimeVersion, scope: 'global-override' }],
   compatibility: [...new Set(catalog.packages.filter(item => item.policy === 'release').map(item => `${item.package}@${item.version}`))] };
-const controlledHome = rendered.home.replace('    - id: mcp-codegraph\n', '    - id: mcp-codegraph\n      disabled: true\n') + YAML.stringify([
+const controlledHome = rendered.home + YAML.stringify([
   { insert: [{ id: 'profile-smoke-probe', name: join(root, 'scripts/profile-smoke-probe.mjs'), config }] },
 ]);
 const controlledWeb = rendered.web + YAML.stringify([

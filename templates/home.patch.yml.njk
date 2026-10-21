@@ -15,16 +15,6 @@
     maxPendingCalls: 128
     graceMs: 3000
 - insert:
-    - id: mcp-codegraph
-      name: '@deepseek-ai/dsh-mcp-client'
-      config:
-        serverName: codegraph
-        transport: stdio
-        command: codegraph
-        args:
-          - serve
-          - '--mcp'
-- insert:
     - id: progressive-tools
       name: dsh-progressive-tools
       config:
