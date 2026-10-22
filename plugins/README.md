@@ -2,6 +2,24 @@
 
 仓库模块可以通过 localPlugins 纳入配置部署文件计划，见[安装指南](<../docs/install.md#本地-esm-插件>)。思源工具配置与行为见[上传和双端同步](<siyuan-tools.md>)。
 
+## Provider 路由提示词
+
+[provider-prompt.mjs](<provider-prompt.mjs>) 使用现有 `localPlugins` 声明部署：每机只添加一项 `id: provider-prompt`、`module: provider-prompt.mjs`、`modulePath: /path/to/harness-home/plugins/provider-prompt.mjs`，`config.rules` 写在该项内。完整示例见[本地插件参数](<../examples/local-plugins-machine.yaml>)。每机的 `modulePath` 沿已有本地插件目录设置；不需要包依赖、公开仓库或 Release，也没有共享配置的隐式合并或 fallback。
+
+插件在 home 只挂载一次，不重复放进 preset 或 Web patch。规则为 `{ providers: string[], models?: string[], text: string }`：provider 精确匹配，省略 models 适用于该 provider 的所有模型；提供 models 时必须是非空精确模型列表；text 不插值。当前声明仅 `providers: [klaude-cl]`，省略 models；其他路由不输出。`config: { rules: [] }` 禁用。
+
+提示词只说明真实外层工具名与 run_code 内部绑定的区别，不改变工具可见性或调用权限；实际工具 schema 优先。声明通过现有文件计划进行 check、离线预览及显式部署，真实安装与 Host 激活仍需另行授权。
+
+```sh
+node --test tests/provider-prompt.test.mjs tests/provider-prompt-config.test.mjs tests/local-plugins.test.mjs
+node scripts/dsh-config.mjs check --machine workstation
+node scripts/dsh-config.mjs update --machine workstation --offline
+```
+
+设置 `DSH_CLI_PACKAGE` 为已安装 CLI 的 package.json 绝对路径后，测试会用正式 Loader 加载临时复制的模块，验证路由切换、配置替换、作用域与卸载；未设置时明确跳过此集成用例，不启动 Host。
+
+server、nas 使用各自的机器名；这些命令只检查本地输入，不连接对应机器。不要添加 `--apply`。离线预览只与声明／快照比较，不验证真实安装或 Host 已加载模块。
+
 ## PTC 字符串构造指引
 
 [ptc-string-guidance.mjs](ptc-string-guidance.mjs) 注册独立的 `dsh-config:ptc-string-guidance` 章节，排在 SDK 后，使用 `interpolate: false`。仅当当前组装具有非空 `tools:sdk` 且运行时语言为 TypeScript 时保留；Native 和 Python 不输出。它不替换 SDK、不修改工具描述、可见性或执行权限；`edit` 和 `send_message` 保持原有 PTC 路径。

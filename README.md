@@ -52,6 +52,10 @@ node scripts/dsh-config.mjs update --machine workstation
 
 共用 progressive-tools 配置使用有序 toolDisclosureRules：普通工具 eager，mcp__* 和 siyuan_* deferred。对应资产版本由[依赖清单](<shared/dependencies.yaml>)选定。
 
+### Provider 路由提示词
+
+[provider-prompt.mjs](<plugins/provider-prompt.mjs>) 通过各机已有 `localPlugins` 文件计划在 home 挂载一次，不安装 npm 包，也不依赖 Release。显式 `config.rules` 当前只面向 `klaude-cl` 的全部模型；其他路由不输出，空 `rules` 禁用。声明与验证见[本地插件说明](<plugins/README.md#provider-路由提示词>)和[公开示例](<examples/local-plugins-machine.yaml>)。
+
 ### 可视化插件
 
 Web profile 统一启用 `@nagi-ovo/dsh-visualize`，使用依赖清单中的 npm 精确版本；其他 profile 不自动安装。插件由共用 Web patch 激活，不重复加载 bundle。OpenUI 不再由配置安装或激活，已安装的旧包在维护窗口通过 pnpm 卸载。

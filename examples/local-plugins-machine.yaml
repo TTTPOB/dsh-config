@@ -26,6 +26,19 @@ homePrivate: |
 webPrivate: |
   - insert: []
 localPlugins:
+  - id: provider-prompt
+    module: provider-prompt.mjs
+    modulePath: /path/to/harness-home/plugins/provider-prompt.mjs
+    config:
+      rules:
+        - providers: [klaude-cl]
+          text: >-
+            Tool naming: when emitting a tool_use call, use the exact names in the actual tool schema,
+            such as mcp__parking__run_code and mcp__parking__context_compress.
+            Short names like run_code or context_compress are only logical aliases.
+            Do not call bash, read, or other tools directly unless they appear in the schema.
+            Inside a run_code program, call tools.bash, tools.read, etc. exactly as written,
+            without any MCP prefix.
   - id: ptc-string-guidance
     module: ptc-string-guidance.mjs
     modulePath: /path/to/harness-home/plugins/ptc-string-guidance.mjs
