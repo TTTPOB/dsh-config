@@ -457,6 +457,10 @@ test('shared provider catalog and home-owned rows render once', t => {
   const home = validatePatch(rendered.home).map(row => row.entry);
   const pi = home.find(row => row.id === 'llm-pi-ai');
   assert.deepEqual(Object.keys(pi.config.providers).sort(), ['extra', 'klaude-cl', 'klaude-openai']);
+  assert.equal(pi.config.providers['klaude-openai'].compat.maxConsecutiveWhitespaceChars, 5000);
+  assert.equal(pi.config.providers['klaude-openai'].compat.maxRepeatedPatternChars, 5000);
+  assert.equal(pi.config.providers['klaude-cl'].compat.maxConsecutiveWhitespaceChars, undefined);
+  assert.equal(pi.config.providers['klaude-cl'].compat.maxRepeatedPatternChars, undefined);
   const deepseek = home.find(row => row.id === 'llm-deepseek');
   assert.deepEqual(deepseek.config.models, [{ id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash', contextWindow: 1000000, inputModalities: ['text', 'image'], systemPromptUpdate: 'in-history', toolUpdate: 'addition-only' }]);
   assert.equal(deepseek.config.models[0].imagePixelBudget, undefined);

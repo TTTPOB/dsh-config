@@ -44,6 +44,8 @@ node scripts/dsh-config.mjs update --machine workstation
 
 机器参数提供 `features`、`mcp`、`subagentModels`、`providers`、`rowOps`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。对话默认模型不在机器参数里：它属于会话与界面的状态。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。provider 目录由 [shared/providers.yaml](shared/providers.yaml) 共用，机器只写 add／set／remove 差异：set 只覆盖该 provider 的顶层键，嵌套值（如 models）整体替换；专属 MCP 行仍保留为私有输入，不进行通用深合并。
 
+共用 `klaude-openai.compat` 将 `maxConsecutiveWhitespaceChars` 和 `maxRepeatedPatternChars` 均设为 5000（5k），限制每个 Responses 输出项的连续空白与短周期重复；其他 provider 保持 pi-ai 默认阈值。对应 pi-ai 与 DSH 适配器的精确成品由依赖清单统一选择。
+
 ### 本地 JS 插件
 
 机器参数 localPlugins 将仓库内小型 ESM 模块纳入 render/check 和 update 文件计划；显式 apply 与配置 patch 一同备份、写入和回滚，不增加 npm 依赖。见[安装声明](<docs/install.md#本地-esm-插件>)、[中性示例](<examples/local-plugins-machine.yaml>)和[思源上传／双端同步工具](<plugins/siyuan-tools.md>)。源码不包含机器端点或凭据，认证继续引用目标机器已有 headers JSON。

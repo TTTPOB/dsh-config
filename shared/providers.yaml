@@ -6,6 +6,8 @@
 providers:
   klaude-openai:
     compat:
+      maxConsecutiveWhitespaceChars: 5000
+      maxRepeatedPatternChars: 5000
       supportsStrictMode: true
       supportsToolSearch: true
       systemPromptFormat: instructions

@@ -12,7 +12,7 @@ verifiedCompatibility:
   "@deepseek-ai/dsh-agent@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-agent-preset-registry@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-host-frontend-static@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
-  "@deepseek-ai/dsh-llm-pi-ai@0.2.1-rc.1-fork2": ["0.2.1-rc.1"]
+  "@deepseek-ai/dsh-llm-pi-ai@0.2.1-rc.1-fork3": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-session-persistence-jsonl@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-session-query@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-session-query-sqlite@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
@@ -106,8 +106,8 @@ packages:
   - package: "@earendil-works/pi-ai"
     scope: global-override
     policy: release
-    version: 1.1.0-fork2
-    url: https://github.com/TTTPOB/pi/releases/download/pi-ai-v1.1.0-fork2/earendil-works-pi-ai-1.1.0-fork2.tgz
+    version: 1.1.0-fork3
+    url: https://github.com/TTTPOB/pi/releases/download/pi-ai-v1.1.0-fork3/earendil-works-pi-ai-1.1.0-fork3.tgz
     resetSelectors: true
   - package: dsh-web-mobile
     scope: profile
@@ -161,8 +161,8 @@ packages:
   - package: "@deepseek-ai/dsh-llm-pi-ai"
     scope: global-override
     policy: release
-    version: 0.2.1-rc.1-fork2
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork4/deepseek-ai-dsh-llm-pi-ai-0.2.1-rc.1-fork2.tgz
+    version: 0.2.1-rc.1-fork3
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork7/deepseek-ai-dsh-llm-pi-ai-0.2.1-rc.1-fork3.tgz
     resetSelectors: true
   - package: "@deepseek-ai/dsh-mcp-client"
     scope: global-override
