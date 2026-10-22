@@ -17,6 +17,9 @@ providers:
     errorCodeRules:
       - match: "^upstream_error:"
         code: SERVER
+      # pi-ai fork2 aborts degenerate whitespace/repeat floods before tools run.
+      - match: "\\(degenerate output\\)"
+        code: SERVER
     api: openai-responses
     models:
       - id: gpt-6-astra
