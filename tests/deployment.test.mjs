@@ -506,6 +506,7 @@ test('live preview reports a missing local target with field context', async t =
 test('CLI separates JSON format from verbosity and hides unchanged items and private config values', async t => {
   const { machine, machinePath, home } = fixture(t);
   const aligned = deploymentTargets(machine, 'unused');
+  const pendingAssets = aligned.entries.filter(row => row.status === 'blocked-missing-release').length;
   writeJson(machine.deployment.globalWorkspacePath, aligned.globalWorkspace);
   writeJson(machine.deployment.profiles.web.packagePath, aligned.profiles.web);
   const rendered = render(machinePath, 'output-test', undefined, { stage: false }).rendered;
@@ -519,14 +520,14 @@ test('CLI separates JSON format from verbosity and hides unchanged items and pri
   writeJson(machinePath, machine);
   const cli = flags => {
     const result = spawnSync(process.execPath, [join(root, 'scripts/dsh-config.mjs'), 'update', machinePath, ...flags], { encoding: 'utf8' });
-    assert.equal(result.status, 0, 'all managed rc.1 Release sources are published');
+    assert.equal(result.status, pendingAssets ? 2 : 0, 'unpublished assets block update without hiding the preview');
     assert.equal(result.stderr, '');
     return result.stdout;
   };
   const compact = JSON.parse(cli(['--json']));
   const full = JSON.parse(cli(['--verbose', '--json']));
   assert.equal(compact.summary.changed, 1);
-  assert.equal(compact.summary.blocked, 0);
+  assert.equal(compact.summary.blocked, pendingAssets);
   assert.equal(compact.entries.length, compact.summary.blocked + 1);
   assert.equal(compact.entries.find(row => row.name === changedName).currentSources[0].source, '0.0.1');
   assert.ok(full.entries.length > compact.entries.length);

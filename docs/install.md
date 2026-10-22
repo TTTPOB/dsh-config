@@ -53,6 +53,14 @@ render 将源文件复制到生成目录的 plugins/<id>.mjs，patch 中仍引�
 - **CLI installation 设置 `autoInstallPeers: true`，消费 profile 设置 `autoInstallPeers: false`。** 前者补齐 app-boot 等 bootstrap peers；后者通过正式 resolver 共享 Host 服务，不补装第二套 Cordis／DSH peers。
 - 使用用户级全局 store 和默认 cache，关闭 global virtual store；不在项目内创建 store／cache，不手工修补 lockfile 或 node_modules。具体共享身份验收见[共享 peer 解析验收](<#共享-peer-解析验收>)。
 
+### Claude 网关图片恢复
+
+共用 home patch 为所有机器挂载一次 `dsh-claude-image-recovery`，明确限定 `providers: [klaude-cl]`；不在各个 preset 或 Web patch 重复挂载。示例见[图片恢复配置](<../examples/claude-image-recovery-machine.yaml>)。监听器位于共用 agent 服务作用域，可接收各 preset 的 `agent/request-error`。原生 `@deepseek-ai/dsh-compaction-image-offload` 由 base bundle 提供，必须保留且不重复插入；部署验收要确认最终组合中原生投影和恢复监听器都已加载。
+
+依赖清单使用 `scope: profile`、`required: true`、`patchOnly: true`，因此每个受管消费 profile 安装包，但不增加 bundle 或全局 core override。发布目标为 `0.1.0`；清单缺少 `url` 时，计划器报告 `blocked-missing-release` 并阻止 apply。只有 GitHub CI Release 资产验证后才填写精确 URL；不能用本地包或猜测地址代替。
+
+三机分别用 `--machine server`、`--machine nas`、`--machine workstation` 预览和应用，先 server、再 nas、本机 workstation 最后；每台使用下文临时 systemd 任务和本机服务／健康地址。当前入口没有 `--no-backup` 选项，apply 的文件备份及失败回滚仍按既有维护流程执行。
+
 ### Active Context Pruning（ACP）
 
 在机器参数中选择：

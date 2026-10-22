@@ -380,8 +380,12 @@ test('release catalog distinguishes selected URLs, explicit registry pins and mi
   for (const entry of catalog.packages) {
     assert.match(entry.version, /^\d+\.\d+\.\d+/);
     if (entry.policy === 'release') {
-      assert.equal(typeof entry.url, 'string', `Missing published source for ${entry.package}`);
-      assert.match(entry.url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/);
+      if (entry.url === undefined) {
+        assert.equal(typeof entry.reason, 'string', `Missing pending source reason for ${entry.package}`);
+        assert.ok(entry.reason.trim());
+      } else {
+        assert.match(entry.url, /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/);
+      }
     }
   }
   assert.ok(!readFileSync(join(root, 'shared/dependencies.yaml'), 'utf8').includes('file:'));

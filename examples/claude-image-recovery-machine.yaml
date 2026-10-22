@@ -1,0 +1,43 @@
+# Recovery is shared in home with providers: [klaude-cl]; no per-machine flag is needed.
+# Keep the native image-offload row from the base bundle; do not insert another copy.
+schemaVersion: 1
+features:
+  sessionTools: false
+  activeContext: false
+  promptOverlay: false
+overrides: {}
+providers:
+  set:
+    klaude-openai:
+      baseURL: https://klaude.example.invalid/v1
+    klaude-cl:
+      baseURL: https://klaude.example.invalid
+mcp:
+  siyuan:
+    url: https://siyuan.example.invalid/mcp
+    headersFile: /path/to/credentials/siyuan-headers.json
+  academicSource:
+    url: https://academic-source.example.invalid/mcp
+    apiKeyFile: /path/to/credentials/academic-source-key
+subagentModels:
+  - provider: deepseek-official
+    model: deepseek-flash
+
+homePrivate: |
+  - insert:
+      - id: mcp-playwright
+        name: "@deepseek-ai/dsh-mcp-client"
+        config:
+          serverName: playwright
+          transport: stdio
+          command: playwright-mcp
+          args: ["--browser", "chromium"]
+webPrivate: |
+  - insert:
+      - id: mcp-ppt
+        name: "@deepseek-ai/dsh-mcp-client"
+        config:
+          serverName: ppt
+          transport: streamable-http
+          url: https://ppt.example.invalid/mcp
+          failOnStartupError: false

@@ -1,6 +1,7 @@
 # Release URLs and compatibility records are added only after artifact validation.
 schemaVersion: 2
 verifiedCompatibility:
+  "dsh-claude-image-recovery@0.1.0": ["0.2.1-rc.1"]
   "dsh-progressive-tools@0.5.1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-tools@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "dsh-mcp-panel@0.6.24-fork1": ["0.2.1-rc.1"]
@@ -120,6 +121,13 @@ packages:
     policy: release
     version: 0.2.0-fork1
     url: https://github.com/TTTPOB/dsh-firecrawl/releases/download/v0.2.0-fork1/firecrawl-dsh-firecrawl-0.2.0-fork1.tgz
+  - package: dsh-claude-image-recovery
+    scope: profile
+    required: true
+    patchOnly: true
+    policy: release
+    version: 0.1.0
+    url: https://github.com/TTTPOB/dsh-claude-image-recovery/releases/download/v0.1.0/dsh-claude-image-recovery-0.1.0.tgz
   - package: dsh-progressive-tools
     scope: profile
     patchOnly: true
