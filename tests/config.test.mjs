@@ -460,6 +460,20 @@ test('shared provider catalog and home-owned rows render once', t => {
   assert.ok(!validatePatch(rendered.web).some(row => row.id === 'llm-pi-ai' || row.id === 'llm-deepseek'));
 });
 
+test('klaude-cl retries gateway tool protocol errors without changing other providers', () => {
+  const { rendered } = renderMachine(example, 'tool-protocol-retry', undefined, { stage: false });
+  const providers = validatePatch(rendered.home).find(row => row.entry.id === 'llm-pi-ai').entry.config.providers;
+  const classify = (provider, message) => providers[provider].errorCodeRules
+    .find(rule => new RegExp(rule.match).test(message))?.code;
+  assert.equal(classify('klaude-cl', 'tool_protocol_error: Model called an unavailable tool: grep.'), 'SERVER');
+  assert.equal(classify('klaude-cl', 'tool_protocol_error: Model called an unavailable tool: bash.'), 'SERVER');
+  assert.equal(classify('klaude-cl', 'upstream_error: overloaded'), 'SERVER');
+  assert.equal(classify('klaude-cl', 'tool_protocol_error: Model attempted a blocked native tool.'), undefined);
+  assert.equal(classify('klaude-cl', 'invalid_request_error: invalid tool schema'), undefined);
+  assert.equal(classify('klaude-cl', 'Some other error mentioning tool_protocol_error:'), undefined);
+  assert.equal(classify('klaude-openai', 'tool_protocol_error: Model called an unavailable tool: grep.'), undefined);
+});
+
 test('retire removes a rendered row and ignores ids the template does not render', t => {
   const machine = readYaml(example);
   const directory = fixture(t);

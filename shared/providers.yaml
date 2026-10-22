@@ -66,6 +66,9 @@ providers:
     errorCodeRules:
       - match: "^upstream_error:"
         code: SERVER
+      # Retry gateway-rejected model tool calls until the client handles this code.
+      - match: "^tool_protocol_error: Model called an unavailable tool:"
+        code: SERVER
     api: openai-responses
     compat:
       supportsToolSearch: true
