@@ -2,6 +2,18 @@
 
 仓库模块可以通过 localPlugins 纳入配置部署文件计划，见[安装指南](<../docs/install.md#本地-esm-插件>)。思源工具配置与行为见[上传和双端同步](<siyuan-tools.md>)。
 
+## PTC 字符串构造指引
+
+[ptc-string-guidance.mjs](ptc-string-guidance.mjs) 注册独立的 `dsh-config:ptc-string-guidance` 章节，排在 SDK 后，使用 `interpolate: false`。仅当当前组装具有非空 `tools:sdk` 且运行时语言为 TypeScript 时保留；Native 和 Python 不输出。它不替换 SDK、不修改工具描述、可见性或执行权限；`edit` 和 `send_message` 保持原有 PTC 路径。
+
+通过机器参数的 `localPlugins` 在 home 层挂载一次，已有和后续 Agent 按各自组装结果判断。声明示例见[本地插件参数](../examples/local-plugins-machine.yaml)：`id: ptc-string-guidance`、`module: ptc-string-guidance.mjs`、`modulePath: /path/to/harness-home/plugins/ptc-string-guidance.mjs`、`config: {}`。可通过 `config.text` 整体替换默认指引；不接受空白文本或未知配置键。
+
+默认指引区分工具 JSON 编码与解码后的 TypeScript 源码，要求长文本采用双引号逐行数组和 `.join("\n")`，保留空行及末尾换行，避免任意 Markdown 使用模板字符串。它是提示词约定，不是语法校验器，不保证模型不再出错。每个 TypeScript PTC 请求增加固定指引文本；相同配置下内容稳定，不逐轮累积。
+
+模块随现有 localPlugins 文件计划暂存、预览和显式部署，无 npm 依赖。卸载清理章节与监听器；更改源码或配置需重新加载模块。完整 `complete` 提示词仍由核心恢复，本插件不向其追加内容。
+
+验证：`node --test tests/ptc-string-guidance.test.mjs tests/local-plugins.test.mjs`。设置 `DSH_CLI_PACKAGE` 为已安装 CLI 的 manifest 路径，可运行真实 Loader 与 ToolRuntime 的进程内组装测试；不启动 Host、不调用模型、不执行 PTC 代码。未设置时集成用例明确 skip。`node scripts/dsh-config.mjs update --machine workstation` 只预览，不能加 `--apply`，除非另获部署授权。
+
 ## 提示词模块
 
 [prompt-sections.mjs](prompt-sections.mjs) 把文本注册到挂载它的 preset 作用域。模块只依赖 Node 内置文件 API 和 Host 的 `systemPrompt` 服务，无需安装 npm 包。
