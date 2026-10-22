@@ -42,7 +42,7 @@ test('local plugin configuration preserves empty rules, exact model lists and li
     writeFileSync(path, JSON.stringify(machine));
     const { rendered, localPlugins } = renderMachine(path, 'provider-prompt', undefined, { stage: false });
     assert.deepEqual(rows(rendered)[0].config, config);
-    assert.equal(localPlugins[0].path, modulePath);
+    assert.equal(localPlugins.find(file => file.id === 'provider-prompt').path, modulePath);
     assert.ok(!existsSync(modulePath));
   }
 });

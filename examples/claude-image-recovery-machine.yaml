@@ -1,6 +1,8 @@
 # Recovery is shared in home with providers: [klaude-cl]; no per-machine flag is needed.
 # Keep the native image-offload row from the base bundle; do not insert another copy.
 schemaVersion: 1
+deployment:
+  home: /path/to/harness-home
 features:
   sessionTools: false
   activeContext: false

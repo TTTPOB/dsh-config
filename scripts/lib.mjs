@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import YAML from 'yaml';
 import nunjucks from 'nunjucks';
 import { validatePresetRows, applyPresetRowOverrides } from './preset-rows.mjs';
-import { planLocalPlugins } from './local-plugins.mjs';
+import { planLocalPlugins, resolveLocalPlugins } from './local-plugins.mjs';
 
 const templates = new nunjucks.Environment(new nunjucks.FileSystemLoader(fileURLToPath(new URL('../templates/', import.meta.url))), {
   autoescape: false,
@@ -234,7 +234,7 @@ export function preserveLiveRows(renderedText, liveText, retire = []) {
   return { text, preserved, retired };
 }
 
-export function renderMachine(machinePath, label, catalog, { stage = true, generatedDir } = {}) {
+export function renderMachine(machinePath, label, catalog, { stage = true, generatedDir, deploymentHome } = {}) {
   assert.match(label, /^[a-zA-Z0-9_-]+$/, 'Invalid output label');
   const machine = validateMachine(readYaml(machinePath));
   const targets = resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog, machine.features);
@@ -253,7 +253,7 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
     globalWorkspace: JSON.stringify(machine.installation.globalWorkspace, null, 2) + '\n',
     webPackage: JSON.stringify(machine.installation.webPackage, null, 2) + '\n',
   };
-  const localPlugins = planLocalPlugins(machine.localPlugins);
+  const localPlugins = planLocalPlugins(resolveLocalPlugins(shared.localPlugins, machine, { home: deploymentHome }));
   if (localPlugins.length) rendered.home += '\n' + YAML.stringify([{ insert: localPlugins.map(file => file.row) }]);
   // Validate every patch before writing any staged output.
   validatePatch(rendered.home);

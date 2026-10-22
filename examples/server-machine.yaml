@@ -1,4 +1,6 @@
 schemaVersion: 1
+deployment:
+  home: /path/to/harness-home
 features:
   sessionTools: false
   activeContext: false

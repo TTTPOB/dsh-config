@@ -2,6 +2,41 @@
 
 仓库模块可以通过 localPlugins 纳入配置部署文件计划，见[安装指南](<../docs/install.md#本地-esm-插件>)。思源工具配置与行为见[上传和双端同步](<siyuan-tools.md>)。
 
+## 运行时工具指引
+
+[runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`output`、`background`、`child`。工具 schema 和运行时权限仍决定实际可调用能力。
+
+### 一处共用声明
+
+[共用默认配置](<../shared/defaults.yaml>) 已声明此模块，无需在各机私有输入重复添加：
+
+```yaml
+localPlugins:
+  - id: runtime-tooling-guidance
+    module: runtime-tooling-guidance.mjs
+    config: {}
+```
+
+共用数组只接受 `id`、`module`、`config`，目标固定为 DSH home 下的 `plugins/<module>`。机器级 `localPlugins` 保留原有绝对 `modulePath` 接口；不接受 `!!js`、相对路径或待求值的表达式。机器与共用项同 id 时，机器声明**整项替换**，包括模块、路径和整个 config，不深合并；同一共用模块不能用另一个 id 再部署一份。
+
+路径规则：
+
+1. live update/apply 使用 `normalizeDeployment` 已解析的目标 home。
+2. render/check 和 `update --offline` 使用机器声明的字面绝对 `deployment.home`；省略时，仅从已有本地插件统一的 `home/plugins` 目录推导。路径缺失或有歧义则报错；不查询 pnpm、真实安装或检查者的 HOME，不展开环境变量或 `~`。
+3. 省略 `deployment.home` 时，live 解析的 home 若与现有模块目录不一致会阻塞，须明确声明目标 home。这样不会将另一机器的离线检查路径误当本机部署位置。公开示例使用中性绝对路径。
+
+模块只在 home 激活一次，源码沿现有文件计划暂存、预览、备份和部署。Git 同步后，在各目标机器运行原有显式 apply 流程即可更新；模块重新加载和 Host 激活仍属于既有维护流程。
+
+### 本地验证
+
+```sh
+node --test tests/runtime-tooling-guidance.test.mjs tests/runtime-tooling-config.test.mjs tests/local-plugins.test.mjs
+node scripts/dsh-config.mjs check --machine workstation
+node scripts/dsh-config.mjs update --machine workstation --offline
+```
+
+server、nas 使用各自机器名；check 和离线预览只消费本地输入，不连接这些机器。配置测试的 apply／回滚只操作自动清理的隔离 fixture。
+
 ## Provider 路由提示词
 
 [provider-prompt.mjs](<provider-prompt.mjs>) 使用现有 `localPlugins` 声明部署：每机只添加一项 `id: provider-prompt`、`module: provider-prompt.mjs`、`modulePath: /path/to/harness-home/plugins/provider-prompt.mjs`，`config.rules` 写在该项内。完整示例见[本地插件参数](<../examples/local-plugins-machine.yaml>)。每机的 `modulePath` 沿已有本地插件目录设置；不需要包依赖、公开仓库或 Release，也没有共享配置的隐式合并或 fallback。

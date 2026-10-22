@@ -199,9 +199,9 @@ for (const role of ['workstation', 'server', 'active-context']) {
   });
 }
 
-test('offline render ignores unresolved deployment overrides', t => {
+test('offline render uses declared home while ignoring other unresolved deployment overrides', t => {
   const machine = readYaml(example);
-  machine.deployment = { home: '$OFFLINE_UNDEFINED_ENV', globalWorkspacePath: '/missing/local/path' };
+  machine.deployment = { home: machine.deployment.home, globalWorkspacePath: '$OFFLINE_UNDEFINED_ENV' };
   const directory = fixture(t);
   const path = join(directory, 'offline-deployment.yaml');
   writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
@@ -364,7 +364,7 @@ test('declared installation files render beside shared patches and drive source 
   const path = join(directory, 'installation-machine.yaml');
   writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
   const { output, rendered } = renderMachine(path, 'test-installation', undefined, { generatedDir: directory });
-  assert.deepEqual(readdirSync(output).sort(), ['global-workspace.yaml', 'home.patch.yml', 'web.package.json', 'web.patch.yml']);
+  assert.deepEqual(readdirSync(output).sort(), ['global-workspace.yaml', 'home.patch.yml', 'plugins', 'web.package.json', 'web.patch.yml']);
   assert.equal(readYaml(join(output, 'global-workspace.yaml')).overrides['@deepseek-ai/dsh-example'], '0.1.7-rc.2');
   assert.equal(parseYaml(rendered.globalWorkspace).blockExoticSubdeps, false);
   assert.equal(JSON.parse(readFileSync(join(output, 'web.package.json'), 'utf8')).dependencies['example-plugin'], '1.0.0');

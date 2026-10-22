@@ -29,6 +29,7 @@ test("render stages the module and activation row without writing the target", t
   const machine = readYaml(join(root, "examples/local-plugins-machine.yaml"));
   const declaration = machine.localPlugins.find(row => row.id === Plugin.name);
   assert.ok(declaration);
+  machine.deployment = { home: join(dir, "target") };
   declaration.modulePath = join(dir, "target/ptc-string-guidance.mjs");
   const input = join(dir, "machine.yaml");
   writeFileSync(input, JSON.stringify(machine));

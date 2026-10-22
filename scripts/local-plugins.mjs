@@ -1,9 +1,51 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const directory = fileURLToPath(new URL('../plugins/', import.meta.url));
+
+/** Resolve shared modules from declarations only; never discover this process's installation. */
+export function resolveLocalPlugins(shared = [], machine, { home } = {}) {
+  assert.ok(Array.isArray(shared), 'shared localPlugins must be an array');
+  const ids = new Set();
+  for (const entry of shared) {
+    assert.ok(entry && typeof entry === 'object' && !Array.isArray(entry), 'Invalid shared localPlugins entry');
+    assert.ok(Object.keys(entry).every(key => ['id', 'module', 'config'].includes(key)), 'Shared localPlugins accepts only id/module/config');
+    assert.ok(!ids.has(entry.id), 'Duplicate shared local plugin id');
+    ids.add(entry.id);
+  }
+  const local = machine.localPlugins ?? [];
+  // Keep the existing absolute-path contract and validation for machine declarations.
+  planLocalPlugins(local);
+  const inherited = shared.filter(entry => !local.some(row => row.id === entry.id));
+  if (!inherited.length) return local;
+  const declaredHome = machine.deployment?.home;
+  const directories = new Set(local.map(entry => dirname(entry.modulePath)));
+  let inferred;
+  if (directories.size === 1) {
+    const directory = [...directories][0];
+    if (basename(directory) === 'plugins') inferred = dirname(directory);
+  }
+  if (home === undefined) {
+    if (declaredHome !== undefined) {
+      assert.ok(typeof declaredHome === 'string' && isAbsolute(declaredHome) && !/[$~]/.test(declaredHome),
+        'Offline shared localPlugins requires a literal absolute deployment.home; do not expand the inspecting machine environment');
+      home = declaredHome;
+    } else {
+      assert.ok(inferred, 'Shared localPlugins requires deployment.home or one existing absolute home/plugins directory');
+      home = inferred;
+    }
+  } else {
+    assert.ok(isAbsolute(home), 'Resolved deployment home must be absolute');
+    if (declaredHome === undefined && inferred) assert.equal(resolve(home), resolve(inferred),
+      'Resolved deployment home differs from existing localPlugins home; declare deployment.home explicitly');
+  }
+  const combined = [...inherited.map(entry => ({ ...entry, modulePath: join(home, 'plugins', entry.module ?? '') })), ...local];
+  for (const entry of inherited) assert.equal(combined.filter(row => row.module === entry.module).length, 1,
+    'Shared and machine localPlugins must not deploy the same module under different ids');
+  return combined;
+}
 
 /** Plan repository-owned ESM files without importing them or reading credentials. */
 export function planLocalPlugins(declarations = []) {

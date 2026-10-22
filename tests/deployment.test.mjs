@@ -474,9 +474,9 @@ test('isolated entry copies local tarballs and passes exact argv to an existing 
   assert.equal(read(machinePath), before);
 });
 
-test('offline update ignores deployment paths and never invokes local discovery', async t => {
+test('offline update uses declared home but ignores other deployment paths and never invokes local discovery', async t => {
   const { machine, machinePath } = fixture(t);
-  machine.deployment = { home: '$UNDEFINED_OFFLINE_VAR', globalWorkspacePath: '/missing/local/workspace' };
+  machine.deployment = { home: machine.deployment.home, globalWorkspacePath: '$UNDEFINED_OFFLINE_VAR' };
   writeJson(machinePath, machine);
   const result = await updateMachine(machinePath, 'test-offline-preview', false, {
     catalog, offline: true, discovery: { query: () => assert.fail('offline queried pnpm') },

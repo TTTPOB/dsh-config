@@ -238,7 +238,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
       preview.runtime.changed = preview.runtime.installedVersion !== catalog.runtimeVersion;
     }
   }
-  const { rendered, localPlugins } = renderMachine(machinePath, label, catalog, { stage: false, generatedDir: dependencies.generatedDir });
+  const { rendered, localPlugins } = renderMachine(machinePath, label, catalog, { stage: false, generatedDir: dependencies.generatedDir, deploymentHome: live ? machine.deployment.home : undefined });
   if (!live) {
     preview.files = localPlugins.map(({ path, source }) => ({ path, source, kind: 'local-plugin', planned: true }));
     return preview;
@@ -352,7 +352,7 @@ export function isolatedTest(machinePath, label, tarballs = [], execute, { gener
   mkdirSync(generatedDir, { recursive: true, mode: 0o700 });
   const testRoot = mkdtempSync(join(generatedDir, 'dsh-isolated-'));
   try {
-    renderMachine(machinePath, label, undefined, { stage: false, generatedDir: testRoot });
+    renderMachine(machinePath, label, undefined, { stage: false, generatedDir: testRoot, deploymentHome: join(testRoot, 'home') });
     const copiedTarballs = new Map();
     for (const [name, source] of sources) {
       const destination = join(testRoot, name.replaceAll('/', '-').replace('@', '') + '.tgz');

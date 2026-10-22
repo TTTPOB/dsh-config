@@ -1,4 +1,9 @@
 schemaVersion: 1
+# Repository modules are deployed to the declared DSH home/plugins/<module>.
+localPlugins:
+  - id: runtime-tooling-guidance
+    module: runtime-tooling-guidance.mjs
+    config: {}
 defaults:
   # The default conversation model belongs to the UI model picker and is never rendered.
   sessionTitle:

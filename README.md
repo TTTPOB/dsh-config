@@ -48,9 +48,13 @@ node scripts/dsh-config.mjs update --machine workstation
 
 ### 本地 JS 插件
 
-机器参数 localPlugins 将仓库内小型 ESM 模块纳入 render/check 和 update 文件计划；显式 apply 与配置 patch 一同备份、写入和回滚，不增加 npm 依赖。见[安装声明](<docs/install.md#本地-esm-插件>)、[中性示例](<examples/local-plugins-machine.yaml>)和[思源上传／双端同步工具](<plugins/siyuan-tools.md>)。源码不包含机器端点或凭据，认证继续引用目标机器已有 headers JSON。
+[共用默认配置](<shared/defaults.yaml>)和机器参数的 `localPlugins` 将仓库内小型 ESM 模块纳入 render/check 和 update 文件计划；显式 apply 与配置 patch 一同备份、写入和回滚，不增加 npm 依赖。见[安装声明](<docs/install.md#本地-esm-插件>)、[中性示例](<examples/local-plugins-machine.yaml>)和[思源上传／双端同步工具](<plugins/siyuan-tools.md>)。源码不包含机器端点或凭据，认证继续引用目标机器已有 headers JSON。
 
 共用 progressive-tools 配置使用有序 toolDisclosureRules：普通工具 eager，mcp__* 和 siyuan_* deferred。对应资产版本由[依赖清单](<shared/dependencies.yaml>)选定。
+
+### 运行时工具指引
+
+[runtime-tooling-guidance.mjs](<plugins/runtime-tooling-guidance.mjs>) 按当前工具模式、PTC 语言与子代理身份加入适用的简短指引，替代 agentsmd 中整段静态 tooling 说明。在[共用默认配置](<shared/defaults.yaml>)中声明一次，各机沿原 apply 流程部署到目标 home；配置和验证见[本地插件说明](<plugins/README.md#运行时工具指引>)；不改变工具权限或执行行为。
 
 ### Provider 路由提示词
 
@@ -129,7 +133,7 @@ selector 可以是 preset 内递归唯一的 entry `id`，或从根开始、以 
 
 可选 `installation.globalWorkspace`／`installation.webPackage` 提供安装输入；共用清单覆盖受管项，保留无关 overrides 和机器专属依赖。受管 fork／个人插件选择精确 Release URL，明确允许的官方包、普通库与第三方插件保留精确 registry pin。缺精确资产会阻塞正式更新，不自动换版本或回退本地来源。
 
-`deployment` 可省略；doctor、update 默认预览和 apply 使用执行机器的 DSH_HOME／用户主目录及 pnpm 公共信息推导部署路径，显式路径支持 `~/` 和已定义环境变量。`update --offline`、render/check 只消费机器 installation 参数或快照，不引入执行机器的安装输入。具体默认和覆盖方式见[部署位置](docs/install.md#2-声明本机部署位置)。
+`deployment` 可省略；doctor、update 默认预览和 apply 使用执行机器的 DSH_HOME／用户主目录及 pnpm 公共信息推导部署路径，显式路径支持 `~/` 和已定义环境变量。`update --offline`、render/check 只消费机器声明或快照，不引入执行机器的安装输入。共用本地模块要求明确的绝对 `deployment.home`，或沿已有一致的 `home/plugins` 目录；离线不展开 `~` 或环境变量，位置缺失或歧义会报错。具体默认和覆盖方式见[部署位置](docs/install.md#2-声明本机部署位置)。
 
 `check` 根据当前机器参数和模板重新渲染，在内存中校验配置结构，无需先运行 render，也不读取已有生成结果；缺少 Release 资产时另外列出“待发布来源”。当前模板与机器参数决定目标配置；Host 加载与功能由成品 smoke 和实际维护验收确认。
 

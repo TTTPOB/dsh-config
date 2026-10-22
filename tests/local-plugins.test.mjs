@@ -26,14 +26,14 @@ test('render/check plan and stage module source without importing modules, readi
   const row = validatePatch(checked.rendered.home).find(row => row.entry.id === 'siyuan-tools');
   assert.equal(row.operation, 'insert');
   assert.deepEqual(row.entry, { id: 'siyuan-tools', name: machine.localPlugins[0].modulePath, config: machine.localPlugins[0].config });
-  assert.equal(checked.localPlugins[0].source, join(root, 'plugins/siyuan-tools.mjs'));
+  assert.equal(checked.localPlugins.find(file => file.id === 'siyuan-tools').source, join(root, 'plugins/siyuan-tools.mjs'));
   assert.ok(!existsSync(generatedDir));
   const cli = spawnSync(process.execPath, [join(root, 'scripts/dsh-config.mjs'), 'check', machinePath], { encoding: 'utf8' });
   assert.equal(cli.status, 0, cli.stderr);
   assert.match(cli.stdout, /checks passed/);
   assert.ok(!existsSync(generatedDir));
   const staged = renderMachine(machinePath, 'local-plugin', undefined, { generatedDir });
-  assert.equal(readFileSync(join(staged.output, 'plugins/siyuan-tools.mjs'), 'utf8'), readFileSync(checked.localPlugins[0].source, 'utf8'));
+  assert.equal(readFileSync(join(staged.output, 'plugins/siyuan-tools.mjs'), 'utf8'), readFileSync(checked.localPlugins.find(file => file.id === 'siyuan-tools').source, 'utf8'));
   assert.ok(!existsSync(machine.localPlugins[0].modulePath));
 });
 
