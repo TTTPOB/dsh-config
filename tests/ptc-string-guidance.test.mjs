@@ -20,8 +20,11 @@ test("validates wording and preserves source-level escaping", () => {
   assert.equal(validate({ text: "{{literal}}" }).value.text, "{{literal}}");
   for (const input of [null, [], { text: " " }, { text: 1 }, { unknown: true }]) assert.ok(validate(input).issues);
   const slash = String.fromCharCode(92);
-  assert.ok(Plugin.DEFAULT_TEXT.includes('join("' + slash + 'n")'));
-  assert.ok(Plugin.DEFAULT_TEXT.includes('quotes as ' + slash + '" and literal backslashes as ' + slash.repeat(2)));
+  assert.ok(Plugin.DEFAULT_TEXT.includes('C:' + slash + 'path, and ' + slash + 'n as written.'));
+  assert.ok(Plugin.DEFAULT_TEXT.includes('const readme = @``'));
+  assert.ok(Plugin.DEFAULT_TEXT.includes('@````'));
+  assert.ok(Plugin.DEFAULT_TEXT.includes('use ' + slash + 'x40`` in a string'));
+  assert.equal(Plugin.DEFAULT_TEXT.includes('join('), false);
 });
 
 test("render stages the module and activation row without writing the target", t => {

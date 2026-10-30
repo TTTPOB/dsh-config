@@ -59,6 +59,8 @@ server、nas 使用各自的机器名；这些命令只检查本地输入，不�
 
 [ptc-string-guidance.mjs](ptc-string-guidance.mjs) 注册独立的 `dsh-config:ptc-string-guidance` 章节，排在 SDK 后，使用 `interpolate: false`。仅当当前组装具有非空 `tools:sdk` 且运行时语言为 TypeScript 时保留；Native 和 Python 不输出。它不替换 SDK、不修改工具描述、可见性或执行权限；`edit` 和 `send_message` 保持原有 PTC 路径。
 
+默认指引要求模型用原始文本字面量书写多行或含引号、反斜杠、反引号的载荷：以 `@` 加两个以上反引号开头，以同样数量的反引号结束，内容逐字保留，不转义也不插值。该语法由 deepseek-harness 的 Node PTC 运行时提供；运行时尚未包含该支持时部署本指引，模型会写出无法解析的程序，因此须先部署运行时。嵌入的 shell 脚本由指引中的 stdin heredoc 规则处理。
+
 通过机器参数的 `localPlugins` 在 home 层挂载一次，已有和后续 Agent 按各自组装结果判断。声明示例见[本地插件参数](../examples/local-plugins-machine.yaml)：`id: ptc-string-guidance`、`module: ptc-string-guidance.mjs`、`modulePath: /path/to/harness-home/plugins/ptc-string-guidance.mjs`、`config: {}`。可通过 `config.text` 整体替换默认指引；不接受空白文本或未知配置键。
 
 默认指引区分工具 JSON 编码与解码后的 TypeScript 源码，要求长文本采用双引号逐行数组和 `.join("\n")`，保留空行及末尾换行，避免任意 Markdown 使用模板字符串。它是提示词约定，不是语法校验器，不保证模型不再出错。每个 TypeScript PTC 请求增加固定指引文本；相同配置下内容稳定，不逐轮累积。
