@@ -11,7 +11,7 @@ verifiedCompatibility:
   "@deepseek-ai/dsh-experimental-tool-agent-team@0.2.1-rc.1-fork2": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-agent@0.2.1-rc.1-fork2": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-agent-loop@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
-  "@deepseek-ai/dsh-ptc-runtime-node@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
+  "@deepseek-ai/dsh-ptc-runtime-node@0.2.1-rc.1-fork2": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-agent-preset-registry@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-host-frontend-static@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-llm-pi-ai@0.2.1-rc.1-fork3": ["0.2.1-rc.1"]
@@ -193,8 +193,8 @@ packages:
   - package: "@deepseek-ai/dsh-ptc-runtime-node"
     scope: global-override
     policy: release
-    version: 0.2.1-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork10/deepseek-ai-dsh-ptc-runtime-node-0.2.1-rc.1-fork1.tgz
+    version: 0.2.1-rc.1-fork2
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork11/deepseek-ai-dsh-ptc-runtime-node-0.2.1-rc.1-fork2.tgz
     resetSelectors: true
   - package: "@deepseek-ai/dsh-agent-preset-registry"
     scope: global-override
