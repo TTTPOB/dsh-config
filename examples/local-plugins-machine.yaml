@@ -43,6 +43,10 @@ localPlugins:
     module: ptc-string-guidance.mjs
     modulePath: /path/to/harness-home/plugins/ptc-string-guidance.mjs
     config: {}
+  - id: ptc-raw-text-reminder
+    module: ptc-raw-text-reminder.mjs
+    modulePath: /path/to/harness-home/plugins/ptc-raw-text-reminder.mjs
+    config: {}
   - id: siyuan-tools
     module: siyuan-tools.mjs
     modulePath: /path/to/harness-home/plugins/siyuan-tools.mjs

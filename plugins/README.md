@@ -59,15 +59,33 @@ server、nas 使用各自的机器名；这些命令只检查本地输入，不�
 
 [ptc-string-guidance.mjs](ptc-string-guidance.mjs) 注册独立的 `dsh-config:ptc-string-guidance` 章节，排在 SDK 后，使用 `interpolate: false`。仅当当前组装具有非空 `tools:sdk` 且运行时语言为 TypeScript 时保留；Native 和 Python 不输出。它不替换 SDK、不修改工具描述、可见性或执行权限；`edit` 和 `send_message` 保持原有 PTC 路径。
 
-默认指引要求模型用原始文本字面量书写多行或含引号、反斜杠、反引号的载荷：以 `@` 加两个以上反引号开头，以同样数量的反引号结束，内容逐字保留，不转义也不插值。该语法由 deepseek-harness 的 Node PTC 运行时提供；运行时尚未包含该支持时部署本指引，模型会写出无法解析的程序，因此须先部署运行时。嵌入的 shell 脚本由指引中的 stdin heredoc 规则处理。
+默认指引只有两条规则：多行或含引号、反斜杠、反引号的文本使用原始文本字面量；shell 脚本通过带引号的 stdin heredoc 或先写文件传入，不能在 ssh／python -c 中嵌套脚本。三个 Wrong／Right 示例分别覆盖 write、edit 和远程 Python，Markdown 围栏示例展示四反引号分隔符。原始文本以 `@` 加 N≥2 个反引号开头，以最大连续长度恰为 N 的反引号结束；内容不转义、不插值，开头紧随的一次换行被移除。必须先发布并安装 lexer-aware Node PTC 运行时，再部署本指引和下述提醒插件。
 
 通过机器参数的 `localPlugins` 在 home 层挂载一次，已有和后续 Agent 按各自组装结果判断。声明示例见[本地插件参数](../examples/local-plugins-machine.yaml)：`id: ptc-string-guidance`、`module: ptc-string-guidance.mjs`、`modulePath: /path/to/harness-home/plugins/ptc-string-guidance.mjs`、`config: {}`。可通过 `config.text` 整体替换默认指引；不接受空白文本或未知配置键。
 
-默认指引区分工具 JSON 编码与解码后的 TypeScript 源码，要求长文本采用双引号逐行数组和 `.join("\n")`，保留空行及末尾换行，避免任意 Markdown 使用模板字符串。它是提示词约定，不是语法校验器，不保证模型不再出错。每个 TypeScript PTC 请求增加固定指引文本；相同配置下内容稳定，不逐轮累积。
+每个 TypeScript PTC 请求增加固定指引文本；相同配置下内容稳定，不逐轮累积。指引是提示词约定，不是语法校验器。
 
 模块随现有 localPlugins 文件计划暂存、预览和显式部署，无 npm 依赖。卸载清理章节与监听器；更改源码或配置需重新加载模块。完整 `complete` 提示词仍由核心恢复，本插件不向其追加内容。
 
 验证：`node --test tests/ptc-string-guidance.test.mjs tests/local-plugins.test.mjs`。设置 `DSH_CLI_PACKAGE` 为已安装 CLI 的 manifest 路径，可运行真实 Loader 与 ToolRuntime 的进程内组装测试；不启动 Host、不调用模型、不执行 PTC 代码。未设置时集成用例明确 skip。`node scripts/dsh-config.mjs update --machine workstation` 只预览，不能加 `--apply`，除非另获部署授权。
+
+## PTC 原始文本提醒
+
+[ptc-raw-text-reminder.mjs](<ptc-raw-text-reminder.mjs>) 是无 npm 依赖的单文件 ESM，通过 `tools/post-execute` 监听 `exec.name === 'run_code' && exec.parent === undefined` 的根调用。它先调用 `next()`，保留下游 accept／block 决策及其 additionalContexts，再追加一条带 `source.kind: ptc-raw-text-reminder` 的 user 消息；不改工具返回值或正文。消息由核心写入日志并送往下一步 inbox。
+
+检测使用内嵌的 MIT js-tokens 9.0.1 原版源码，先以等长、保留换行的占位符屏蔽已有原始文本，再检查五类写法：引号字符串中至少两次换行转义；长度超过 80 的引号字符串含转义引号；模板中转义反引号或插值起始符；纯字符串数组接换行 join；String.raw。注释、正则和普通字符串中的原始文本起始序列不当作原始文本。检测是建议性的，误报／漏报只影响是否提醒。
+
+成功且命中时，提醒明确说“已经成功，不要重跑”，报告首个命中的行号；可可靠解码时，把实际值重排为原始文本，最多展示前三行／300 字符并标明省略，分隔符长于值中最长反引号段。其余命中只追加数量。失败若命中复杂文本，或错误是 SyntaxError、Unterminated raw string literal、包含 Location (JavaScript parse 的 strip 错误，则追加单行改写建议；有命中时附行号和最多 80 字符片段。其他失败不提醒。
+
+`config: {}` 可用。配置字段：`enabled`（默认 true）、`newlineEscapeThreshold`（默认 2）、`escapedQuoteLengthThreshold`（默认 80）；文本可分别覆盖 `successText`、`suggestionText`、`failureText`、`moreText`，均须非空。阈值须为正整数，未知配置键被拒绝。声明见[本地插件示例](<../examples/local-plugins-machine.yaml>)，只在 home 挂载一次。部署顺序：先发布并安装 lexer-aware 运行时，再沿现有 localPlugins 显式部署流程安装两个插件；本仓库示例不自动更新真实安装。
+
+插件没有冷却、限流或跨调用状态，每个符合条件的调用增加一条短 user 消息及对应输入 token；成功预览有长度限制，不把提醒写入固定系统提示词。重复命中会继续增加会话文本。卸载时 Cordis 清理监听器。
+
+```sh
+NODE_OPTIONS=--max-old-space-size=4096 node --test tests/ptc-string-guidance.test.mjs tests/ptc-raw-text-reminder.test.mjs tests/local-plugins.test.mjs
+```
+
+设置 `DSH_CLI_PACKAGE` 为 `pnpm list -g --depth 0 --json` 中 `@deepseek-ai/dsh` 安装目录下的 package.json 绝对路径，可运行真实 Loader／ToolRuntime 集成测试。测试通过临时配置加载模块，执行内建根 run_code 传输，检查提醒、嵌套过滤和卸载。run_code 是核心保留名称，不能手工注册；测试只以受控 PtcRuntime 替代实际程序执行器，不启动 Host、不调用模型，不证明真实 Node PTC 解析或下一步会话日志投递。
 
 ## 提示词模块
 
