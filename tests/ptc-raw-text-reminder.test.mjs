@@ -71,8 +71,8 @@ test("decodes common escapes without executing expressions", () => {
 test("renders safe delimiters and bounded previews", () => {
   assert.equal(Plugin.renderRawLiteral("plain"), '@``\nplain``');
   assert.equal(Plugin.renderRawLiteral('```code```'), '@````\n```code```\n````');
-  assert.equal(Plugin.renderRawLiteral("a\nb\nc\nd"), '@``\na\nb\nc…``');
-  assert.equal(Plugin.renderRawLiteral("a".repeat(301)), '@``\n' + "a".repeat(300) + '…``');
+  assert.equal(Plugin.renderRawLiteral("a\nb\nc\nd"), '@``\na\nb\nc`` (truncated)');
+  assert.equal(Plugin.renderRawLiteral("a".repeat(301)), '@``\n' + "a".repeat(300) + '`` (truncated)');
 });
 
 test("uncertain decoding skips the preview and failure snippets stay bounded", async () => {
@@ -87,7 +87,7 @@ test("uncertain decoding skips the preview and failure snippets stay bounded", a
   assert.equal(result.additionalContexts[0], preserved);
   const message = result.additionalContexts[1].content[0].text;
   assert.equal(message.slice(message.indexOf("Line 1: ") + 8).length, 80);
-  assert.equal(Plugin.renderRawLiteral("a\rb\rc\rd"), '@``\na\rb\rc…``');
+  assert.equal(Plugin.renderRawLiteral("a\rb\rc\rd"), '@``\na\rb\rc`` (truncated)');
 });
 
 test("root-only and enabled filtering always delegates exactly once", async () => {

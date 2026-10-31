@@ -550,11 +550,12 @@ export function detectComplexText(code, config = DEFAULTS) {
 
 export function renderRawLiteral(value) {
   const breaks = [...value.matchAll(/\r\n|[\n\r\u2028\u2029]/g)];
-  let shown = value.slice(0, Math.min(breaks[2]?.index ?? value.length, 300));
-  if (shown.length < value.length) shown += "…";
+  const shown = value.slice(0, Math.min(breaks[2]?.index ?? value.length, 300));
+  // Keep the truncation marker outside the literal so it cannot read as content.
+  const marker = shown.length < value.length ? " (truncated)" : "";
   const longest = Math.max(0, ...(value.match(/`+/g) ?? []).map(run => run.length));
   const delimiter = "`".repeat(Math.max(2, longest + 1));
-  return "@" + delimiter + "\n" + shown + (shown.endsWith("`") ? "\n" : "") + delimiter;
+  return "@" + delimiter + "\n" + shown + (shown.endsWith("`") ? "\n" : "") + delimiter + marker;
 }
 
 function errorText(result) {
