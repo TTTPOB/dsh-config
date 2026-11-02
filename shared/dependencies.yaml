@@ -212,8 +212,9 @@ packages:
     patchOnly: true
   - package: dsh-better-sidebar
     scope: profile
-    policy: registry
-    version: 0.28.2
+    policy: release
+    version: 0.28.2-fork1
+    url: https://github.com/TTTPOB/DSH-better-sidebar/releases/download/v0.28.2-fork1/dsh-better-sidebar-0.28.2-fork1.tgz
     profiles: [web]
     required: true
     patchOnly: true

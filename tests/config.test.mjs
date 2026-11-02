@@ -14,16 +14,17 @@ function fixture(t) {
 
 const example = join(root, 'examples/workstation-machine.yaml');
 
-test('Better Sidebar uses an exact npm pin and one Web patch mount without owning preferences', () => {
+test('Better Sidebar uses the personal Release and one Web patch mount without owning preferences', () => {
   const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
   const selected = catalog.packages.find(row => row.package === 'dsh-better-sidebar');
-  assert.equal(selected.policy, 'registry');
-  assert.equal(selected.version, '0.28.2');
+  assert.equal(selected.policy, 'release');
+  assert.equal(selected.version, '0.28.2-fork1');
+  assert.ok(selected.url.startsWith('https://github.com/TTTPOB/DSH-better-sidebar/releases/download/'));
   const target = resolveDependencyTargets('unused', {
     webPackage: { dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-better-sidebar'] } } },
     profiles: { headless: {} },
   }, catalog);
-  assert.equal(target.profiles.web.dependencies[selected.package], '0.28.2');
+  assert.equal(target.profiles.web.dependencies[selected.package], selected.url);
   assert.deepEqual(target.profiles.web.dsh.profile.bundles, ['@deepseek-ai/dsh-base']);
   assert.ok(!target.profiles.headless.dependencies[selected.package]);
   assert.ok(!Object.hasOwn(target.globalWorkspace.overrides, selected.package));
