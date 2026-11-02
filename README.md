@@ -64,6 +64,12 @@ node scripts/dsh-config.mjs update --machine workstation
 
 Web profile 统一启用 `@nagi-ovo/dsh-visualize`，使用依赖清单中的 npm 精确版本；其他 profile 不自动安装。插件由共用 Web patch 激活，不重复加载 bundle。OpenUI 不再由配置安装或激活，已安装的旧包在维护窗口通过 pnpm 卸载。
 
+### Better Sidebar
+
+Web profile 统一安装 npm 精确版本 `dsh-better-sidebar@0.28.2`，由[依赖清单](shared/dependencies.yaml)管理；其他 profile 不自动安装。使用 `patchOnly: true` 移除重复 bundle 激活，由共用 Web patch 挂载一次 `better-sidebar`，不覆盖界面拥有的偏好字段。
+
+当前接入的是上游原版，没有“仅桌面启用”补丁：手机 PWA 仍可能使用它的文件页及布局增强，与 Mobile Workbench 的组合需另行验收。配置检查和 update dry-run 不代表插件已安装或运行时兼容已验证。
+
 ### 配置归属：模板、界面与机器
 
 DSH 的设置页只能写带 `.volatile()` 的字段，并写进 **profile patch**（`profiles/<name>/cordis.patch.yml`）。因此本仓库遵循一条硬规则：**模板绝不渲染界面拥有的字段**，否则下一次 `update --apply` 会静默覆盖界面里的选择。

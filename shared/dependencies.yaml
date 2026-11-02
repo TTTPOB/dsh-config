@@ -210,6 +210,13 @@ packages:
     profiles: [web]
     required: true
     patchOnly: true
+  - package: dsh-better-sidebar
+    scope: profile
+    policy: registry
+    version: 0.28.2
+    profiles: [web]
+    required: true
+    patchOnly: true
   - package: dsh-mcp-panel
     scope: profile
     policy: release

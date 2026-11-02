@@ -14,6 +14,29 @@ function fixture(t) {
 
 const example = join(root, 'examples/workstation-machine.yaml');
 
+test('Better Sidebar uses an exact npm pin and one Web patch mount without owning preferences', () => {
+  const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
+  const selected = catalog.packages.find(row => row.package === 'dsh-better-sidebar');
+  assert.equal(selected.policy, 'registry');
+  assert.equal(selected.version, '0.28.2');
+  const target = resolveDependencyTargets('unused', {
+    webPackage: { dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-better-sidebar'] } } },
+    profiles: { headless: {} },
+  }, catalog);
+  assert.equal(target.profiles.web.dependencies[selected.package], '0.28.2');
+  assert.deepEqual(target.profiles.web.dsh.profile.bundles, ['@deepseek-ai/dsh-base']);
+  assert.ok(!target.profiles.headless.dependencies[selected.package]);
+  assert.ok(!Object.hasOwn(target.globalWorkspace.overrides, selected.package));
+  for (const machine of ['workstation', 'server']) {
+    const { rendered } = renderMachine(join(root, 'examples/' + machine + '-machine.yaml'), 'better-sidebar', undefined, { stage: false });
+    const rows = validatePatch(rendered.web).map(row => row.entry).filter(row => row.name === selected.package);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id, 'better-sidebar');
+    assert.equal(rows[0].config, undefined);
+    assert.ok(!validatePatch(rendered.home).some(row => row.entry.name === selected.package));
+  }
+});
+
 test('Visualize is installed and activated once in Web only, replacing OpenUI', () => {
   for (const machine of ['workstation', 'server']) {
     const { rendered } = renderMachine(join(root, 'examples/' + machine + '-machine.yaml'), 'visualize', undefined, { stage: false });
