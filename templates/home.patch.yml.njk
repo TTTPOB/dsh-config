@@ -3,6 +3,9 @@
     mode: native
     maxParallelSubCalls: 10
     ptcNativeTools: [context_compress]
+# Edits and writes apply without a prior read of the target file.
+- id: fs-observation-policy
+  disabled: true
 - id: ptc-runtime
   config:
     # ACP's canonical run_code call requires a TypeScript function body.
