@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync, realpathSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, realpathSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
@@ -19,17 +19,17 @@ function validate(input) {
   assert.equal(result.issues, undefined);
   return result.value;
 }
-function register(t, config) {
+function register(t, config, services = {}) {
   const tools = new Map(), disposers = [];
-  Plugin.apply({ effect: fn => disposers.push(fn()), tools: { register(tool) {
+  Plugin.apply({ get: name => services[name], effect: fn => disposers.push(fn()), tools: { register(tool) {
     tools.set(tool.name, tool);
     return () => tools.delete(tool.name);
   } } }, config);
   const dispose = () => disposers.splice(0).reverse().forEach(fn => fn());
   t.after(dispose);
-  return { tools, dispose, call: (name, args = {}, signal = new AbortController().signal) => tools.get(name).execute(args, { signal }) };
+  return { tools, dispose, call: (name, args = {}, signal = new AbortController().signal, exec = {}) => tools.get(name).execute(args, { signal, ...exec }) };
 }
-async function fixture(t, extra = {}) {
+async function fixture(t, extra = {}, services = {}) {
   const dir = directory(t), requests = [];
   let respond = () => ({ code: 0, data: null });
   const server = createServer(async (req, res) => {
@@ -38,8 +38,8 @@ async function fixture(t, extra = {}) {
     requests.push({ path: req.url, method: req.method, headers: req.headers, rawHeaders: req.rawHeaders, body: Buffer.concat(bytes) });
     const reply = respond(requests.at(-1));
     if (reply.delay) return;
-    res.writeHead(reply.status ?? 200, { 'Content-Type': 'application/json' });
-    res.end(reply.raw ?? JSON.stringify(reply));
+    res.writeHead(reply.status ?? 200, { 'Content-Type': reply.contentType ?? 'application/json' });
+    res.end(reply.bytes ?? reply.raw ?? JSON.stringify(reply));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
@@ -48,7 +48,7 @@ async function fixture(t, extra = {}) {
   writeFileSync(headersFile, JSON.stringify({ Authorization: 'Token test-self', 'User-Agent': 'old-agent', 'Content-Type': 'application/json' }));
   writeFileSync(peerHeaders, JSON.stringify({ Authorization: 'Token test-peer' }));
   const config = validate({ self: { baseURL: baseURL + '/self', headersFile }, peer: { baseURL: baseURL + '/peer', headersFile: peerHeaders }, ...extra });
-  return { dir, requests, config, headersFile, setReply: fn => { respond = fn; }, ...register(t, config) };
+  return { dir, requests, config, headersFile, setReply: fn => { respond = fn; }, ...register(t, config, services) };
 }
 
 test('multipart upload sends actual local bytes and returns local-to-asset mappings without sync', async t => {
@@ -94,7 +94,7 @@ test('sync routes independently, rereads flat credentials and overrides UA case-
     assert.equal(req.headers['user-agent'], 'Browser-Test/1.0');
     assert.equal(req.rawHeaders.filter(value => value.toLowerCase() === 'user-agent').length, 1);
   }
-  assert.equal(f.tools.size, 3);
+  assert.equal(f.tools.size, 4);
   assert.ok([...f.tools.values()].every(tool => tool.deferLoading === true && tool.timeoutMs === f.config.timeoutMs));
   f.dispose();
   assert.equal(f.tools.size, 0);
@@ -130,6 +130,70 @@ test('credential errors, invalid local paths and partial upload failures fail wi
     await assert.rejects(f.call('siyuan_upload_asset', { files: [file] }), /may already exist/);
   }
   assert.equal(f.requests.length, 2);
+});
+
+const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+const imageAgent = { agent: { options: { provider: 'p', model: 'm' }, session: { requestHeader: () => undefined } } };
+function imageServices({ modalities = ['text', 'image'], maxBytes = 1000 } = {}) {
+  const saved = [];
+  return { saved, services: {
+    llm: { resolveModelInfo: async () => ({ inputModalities: modalities }) },
+    attachments: { imageLimits: { maxImageBytes: maxBytes, maxMessageImageBytes: maxBytes }, async saveImage(input) {
+      saved.push(input);
+      return { attachmentId: 'att-1', mediaType: input.mediaType, bytes: input.data.byteLength, width: 4, height: 3, name: input.name };
+    } },
+  } };
+}
+
+test('fetch returns an image inline from self through the attachment store', async t => {
+  const store = imageServices();
+  const f = await fixture(t, {}, store.services);
+  f.setReply(() => ({ contentType: 'image/png', bytes: png }));
+  const value = await f.call('siyuan_fetch_asset', { asset: '/assets/a-1.png' }, undefined, imageAgent);
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.requests[0].path, '/self/api/file/getFile');
+  assert.equal(f.requests[0].headers.authorization, 'Token test-self');
+  assert.deepEqual(JSON.parse(f.requests[0].body), { path: '/data/assets/a-1.png' });
+  assert.deepEqual(Buffer.from(store.saved[0].data), png);
+  assert.equal(store.saved[0].mediaType, 'image/png');
+  assert.deepEqual(value, { asset: 'assets/a-1.png', image: { attachmentId: 'att-1', mediaType: 'image/png', bytes: png.length, width: 4, height: 3, name: 'a-1.png' } });
+  const blocks = f.tools.get('siyuan_fetch_asset').output.render({}, value);
+  assert.deepEqual(blocks.map(block => block.type), ['text', 'image']);
+  assert.equal(blocks[1].attachment.attachmentId, 'att-1');
+});
+
+test('fetch with saveTo writes original bytes to temp or an exact new path', async t => {
+  const f = await fixture(t);
+  const pdf = Buffer.from('%PDF-1.7 bytes');
+  f.setReply(() => ({ contentType: 'application/pdf', bytes: pdf }));
+  const temp = await f.call('siyuan_fetch_asset', { asset: 'assets/doc-1.pdf', saveTo: 'temp' });
+  t.after(() => rmSync(join(temp.path, '..'), { recursive: true, force: true }));
+  assert.equal(basename(temp.path), 'doc-1.pdf');
+  assert.deepEqual(readFileSync(temp.path), pdf);
+  assert.deepEqual({ ...temp, path: undefined }, { asset: 'assets/doc-1.pdf', path: undefined, bytes: pdf.length, mediaType: 'application/pdf' });
+  const target = join(f.dir, 'copy.pdf');
+  assert.equal((await f.call('siyuan_fetch_asset', { asset: 'assets/doc-1.pdf', saveTo: target })).path, target);
+  assert.deepEqual(readFileSync(target), pdf);
+  await assert.rejects(f.call('siyuan_fetch_asset', { asset: 'assets/doc-1.pdf', saveTo: target }), { code: 'EEXIST' });
+  await assert.rejects(f.call('siyuan_fetch_asset', { asset: 'assets/doc-1.pdf', saveTo: 'relative.pdf' }), /saveTo/);
+  assert.ok(f.requests.every(req => req.path === '/self/api/file/getFile'));
+});
+
+test('fetch refusals happen before network where possible and report API envelopes', async t => {
+  const store = imageServices({ maxBytes: 4 });
+  const f = await fixture(t, {}, store.services);
+  for (const asset of ['../conf/conf.json', 'assets/../conf.json', 'data/assets/a.png', 'assets\\a.png', 'assets//a.png']) {
+    await assert.rejects(f.call('siyuan_fetch_asset', { asset }, undefined, imageAgent), /asset must be/);
+  }
+  await assert.rejects(f.call('siyuan_fetch_asset', { asset: 'assets/doc.pdf' }, undefined, imageAgent), /pass saveTo/);
+  const blind = await fixture(t, {}, imageServices({ modalities: ['text'] }).services);
+  await assert.rejects(blind.call('siyuan_fetch_asset', { asset: 'assets/a.png' }, undefined, imageAgent), /does not accept image input/);
+  assert.equal(f.requests.length + blind.requests.length, 0);
+  f.setReply(() => ({ contentType: 'image/png', bytes: png }));
+  await assert.rejects(f.call('siyuan_fetch_asset', { asset: 'assets/a.png' }, undefined, imageAgent), /inline limit/);
+  f.setReply(() => ({ code: 404, msg: 'not found' }));
+  await assert.rejects(f.call('siyuan_fetch_asset', { asset: 'assets/a.png', saveTo: 'temp' }), /API code 404.*not found/);
+  assert.equal(store.saved.length, 0);
 });
 
 test('configured deadline and caller cancellation abort requests without retry', async t => {
@@ -176,7 +240,7 @@ test('installed Loader loads a copied module in isolated home, scopes tools and 
   const key = { agent: 'with-siyuan' };
   const scope = createScope(ctx, key);
   const include = await scope.ctx.plugin(Include, { path: pathToFileURL(yamlFile).href });
-  const names = ['siyuan_upload_asset', 'siyuan_sync_self', 'siyuan_sync_peer'];
+  const names = ['siyuan_fetch_asset', 'siyuan_upload_asset', 'siyuan_sync_self', 'siyuan_sync_peer'];
   assert.deepEqual(ctx.tools.schemas(key).map(tool => tool.name).sort(), names.sort());
   assert.ok(ctx.tools.schemas(key).every(tool => tool.deferLoading));
   assert.deepEqual(ctx.tools.schemas(), []);

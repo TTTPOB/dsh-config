@@ -1,5 +1,6 @@
-import { readFile } from 'node:fs/promises';
-import { basename, isAbsolute } from 'node:path';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, extname, isAbsolute, join } from 'node:path';
 
 export const name = 'siyuan-tools';
 export const inject = ['tools'];
@@ -29,7 +30,7 @@ export const Config = {
   },
 };
 
-async function post(config, endpoint, api, body, signal) {
+async function request(config, endpoint, api, body, signal) {
   const target = config[endpoint];
   let raw;
   try { raw = JSON.parse(await readFile(target.headersFile, 'utf8')); }
@@ -52,6 +53,11 @@ async function post(config, endpoint, api, body, signal) {
     await response.body?.cancel();
     throw new Error('SiYuan ' + endpoint + ' ' + api + ': HTTP ' + response.status);
   }
+  return response;
+}
+
+async function post(config, endpoint, api, body, signal) {
+  const response = await request(config, endpoint, api, body, signal);
   let result;
   try { result = await response.json(); }
   catch { throw new Error('SiYuan ' + endpoint + ' ' + api + ': invalid JSON response'); }
@@ -60,12 +66,96 @@ async function post(config, endpoint, api, body, signal) {
 }
 
 const render = (_args, value) => [{ type: 'text', text: JSON.stringify(value) }];
+const imageTypes = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
+const imageSchema = { type: 'object', properties: {
+  attachmentId: { type: 'string' }, mediaType: { type: 'string' }, bytes: { type: 'integer' },
+  width: { type: 'integer' }, height: { type: 'integer' }, name: { type: 'string' },
+  originalDimensions: { type: 'object', properties: { width: { type: 'integer' }, height: { type: 'integer' } }, required: ['width', 'height'], additionalProperties: false },
+}, required: ['attachmentId', 'mediaType', 'bytes', 'width', 'height'], additionalProperties: false };
+
+function assetPath(asset) {
+  const path = typeof asset === 'string' ? asset.replace(/^\/+/, '') : '';
+  if (!path.startsWith('assets/') || path.includes('\\') || path.split('/').some(part => part === '..' || part === '.' || part === '')) {
+    throw new Error('asset must be a SiYuan asset path such as assets/name-20260101000000-abcdefg.png');
+  }
+  return path;
+}
+
+/** Resolve the attachment store after confirming the calling model accepts image input. */
+async function imageStore(ctx, exec) {
+  const attachments = ctx.get('attachments');
+  if (!attachments) throw new Error('cannot return the image inline: no attachment store is mounted; pass saveTo instead');
+  const routed = exec.agent?.session.requestHeader()?.config;
+  const provider = routed?.provider ?? exec.agent?.options.provider;
+  const model = routed?.model ?? exec.agent?.options.model;
+  const llm = ctx.get('llm');
+  if (provider === undefined || model === undefined || !llm) throw new Error('cannot return the image inline: the current model route could not be resolved; pass saveTo instead');
+  const info = await llm.resolveModelInfo(provider, model, exec.signal);
+  if (!info.inputModalities?.includes('image')) throw new Error('cannot return the image inline: model "' + model + '" does not accept image input; pass saveTo instead');
+  return attachments;
+}
+
+async function fetchAsset(config, path, signal) {
+  const response = await request(config, 'self', '/api/file/getFile', { path: '/data/' + path }, signal);
+  const data = new Uint8Array(await response.arrayBuffer());
+  const mediaType = response.headers.get('Content-Type') ?? 'application/octet-stream';
+  // getFile reports failures as a JSON envelope; asset bytes never carry a non-zero numeric code.
+  if (mediaType.includes('application/json')) {
+    let result;
+    try { result = JSON.parse(new TextDecoder().decode(data)); }
+    catch { result = undefined; }
+    if (object(result) && typeof result.code === 'number' && result.code !== 0) throw new Error('SiYuan self /api/file/getFile: API code ' + result.code + (typeof result.msg === 'string' ? ' (' + result.msg + ')' : ''));
+  }
+  return { data, mediaType };
+}
+
+async function saveAsset(path, saveTo, data) {
+  if (saveTo === 'temp') {
+    const file = join(await mkdtemp(join(tmpdir(), 'siyuan-asset-')), basename(path));
+    await writeFile(file, data, { flag: 'wx' });
+    return file;
+  }
+  if (typeof saveTo !== 'string' || !isAbsolute(saveTo)) throw new Error('saveTo must be "temp" or an absolute local file path');
+  await writeFile(saveTo, data, { flag: 'wx' });
+  return saveTo;
+}
 const syncSchema = { type: 'object', properties: {
   endpoint: { type: 'string', enum: ['self', 'peer'] }, accepted: { type: 'boolean' },
   message: { type: 'string' },
 }, required: ['endpoint', 'accepted', 'message'], additionalProperties: false };
 
 export function apply(ctx, config) {
+  ctx.effect(() => ctx.tools.register({
+    name: 'siyuan_fetch_asset', deferLoading: true, timeoutMs: config.timeoutMs,
+    description: 'Fetch one asset from the default SiYuan instance. Without saveTo, returns a PNG/JPEG/WebP/GIF image directly for viewing (large images are downscaled). With saveTo, writes the original bytes to a local file on the DSH execution machine and returns its path; use this for non-image assets. Never overwrites existing files.',
+    parameters: { type: 'object', properties: {
+      asset: { type: 'string', description: 'SiYuan asset path as referenced in notes, e.g. assets/name-20260101000000-abcdefg.png.' },
+      saveTo: { type: 'string', description: 'Omit to view an image inline. "temp" writes to a new temporary directory; an absolute path writes exactly there and fails if the file exists.' },
+    }, required: ['asset'], additionalProperties: false },
+    output: { schema: { type: 'object', properties: {
+      asset: { type: 'string' }, path: { type: 'string' }, bytes: { type: 'integer' }, mediaType: { type: 'string' }, image: imageSchema,
+    }, required: ['asset'], additionalProperties: false },
+    render: (_args, value) => value.image
+      ? [{ type: 'text', text: JSON.stringify({ asset: value.asset, mediaType: value.image.mediaType, width: value.image.width, height: value.image.height, ...value.image.originalDimensions ? { originalDimensions: value.image.originalDimensions } : {} }) }, { type: 'image', attachment: value.image }]
+      : render(_args, value) },
+    async execute({ asset, saveTo }, exec) {
+      const path = assetPath(asset);
+      if (saveTo !== undefined) {
+        const { data, mediaType } = await fetchAsset(config, path, exec.signal);
+        return { asset: path, path: await saveAsset(path, saveTo, data), bytes: data.byteLength, mediaType };
+      }
+      const mediaType = imageTypes[extname(path).toLowerCase()];
+      if (!mediaType) throw new Error('asset is not a PNG/JPEG/WebP/GIF image; pass saveTo to download it as a file');
+      const attachments = await imageStore(ctx, exec);
+      const { data } = await fetchAsset(config, path, exec.signal);
+      const limit = Math.min(attachments.imageLimits.maxImageBytes, attachments.imageLimits.maxMessageImageBytes);
+      if (data.byteLength > limit) throw new Error('image is ' + data.byteLength + ' bytes, above the ' + limit + '-byte inline limit; pass saveTo and inspect a downscaled copy');
+      let ref;
+      try { ref = await attachments.saveImage({ data, mediaType, name: basename(path) }); }
+      catch (error) { throw new Error('cannot return the image inline' + (error?.code ? ' (' + error.code + ')' : '') + ': ' + (error?.message ?? error) + '; pass saveTo to download it as a file', { cause: error }); }
+      return { asset: path, image: { ...ref, attachmentId: String(ref.attachmentId) } };
+    },
+  }));
   ctx.effect(() => ctx.tools.register({
     name: 'siyuan_upload_asset', deferLoading: true, timeoutMs: config.timeoutMs,
     description: 'Upload local files from the DSH execution machine to the default SiYuan instance. Sends actual bytes, not local paths. Does not trigger sync; do not automatically retry failed writes.',
