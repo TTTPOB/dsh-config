@@ -17,7 +17,7 @@ verifiedCompatibility:
   "@deepseek-ai/dsh-llm-pi-ai@0.2.1-rc.1-fork3": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-session-persistence-jsonl@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
   "@deepseek-ai/dsh-session-query@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
-  "@deepseek-ai/dsh-session-query-sqlite@0.2.1-rc.1-fork1": ["0.2.1-rc.1"]
+  "@deepseek-ai/dsh-session-query-sqlite@0.2.1-rc.1-fork2": ["0.2.1-rc.1"]
   "dsh-active-context@0.5.2": ["0.2.1-rc.1"]
   "dsh-session-tools@0.4.0": ["0.2.1-rc.1"]
   "dsh-workspace-envrc@0.3.0": ["0.2.1-rc.1"]
@@ -72,8 +72,8 @@ packages:
   - package: "@deepseek-ai/dsh-session-query-sqlite"
     scope: global-override
     policy: release
-    version: 0.2.1-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork1/deepseek-ai-dsh-session-query-sqlite-0.2.1-rc.1-fork1.tgz
+    version: 0.2.1-rc.1-fork2
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.1-rc.1-fork12/deepseek-ai-dsh-session-query-sqlite-0.2.1-rc.1-fork2.tgz
     resetSelectors: true
   - package: "@deepseek-ai/dsh-client-ui-plugin-manager"
     scope: global-override
