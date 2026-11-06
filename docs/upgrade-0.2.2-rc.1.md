@@ -8,7 +8,7 @@
 
 Pi 已有[正式 Release 资产](<https://github.com/TTTPOB/pi/releases/download/pi-ai-v1.3.0-fork1/earendil-works-pi-ai-1.3.0-fork1.tgz>)，本地同版 tarball 的 SHA256 已核实为 `0e8d79376b25c04d1fcb67ceb2d04a1e3bec804f3c6ec833fbacd15ef7fc7db1`。0.2.2 新增的 `@botiverse/oar` 也间接依赖 Pi；既有全局目标规划与隔离 installation/profile workspace 均已设置 `blockExoticSubdeps: false`，允许精确 URL override 作用于间接依赖，无需新增兼容层。
 
-核心 fork 尚未发 Release，下表插件也尚未交付本轮 Release。清单仅保存目标版本和缺来源 `reason`，不猜 URL；旧版 `verifiedCompatibility` 已清空，待实际 runtime 拒绝和成品行为验证后再登记精确例外。
+核心 22 个 fork 包与下表 7 个插件均已正式发布。已核对下载副本的 SHA256 与 Release 来源清单、包名和版本，32 个清单行（包含 global/profile 重复归属）已填入精确 URL 并删除未发布 `reason`。Pi 与 4 个未变插件也使用正式 Release 资产，共 34 个唯一 tarball；Pi SHA256 再次核对一致。
 
 | 插件包 | 目标版本 |
 |---|---|
@@ -61,24 +61,24 @@ node scripts/dsh-config.mjs check --machine nas
 ```
 
 - 完整单元测试共 148 项：142 通过、0 失败；需要显式 `DSH_CLI_PACKAGE` 的 6 个 installed-Loader 集成用例按约定 skip。其中工具指引的目标 runtime 集成另在一次性安装中运行通过，见下文。
-- 三机私有输入均存在，`check` 全部退出 `0` 并列出待发布来源；公开 workstation、server、active-context、local-plugins 示例全部完成内存渲染和 patch 结构校验。
+- 三机私有输入均存在，正式来源补齐后 `check` 全部退出 `0`，没有待发布来源；公开 workstation、server、active-context、local-plugins 示例全部完成内存渲染和 patch 结构校验。
 - 每个公开示例及三机的每个已生成 preset，persona／plan section 都经目标源码的真实 `renderPrompt` 成功渲染；变量名从目标 `agent-loop` 注册提取。没有读取 literal prompt-overlay 文件，该项仅覆盖配置文本；完整 `renderContextSnapshot` 和成品提示词检查见下文隔离组合验收。
-- 三机 `update --offline --json` 都退出 `2`，各报告 32 个缺来源条目；这是发布资产阻塞，不是配置结构失败。未执行 `--apply`。
+- 三机 `update --offline --verbose --json` 均退出 `0`、`blocked: 0`；workstation／server／nas 变化总条目分别为 41／42／41（workstation 含一项 retired override 移除）。这是与 installation 参数／快照的来源比较，不是当前实际安装的版本验收。未执行 `--apply`。
 - 五项变异检查分别删除 Team fresh 路由、忽略 required dependency、移除 executor 唯一性检查、绕过 smoke/catalog runtime 对齐、删除旧 tools 行迁移锚点；对应行为测试均失败，恢复实现后回归通过。未删除测试或添加兼容层。
 
 ## 4. 受控输入与离线预览
 
-`generated/upgrade-0.2.2-rc.1/assets/` 已备齐 34 个 tarball：22 个核心 fork、Pi、表中 7 个新插件和 4 个未变插件。每个包在目录根层只保留一个 tarball；这些忽略目录不随 Git 提交交付，换机器时需重新收集同版资产。
+`generated/upgrade-0.2.2-rc.1/release-assets/` 已备齐 34 个正式 Release tarball：22 个核心 fork、Pi、表中 7 个新插件和 4 个未变插件。每个包在目录根层只保留一个 tarball；这些忽略目录不随 Git 提交交付，换机器时需重新收集同版资产。
 
-以下命令已执行。prepare 输出 `Prepared 3 presets and 34 tarballs`，`check` 退出 `0`；离线 update 退出 `2`，报告 32 个待发布来源。本地成品不补齐正式 Release URL。
+以下命令已使用正式 Release 输入重新执行。prepare 输出 `Prepared 3 presets and 34 tarballs (0 local)`，公开受控输入的 `check` 退出 `0`；正式来源补齐后离线 update 退出 `0`，没有缺来源阻塞。
 
 ```sh
 export NODE_OPTIONS=--max-old-space-size=4096
-node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/assets generated/upgrade-0.2.2-rc.1/input
+node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/release-assets generated/upgrade-0.2.2-rc.1/release-public
 export NODE_OPTIONS=--max-old-space-size=4096
-node scripts/dsh-config.mjs check generated/upgrade-0.2.2-rc.1/input/machine.yaml
+node scripts/dsh-config.mjs check generated/upgrade-0.2.2-rc.1/release-public/machine.yaml
 export NODE_OPTIONS=--max-old-space-size=4096
-node scripts/dsh-config.mjs update generated/upgrade-0.2.2-rc.1/input/machine.yaml --offline --verbose
+node scripts/dsh-config.mjs update generated/upgrade-0.2.2-rc.1/release-public/machine.yaml --offline --verbose
 ```
 
 prepare 为机器输入声明输出目录下的 `deployment.home`，供 `check`／update 预览解析共享本地插件路径；预览不安装该 home。`isolatedTest` 仍使用自己拥有并自动清理的临时 home。受控 smoke patch 从仓库源码加载本地插件，并在 Loader 求值凭据表达式前禁用外部 MCP；三机私有变体保留本地行与字面表达式，不请求真实 provider／MCP。
@@ -89,22 +89,28 @@ prepare 为机器输入声明输出目录下的 `deployment.home`，供 `check`�
 
 ```sh
 export NODE_OPTIONS=--max-old-space-size=4096
-flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/input/argv.json
+flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/release-public/argv.json
 export NODE_OPTIONS=--max-old-space-size=4096
-node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/assets --private workstation
+node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/release-assets generated/upgrade-0.2.2-rc.1/release-workstation --private workstation
 export NODE_OPTIONS=--max-old-space-size=4096
-flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/profile-smoke-input-workstation/argv.json
+flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/release-workstation/argv.json
 export NODE_OPTIONS=--max-old-space-size=4096
-node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/assets --private server
+node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/release-assets generated/upgrade-0.2.2-rc.1/release-server --private server
 export NODE_OPTIONS=--max-old-space-size=4096
-flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/profile-smoke-input-server/argv.json
+flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/release-server/argv.json
 export NODE_OPTIONS=--max-old-space-size=4096
-node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/assets --private nas
+node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/release-assets generated/upgrade-0.2.2-rc.1/release-nas --private nas
 export NODE_OPTIONS=--max-old-space-size=4096
-flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/profile-smoke-input-nas/argv.json
+flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/release-nas/argv.json
 ```
 
-公开输入、workstation、server、NAS 均退出 `0`，三份私有 prepare 也均输出 3 presets／34 tarballs。每个输入的 standard、Team、redteam 三个 preset 均完成真实 prompt/context assembly、工具隔离与实际模块版本检查，模型可见工具恰为 `run_code` 和配置声明的 native exceptions（本轮为 `context_compress`、`mcp_probe`）；真实 per-call SDK 调用、ACP 拒绝输入不改 Surface、成功提交及次步归档均通过。报告为 `modelRequests: 0`、`cleaned: true`，Web 验证只覆盖认证交换与页面 HTTP 请求，`browserChecked: false`。配置侧仍报告 `renderedConfigurationVerified: false`：验收的是受控组合，不是整份日用配置。
+公开输入、workstation、server、NAS 已用正式 Release 成品串行重跑，均退出 `0`；三份私有 prepare 也均输出 3 presets／34 tarballs（0 local），每轮实际核对 44 个包／安装归属。每个输入的 standard、Team、redteam 三个 preset 均完成真实 prompt/context assembly、工具隔离与实际模块版本检查，模型可见工具恰为 `run_code` 和配置声明的 native exceptions（本轮为 `context_compress`、`mcp_probe`）；真实 per-call SDK 调用、ACP 拒绝输入不改 Surface、成功提交及次步归档均通过。报告为 `modelRequests: 0`、`cleaned: true`，Web 验证只覆盖认证交换与页面 HTTP 请求，`browserChecked: false`。配置侧仍报告 `renderedConfigurationVerified: false`：验收的是受控组合，不是整份日用配置。
+
+### 正式 runtime 的精确兼容拒绝
+
+本轮 generated 验收入口在任何临时豁免前，用隔离安装的官方 `evaluatePluginCompatibility` 执行 doctor。四套输入都只发现相同的 16 个精确拒绝，没有其他安装或 built-entry 问题；临时安装仅对实际拒绝项执行 `allow-version`。四轮 smoke 全部通过后，清单只登记其中 15 个 DSH fork 与 `0.2.2-rc.1` 的精确组合，不给其他核心包、Pi 或七个新插件批量授权。
+
+第 16 项为旧 `@firecrawl/dsh-firecrawl@0.2.0-fork1`，官方拒绝原因是它要求 `@deepseek-ai/dsh-launch-environment: 0.2.1-rc.1` 和 `@deepseek-ai/dsh-web: 0.2.1-rc.1`。本轮只有占位 key 下的加载和工具注册证据，没有真实 Firecrawl 请求，**不登记其永久兼容豁免**。离线 update 没有缺来源阻塞不表示真实 apply 已能通过兼容检查；Firecrawl 等待正规升级到 0.2.2 后的新 Release，不对旧版补豁免；新成品到位后再做真实自建服务行为验收。临时验收豁免随隔离 home 一并清理。
 
 ### 失败根因与回归
 
@@ -116,4 +122,4 @@ flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/pro
 
 ## 6. 待执行
 
-浏览器操作、手机真机、SSH helper、真实 provider／MCP 请求仍待验收，外部请求另行授权。正式 Release 尚需下载核验精确 URL／SHA256 后写入清单；真实安装、`update --apply` 和日用 Host 切换未执行。
+浏览器操作、手机真机、SSH helper、真实 provider／MCP 请求仍待验收，外部请求另行授权。Firecrawl 的 0.2.2 升级 Release 与真实自建服务请求验收仍待完成；真实安装、`update --apply` 和日用 Host 切换未执行。
