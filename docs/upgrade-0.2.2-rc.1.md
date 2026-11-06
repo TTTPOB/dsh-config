@@ -18,12 +18,13 @@
 | `dsh-progressive-tools` | `0.6.0` |
 | `dsh-mcp-panel` | `0.6.24-fork2` |
 | `dsh-web-mobile` | `3.5.0` |
+| `@firecrawl/dsh-firecrawl` | `0.2.0-fork2` |
 
 与 0.2.1-rc.1 相比，fork 包新增 `@deepseek-ai/dsh-tool-executor-ptc`（PTC native exceptions）和 `@deepseek-ai/dsh-experimental-client-ui-agent-team`（Team 面板的已归档成员分组）。Team 的 service、tools 和 UI 的 profile 依赖与全局 override 使用同一资产；不启用官方 Team profile bundle。
 
 上游 0.2.2 新增的 `@botiverse/oar` 也依赖 Pi。pnpm 默认拒绝从 URL 安装间接依赖，所以全局规划和隔离 workspace 都设置了 `blockExoticSubdeps: false`，让 Pi 的 URL override 同样作用于间接依赖。
 
-image-recovery、visualize、Better Sidebar 沿用已发布版本。Firecrawl 等待升级，见第 5 节。
+image-recovery、visualize、Better Sidebar 沿用已发布版本。
 
 ## 2. 配置迁移
 
@@ -93,7 +94,6 @@ image-recovery、visualize、Better Sidebar 沿用已发布版本。Firecrawl �
 
 ## 5. 未覆盖与待办
 
-- **Firecrawl**：`@firecrawl/dsh-firecrawl@0.2.0-fork1` 精确依赖 DSH `0.2.1-rc.1`，被 0.2.2 runtime 拒绝。它不登记豁免，正在升级到 0.2.2-rc.1；新 Release 到位后替换清单中的待更新行，并对自建服务发一次真实请求验收。在此之前不能执行真实 `update --apply`。
 - **envrc**：发布 CI 固定在 Ubuntu 24.04（direnv 2.32.x，与三台机器一致）。在 direnv 2.37.1 下，`deny` 之后再执行仍退出 `0`，两项原生测试失败；envrc 尚不兼容 direnv 2.37.1。
 - 浏览器交互、手机真机（iOS 输入法、软键盘、PWA、Android 返回键）、SSH 远端 helper（协议版本 3，不能混用旧 helper）、真实 provider 和 MCP 请求尚未验收。
 - 尚未真实安装或切换任何机器。

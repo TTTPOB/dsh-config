@@ -112,13 +112,11 @@ packages:
     policy: release
     version: 3.5.0
     url: https://github.com/TTTPOB/dsh-mobile-workbench/releases/download/v3.5.0/dsh-web-mobile-3.5.0.tgz
-  # Pending: replace this old target with the forthcoming 0.2.2-compatible Release.
-  # Do not grant an exemption; its exact 0.2.1 peers are rejected by the target runtime.
   - package: "@firecrawl/dsh-firecrawl"
     scope: profile
     policy: release
-    version: 0.2.0-fork1
-    url: https://github.com/TTTPOB/dsh-firecrawl/releases/download/v0.2.0-fork1/firecrawl-dsh-firecrawl-0.2.0-fork1.tgz
+    version: 0.2.0-fork2
+    url: https://github.com/TTTPOB/dsh-firecrawl/releases/download/v0.2.0-fork2/firecrawl-dsh-firecrawl-0.2.0-fork2.tgz
   - package: dsh-claude-image-recovery
     scope: profile
     required: true
