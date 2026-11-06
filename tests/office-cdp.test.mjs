@@ -125,3 +125,27 @@ test('automatic hide runs once and explicit show remains visible for later docum
   assert.equal(wire.sent.filter(m=>m.params.expression.includes('Office.addin.hide')).length,1);
   assert.ok(wire.sent.some(m=>m.params.expression.includes('Office.addin.showAsTaskpane')));
 });
+test('helper backend sends deck size into render and keeps helper error codes', async t => {
+  const requests=[];
+  const png=Buffer.from([137,80,78,71,13,10,26,10,9,9]);
+  t.mock.method(globalThis,'fetch',async(url,init)=>{
+    const href=String(url);requests.push({href,body:JSON.parse(init.body)});
+    if(href.endsWith('/eval'))return {ok:true,json:async()=>({value:{slideCount:7}})};
+    return {ok:true,arrayBuffer:async()=>png};
+  });
+  const saved=[];const ref={attachmentId:'image-helper',mediaType:'image/png',bytes:png.length,width:10,height:5};
+  const f=register(t,config({backend:'helper',helperUrl:'http://127.0.0.1:19999',autoHide:false}),{saveImage:async value=>{saved.push(value);return ref;}});
+  const value=await f.call('office_render_slide',{slide:2});
+  assert.deepEqual(saved[0].data,png);
+  assert.equal(value.image.attachmentId,'image-helper');
+  assert.equal(new URL(requests[0].href).host,'127.0.0.1:19999');
+  assert.equal(new URL(requests[0].href).pathname,'/eval');
+  assert.equal(new URL(requests[1].href).pathname,'/render');
+  assert.deepEqual(requests[1].body,{slide:2,width:1280,height:720,expectSlides:7});
+});
+
+test('helper failures surface the helper code instead of a bare status', async t => {
+  t.mock.method(globalThis,'fetch',async()=>({ok:false,status:503,json:async()=>({error:{
+    code:'powerpoint-not-running',message:'PowerPoint is not running in the current session.'}})}));
+  await assert.rejects(Plugin.evaluate(config({backend:'helper'}),'return 1;'),/powerpoint-not-running: PowerPoint is not running/);
+});

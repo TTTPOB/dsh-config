@@ -37,14 +37,19 @@ localPlugins:
 
 ## 配置与限制
 
+- `backend`：`cdp`（默认）在本机直连 CDP 并用本机 PowerShell 渲染；`helper` 把所有文档操作发给 Windows helper，远端只需一个端口。
 - `endpoint`：CDP HTTP(S) 地址；默认本地 9224。WebSocket 主机和端口使用该地址，支持端口转发。
+- `helperUrl`：`backend: helper` 时的 helper 地址，默认 `http://127.0.0.1:18766`。
+- `helperToken`：非空时以 `Authorization: Bearer` 发送；默认空，依赖 SSH 隧道鉴权。
 - `targetUrl`：匹配 Office 页面的 URL 前缀；默认 Claude Office 侧栏站点。匹配零个或多个页面都报错，需要保持一个目标侧栏或收窄前缀。
-- `timeoutMs`：每个工具及 CDP 请求超时，默认 90000。
+- `timeoutMs`：每个工具及请求超时，默认 90000。
 - `autoHide`：首次文档调用自动隐藏，默认 `true`。
-- `powershell`：本机 PowerShell 可执行文件，默认 `powershell.exe`。
+- `powershell`：`backend: cdp` 时使用的本机 PowerShell，默认 `powershell.exe`。
 - `renderWidth` / `renderHeight`：COM 导出像素尺寸，默认 1280 × 720。
 
-CDP 能读写侧栏绑定的文档；渲染使用 COM 的 `ActivePresentation`。当前版本不处理多窗口，必须保持目标演示文稿为活动文档。远端只转发 CDP 不会同时转发 COM，不能宣称远端渲染已支持。
+渲染使用 COM 的 `ActivePresentation`，导出前比对页数，不一致时报 `presentation-mismatch` 而不是悄悄渲染错文档。`backend: cdp` 需要 DSH 机器能调 PowerShell，远端只转发 CDP 无法渲染。
+
+`backend: helper` 时 CDP 端口留在 Windows 本机，远端只连 helper；helper 不保存任何文档状态，每次请求重新发现侧栏并重新附加 COM，所以开机时 PowerPoint 未运行、侧栏重载或换文档都不需要重启服务。同类失败分别返回 `powerpoint-not-running`、`taskpane-not-open`、`pane-unreachable`。
 
 `office_run_js` 直接运行 Office 页面代码，不提供 Claude 的 SES 沙箱或 `insertImage`、`blobs`、`JSZip` 私有 helper。该插件具有本机文档控制权，只给可信 agent 使用；CDP 端口不要直接暴露到公网。
 

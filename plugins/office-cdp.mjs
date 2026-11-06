@@ -10,10 +10,13 @@ const runFile = promisify(execFile);
 /** Dependency-free Standard Schema for deployment-specific connection settings. */
 export const Config = {
   '~standard': { version: 1, vendor: name, validate(input) {
-    const value = { endpoint: 'http://127.0.0.1:9224', targetUrl: 'https://pivot.claude.ai/', timeoutMs: 90000,
+    const value = { backend: 'cdp', endpoint: 'http://127.0.0.1:9224', helperUrl: 'http://127.0.0.1:18766',
+      helperToken: '', targetUrl: 'https://pivot.claude.ai/', timeoutMs: 90000,
       powershell: 'powershell.exe', renderWidth: 1280, renderHeight: 720, autoHide: true, ...input };
     const issues = [];
-    for (const key of ['endpoint', 'targetUrl']) {
+    if (!['cdp', 'helper'].includes(value.backend)) issues.push({ message: "backend must be 'cdp' or 'helper'", path: ['backend'] });
+    if (typeof value.helperToken !== 'string') issues.push({ message: 'helperToken must be a string', path: ['helperToken'] });
+    for (const key of ['endpoint', 'helperUrl', 'targetUrl']) {
       try { if (!['http:', 'https:'].includes(new URL(value[key]).protocol)) throw new Error('protocol'); }
       catch (error) { issues.push({ message: key + ' must be an HTTP(S) URL', path: [key] }); }
     }
@@ -26,8 +29,34 @@ export const Config = {
   } },
 };
 
+const PNG_MAGIC = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+function helperSignal(config, signal) {
+  const deadline = AbortSignal.timeout(config.timeoutMs);
+  const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
+  combined.throwIfAborted();
+  return combined;
+}
+
+/** One request to the Windows helper; failures keep the helper's code and hint. */
+async function helperRequest(config, route, body, signal, binary = false) {
+  const headers = { 'content-type': 'application/json' };
+  if (config.helperToken) headers.authorization = 'Bearer ' + config.helperToken;
+  const response = await fetch(new URL(route, config.helperUrl), {
+    method: 'POST', headers, body: JSON.stringify(body), signal: helperSignal(config, signal),
+  });
+  if (!response.ok) {
+    let detail = null;
+    try { detail = (await response.json()).error; } catch { detail = null; }
+    throw new Error('office-cdp helper ' + (detail?.code ?? 'HTTP ' + response.status) + ': '
+      + (detail?.message ?? 'request failed'));
+  }
+  return binary ? Buffer.from(await response.arrayBuffer()) : response.json();
+}
+
 /** Evaluate once; never retry writes whose completion is unknown. */
 export async function evaluate(config, expression, signal) {
+  if (config.backend === 'helper') return (await helperRequest(config, '/eval', { code: expression }, signal)).value ?? null;
   const deadline = AbortSignal.timeout(config.timeoutMs);
   const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
   combined.throwIfAborted();
@@ -114,6 +143,11 @@ export function outlineExpression(slide, compact = false) {
       result.push({slide:i,id:s.id,shapes:${compact ? "shapes.map(s=>({...s,text:s.text.slice(0,200)}))" : 'shapes'}}); } return result;`);
 }
 
+/** Deck size, used to refuse rendering a different PowerPoint window. */
+export function deckSizeExpression(slide) {
+  return office(`const items = await slides(ctx); at(items, ${JSON.stringify(slide)}); return {slideCount: items.length};`);
+}
+
 /** Geometry warnings are heuristics; they do not establish visual correctness. */
 export function verifyLayout(data, page) {
   const problems = [];
@@ -133,20 +167,33 @@ export function verifyLayout(data, page) {
   return { slidesChecked: data.length, problems, note: 'Heuristic only: containment is ignored; inspect rendered slides for clipping and intentional overlaps.' };
 }
 
-/** Export PNG through local Windows COM and return bytes on stdout, not a Windows path. */
-export async function renderSlide(config, slide, signal) {
+/** Export PNG through PowerPoint COM, locally or through the Windows helper, and return bytes. */
+export async function renderSlide(config, slide, options = {}) {
   if (!Number.isSafeInteger(slide) || slide < 1) throw new Error('slide must be a positive integer');
+  const expected = Number(options.expectSlides ?? 0);
+  if (config.backend === 'helper') {
+    const bytes = await helperRequest(config, '/render',
+      { slide, width: config.renderWidth, height: config.renderHeight, expectSlides: expected }, options.signal, true);
+    if (!bytes.subarray(0, 8).equals(PNG_MAGIC)) throw new Error('office-cdp helper did not return a PNG');
+    return bytes;
+  }
   const script = `$ErrorActionPreference = 'Stop'
 $p = [IO.Path]::Combine([IO.Path]::GetTempPath(), [Guid]::NewGuid().ToString() + '.png')
 try {
   $app = [Runtime.InteropServices.Marshal]::GetActiveObject('PowerPoint.Application')
-  $app.ActivePresentation.Slides.Item(${slide}).Export($p, 'PNG', ${config.renderWidth}, ${config.renderHeight})
-  [Convert]::ToBase64String([IO.File]::ReadAllBytes($p))
+  $deck = $app.ActivePresentation
+  if (${expected} -ne 0 -and $deck.Slides.Count -ne ${expected}) { Write-Output ('MISMATCH:' + $deck.Slides.Count) }
+  else {
+    $deck.Slides.Item(${slide}).Export($p, 'PNG', ${config.renderWidth}, ${config.renderHeight})
+    [Convert]::ToBase64String([IO.File]::ReadAllBytes($p))
+  }
 } finally { if ([IO.File]::Exists($p)) { [IO.File]::Delete($p) } }`;
   const { stdout } = await runFile(config.powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script,'utf16le').toString('base64')],
-    { signal, timeout: config.timeoutMs, maxBuffer: 32 * 1024 * 1024, windowsHide: true });
-  const bytes = Buffer.from(stdout.trim(), 'base64');
-  if (!bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) throw new Error('PowerPoint did not return a PNG');
+    { signal: options.signal, timeout: config.timeoutMs, maxBuffer: 32 * 1024 * 1024, windowsHide: true });
+  const output = stdout.trim();
+  if (output.startsWith('MISMATCH:')) throw new Error('PowerPoint has a different deck active (' + output.slice(9) + ' slides); keep the deck bound to the taskpane active.');
+  const bytes = Buffer.from(output, 'base64');
+  if (!bytes.subarray(0, 8).equals(PNG_MAGIC)) throw new Error('PowerPoint did not return a PNG');
   return bytes;
 }
 
@@ -208,9 +255,9 @@ export function apply(ctx, config) {
     const placement={}; for (const [key,target] of [['left','imageLeft'],['top','imageTop'],['width','imageWidth'],['height','imageHeight']]) if(a[key]!==undefined) placement[target]=a[key];
     return evaluateNow(imageExpression(a.slide,base64,placement),e);
   });
-  add('office_render_slide','Render a slide with local Windows PowerPoint COM and return its PNG directly for visual inspection. Requires PowerShell on the DSH machine; forwarding CDP alone does not forward COM. Renders the active presentation; keep the intended deck active.',{slide:slideParam},['slide'],{type:'object',properties:{slide:slideParam,image:imageSchema},required:['slide','image'],additionalProperties:false},async(a,e)=>{
-    await evaluateNow(outlineExpression(a.slide,true),e);
-    const data=await renderSlide(config,a.slide,e.signal);
+  add('office_render_slide','Render a slide with PowerPoint COM and return its PNG directly for visual inspection. With backend helper the Windows helper renders; with backend cdp the local DSH machine renders through PowerShell. Either way the active presentation must be the deck bound to the taskpane.',{slide:slideParam},['slide'],{type:'object',properties:{slide:slideParam,image:imageSchema},required:['slide','image'],additionalProperties:false},async(a,e)=>{
+    const guard=await evaluateNow(deckSizeExpression(a.slide),e);
+    const data=await renderSlide(config,a.slide,{signal:e.signal,expectSlides:guard?.slideCount});
     const image=await ctx.attachments.saveImage({data,mediaType:'image/png',name:'slide-'+a.slide+'.png'});
     return {slide:a.slide,image:{...image,attachmentId:String(image.attachmentId)}};
   },(_a,v)=>[{type:'text',text:JSON.stringify({slide:v.slide,width:v.image.width,height:v.image.height})},{type:'image',attachment:v.image}]);
@@ -228,7 +275,7 @@ const skillContent = `# PowerPoint Office.js 操作手册
 2. 调用 office_slide_outline 获取摘要，office_slide_shapes 获取单页完整文本和形状。
 3. 用 office_run_js 执行异步函数体；必须显式 return 返回 JSON 结果。它不是 SES 沙箱，没有 insertImage、blobs、JSZip 等 Claude 私有 helper。
 4. 用 office_insert_image 插入图片；filePath 是 DSH 机器上的路径，不是 Windows 路径。也可传裸 base64。无需先上传到 Windows。
-5. 修改后调用 office_render_slide，工具直接返回 PNG 图片，亲眼检查后再判断排版。渲染目前使用本机 PowerShell/COM；仅转发 CDP 的远端无法使用此渲染工具。确保目标文档为 PowerPoint 活动演示文稿。
+5. 修改后调用 office_render_slide，工具直接返回 PNG 图片，亲眼检查后再判断排版。渲染走 PowerPoint COM：本机由 DSH 机器调 PowerShell，远端由 Windows helper 转发。确保目标文档是该侧栏绑定的活动演示文稿，切换窗口会让渲染拒绝并报 presentation-mismatch。
 6. 最后调用 office_verify_layout。几何结果仅作提示，不替代视觉检查；容器内文字等完全包含关系被忽略，部分重叠可能是有意设计。无告警不代表视觉正确。
 
 按单页小步修改、渲染、检查、修正。同一问题三轮仍未解决就说明现状。错误或超时可能发生在部分修改之后，先读取现状，不盲目重试。不要删除用户已有内容来消除告警。
