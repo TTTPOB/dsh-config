@@ -20,6 +20,10 @@ mcp:
 subagentModels:
   - provider: deepseek-official
     model: deepseek-flash
+# Route for a fresh subagent call that names no model; subagent_fork keeps the parent route.
+subagentDefault:
+  provider: deepseek-official
+  model: deepseek-flash
 
 homePrivate: |
   - insert: []

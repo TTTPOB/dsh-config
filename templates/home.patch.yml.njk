@@ -232,6 +232,8 @@
                   provider: spawn
                   toolName: subagent
                   modelSelectionSettings: true
+                  # Fresh children never silently inherit the parent route; only subagent_fork does.
+                  agentOptions: [[ machine.subagentDefault | dump ]]
               - id: tool-subagent-fork
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:

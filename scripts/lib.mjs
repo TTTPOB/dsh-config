@@ -107,6 +107,11 @@ export function validateMachine(machine) {
   assert.ok(Array.isArray(machine.subagentModels) && machine.subagentModels.length
     && machine.subagentModels.every(route => typeof route.provider === 'string' && route.provider.length && typeof route.model === 'string' && route.model.length),
   'subagentModels requires provider/model routes');
+  const childDefault = machine.subagentDefault;
+  assert.ok(childDefault && typeof childDefault.provider === 'string' && childDefault.provider.length
+    && typeof childDefault.model === 'string' && childDefault.model.length
+    && (childDefault.reasoningEffort === undefined || (typeof childDefault.reasoningEffort === 'string' && childDefault.reasoningEffort.length)),
+  'subagentDefault requires a provider/model route with an optional reasoningEffort');
   if (machine.providers !== undefined) {
     assert.ok(machine.providers && typeof machine.providers === 'object' && !Array.isArray(machine.providers), 'providers must be an object');
     for (const [key, value] of Object.entries(machine.providers)) {

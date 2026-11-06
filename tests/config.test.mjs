@@ -82,7 +82,10 @@ test('rc.1 presets separate ordinary delegation and Team tools without present',
   for (const id of ['standard-ptc']) {
     const plugins = byId(id), tools = delegation(plugins);
     const spawn = tools.find(row => row.id === 'tool-subagent').config;
-    assert.deepEqual(spawn, { provider: 'spawn', toolName: 'subagent', modelSelectionSettings: true });
+    assert.deepEqual(spawn, {
+      provider: 'spawn', toolName: 'subagent', modelSelectionSettings: true,
+      agentOptions: { provider: 'deepseek-official', model: 'deepseek-flash' },
+    });
     assert.deepEqual(tools.find(row => row.id === 'tool-subagent-fork').config,
       { provider: 'fork', toolName: 'subagent_fork' });
     assert.ok(!tools.some(row => row.id === 'tool-agent-team'));
