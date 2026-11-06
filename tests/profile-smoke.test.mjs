@@ -109,8 +109,14 @@ test('private smoke rows drop external services and keep every local row with it
 
 test('dump assertions require the isolated bind and reject global Team tools', () => {
   const rows = [...runtimeRows, { id: 'webserver', config: { host: '127.0.0.1', port: 0 } },
-    { name: '@deepseek-ai/dsh-agent-preset', config: { id: 'standard-ptc', plugins: [{ id: 'tool-presentation', config: { mode: 'ptc' } }] } }];
+    { name: '@deepseek-ai/dsh-agent-preset', config: { id: 'standard-ptc', plugins: [{ id: 'progressive-ptc-executor', name: 'dsh-progressive-tools/ptc' }] } }];
   verifyDumpConfiguration(rows, ['standard-ptc']);
+  const duplicate = structuredClone(rows);
+  duplicate[2].config.plugins.push({ id: 'tool-executor-native', name: '@deepseek-ai/dsh-tool-executor-native' });
+  assert.throws(() => verifyDumpConfiguration(duplicate, ['standard-ptc']), /one progressive PTC executor/);
+  duplicate[2].config.plugins.pop();
+  duplicate[2].config.plugins[0].name = '@deepseek-ai/dsh-tool-executor-ptc';
+  assert.throws(() => verifyDumpConfiguration(duplicate, ['standard-ptc']), /one progressive PTC executor/);
   assert.throws(() => verifyDumpConfiguration([...rows, { id: 'tool-agent-team' }], ['standard-ptc']), /global Team/);
   assert.throws(() => verifyDumpConfiguration([...runtimeRows, { ...rows[1], config: { host: '127.0.0.1', port: 53083 } }, rows[2]], ['standard-ptc']));
 });
@@ -119,7 +125,7 @@ test('smoke orchestration preserves workspace overrides, never ignores build pol
   const directory = temporary(t), home = join(directory, 'home'), installation = join(directory, 'installation');
   mkdirSync(join(home, 'profiles/web'), { recursive: true });
   mkdirSync(installation);
-  const options = { runtimeVersion: '0.2.1-rc.1', presets: ['standard-ptc'], compatibility: ['fixture@1.0.0-fork1'] };
+  const options = { runtimeVersion: readDependencyCatalog().runtimeVersion, presets: ['standard-ptc'], compatibility: ['fixture@1.0.0-fork1'] };
   writeFileSync(join(home, 'cordis.patch.yml'), JSON.stringify([{ insert: [{ id: 'profile-smoke-probe', config: options }] }]));
   writeFileSync(join(installation, 'pnpm-workspace.yaml'), JSON.stringify({ overrides: { fixture: 'file:/owned/fixture.tgz' } }));
   const previous = { DSH_HOME: process.env.DSH_HOME, DSH_CONFIG_TEST_ROOT: process.env.DSH_CONFIG_TEST_ROOT, DSH_SECRET_CANARY: process.env.DSH_SECRET_CANARY };
@@ -136,13 +142,19 @@ test('smoke orchestration preserves workspace overrides, never ignores build pol
       assert.ok(cwd.startsWith(directory));
       assert.ok(!argv.includes('--ignore-workspace'));
       return JSON.stringify([...runtimeRows, { id: 'webserver', config: { host: '127.0.0.1', port: 0 } },
-        { name: '@deepseek-ai/dsh-agent-preset', config: { id: 'standard-ptc', plugins: [{ id: 'tool-presentation', config: { mode: 'ptc' } }] } }]);
+        { name: '@deepseek-ai/dsh-agent-preset', config: { id: 'standard-ptc', plugins: [{ id: 'progressive-ptc-executor', name: 'dsh-progressive-tools/ptc' }] } }]);
     },
     resolveCli: () => join(installation, 'fixture-cli.mjs'),
     launch: async () => { launched++; return { url: 'http://127.0.0.1:49152', stop: async () => { stopped++; } }; },
     fetch: async () => ({ status: 200, text: async () => '<script>window.__DSH_BOOT__={}</script>',
       json: async () => ({ loaded: true, presets: [{ id: 'standard-ptc' }] }) }),
   };
+  const patchPath = join(home, 'cordis.patch.yml');
+  const patch = readFileSync(patchPath, 'utf8');
+  writeFileSync(patchPath, patch.replace(options.runtimeVersion, `${options.runtimeVersion}-mismatch`));
+  await assert.rejects(runProfileSmoke(directory, home, dependencies), /Smoke runtime must match the selected catalog/);
+  assert.equal(launched, 0);
+  writeFileSync(patchPath, patch);
   assert.equal((await runProfileSmoke(directory, home, dependencies)).isolatedHost, true);
   assert.equal(launched, 1); assert.equal(stopped, 1);
   for (const path of [join(installation, 'pnpm-workspace.yaml'), join(home, 'profiles/web/pnpm-workspace.yaml')]) {

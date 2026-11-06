@@ -22,13 +22,27 @@ test('the Team branch replaces ordinary delegation, and only fresh subagents tak
   const ordinary = delegation('standard-ptc'), team = delegation('standard-ptc-team');
   assert.ok(!ordinary.some(row => row.id === 'tool-agent-team'));
   assert.ok(team.some(row => row.id === 'tool-agent-team'));
-  for (const id of ['tool-subagent', 'tool-subagent-fork', 'tool-subagent-control', 'tool-subagent-list-agents']) {
+  for (const id of ['tool-subagent', 'tool-subagent-fork', 'tool-subagent-control']) {
     assert.ok(ordinary.some(row => row.id === id));
     assert.ok(!team.some(row => row.id === id));
   }
   // A fork child reuses the parent prefix, so only the fresh tool receives the machine route.
   assert.deepEqual(ordinary.find(row => row.id === 'tool-subagent').config.agentOptions, machine.subagentDefault);
   assert.equal(ordinary.find(row => row.id === 'tool-subagent-fork').config.agentOptions, undefined);
+  assert.deepEqual(team.find(row => row.id === 'tool-agent-team').config.freshAgentOptions, machine.subagentDefault);
+});
+
+test('upgrading a managed tools row replaces obsolete configuration instead of preserving it', () => {
+  const { rendered } = renderMachine(example, 'tools-row-migration', undefined, { stage: false });
+  const live = '- id: tools\n  config:\n    mode: ptc\n    maxParallelSubCalls: 3\n- id: unrelated-private-row\n  config:\n    enabled: true\n';
+  const old = parseYaml(live);
+  const result = preserveLiveRows(rendered.home, live);
+  const merged = validatePatch(result.text).map(row => row.entry);
+  const current = validatePatch(rendered.home).map(row => row.entry).find(row => row.id === old[0].id);
+  assert.ok(current, 'The migration must still own the tools row');
+  assert.deepEqual(merged.find(row => row.id === old[0].id).config, current.config);
+  assert.ok(!result.preserved.includes(old[0].id));
+  assert.ok(result.preserved.includes(old[1].id));
 });
 
 test('rc.1 dependency migration removes retired overrides and resets obsolete Pi selectors', () => {
@@ -65,6 +79,10 @@ test('rc.1 catalog normalizes old core and native selectors to effective package
 
 test('required Team packages are installed without activating the official global-tool bundle', () => {
   const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
+  // Exercise published targets even while the selected release is awaiting publication.
+  for (const item of catalog.packages.filter(item => item.policy === 'release')) {
+    item.url = `https://github.com/example/fixtures/releases/download/v${item.version}/${item.package.replaceAll('/', '-')}.tgz`;
+  }
   const target = resolveDependencyTargets('unused', { webPackage: { dsh: { profile: { bundles: [
     '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-experimental-agent-team-profile',
   ] } } } }, catalog);

@@ -47,7 +47,8 @@ export function verifyDumpConfiguration(rows, expectedPresets, pressureDefault, 
   for (const id of expectedPresets) {
     const preset = entries.find(row => row.name === '@deepseek-ai/dsh-agent-preset' && row.config.id === id);
     assert.ok(preset, `dump-config: missing preset ${id}`);
-    assert.equal(preset.config.plugins.find(row => row.id === 'tool-presentation')?.config.mode, 'ptc');
+    const executors = preset.config.plugins.filter(row => !row.disabled && /(?:executor|tool-presentation)/.test(row.id));
+    assert.deepEqual(executors.map(row => row.name), ['dsh-progressive-tools/ptc'], `${id}: expected one progressive PTC executor`);
     if (pressureDefault) {
       const compaction = preset.config.plugins.find(row => row.id === 'compaction');
       const acp = compaction?.config.find(row => row.id === 'active-context');

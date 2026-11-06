@@ -21,7 +21,7 @@ export function prepareInstallation(testRoot, home) {
   const homePatch = YAML.parse(readFileSync(join(home, 'cordis.patch.yml'), 'utf8'));
   const options = homePatch.flatMap(row => row.insert ?? [row]).find(row => row.id === 'profile-smoke-probe')?.config;
   assert.ok(options, 'Missing controlled profile-smoke-probe configuration');
-  assert.equal(options.runtimeVersion, '0.2.1-rc.1');
+  assert.equal(options.runtimeVersion, readDependencyCatalog().runtimeVersion, 'Smoke runtime must match the selected catalog');
   writeFileSync(join(installation, 'package.json'), JSON.stringify({ name: 'dsh-profile-smoke', private: true,
     type: 'module', packageManager: 'pnpm@11.28.5', dependencies: { '@deepseek-ai/dsh': options.runtimeVersion } }), { mode: 0o600 });
   writeFileSync(join(installation, 'pnpm-workspace.yaml'), YAML.stringify(workspace), { mode: 0o600 });
