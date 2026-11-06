@@ -24,6 +24,11 @@ export function apply(ctx, config) {
   } }));
 }
 
+export async function executeProbeTool(ctx, { callId, name, arguments: args, agent, signal }) {
+  const batch = await ctx.tools.execute({ calls: [{ type: 'tool-call', id: callId, name, arguments: JSON.stringify(args) }], agent, signal });
+  return batch.results[0].result;
+}
+
 export async function probeInvalidCompression(ctx, agent, { createAssistantMessage, createToolResultMessage }) {
   const session = agent.session;
   const callId = `smoke-acp-${randomUUID()}`;
@@ -38,7 +43,7 @@ export async function probeInvalidCompression(ctx, agent, { createAssistantMessa
   const surface = [...session.surface.nodes];
   const summaries = session.snapshotEvents().filter(event => event.type === 'compaction/summary').length;
   try {
-    const result = await ctx.tools.execute({ callId, name: 'run_code', arguments: args, agent, signal: AbortSignal.timeout(30000) });
+    const result = await executeProbeTool(ctx, { callId, name: 'run_code', arguments: args, agent, signal: AbortSignal.timeout(30000) });
     assert.equal(result.isError, true, 'Empty ACP regions unexpectedly succeeded');
     assert.match(JSON.stringify(result), /ACP: submit 1-\d+ non-overlapping regions/,
       'Canonical per-call program did not reach ACP input validation');
@@ -75,7 +80,7 @@ async function probeSuccessfulCompression(ctx, agent, { createAssistantMessage, 
   const call = session.append('tool/call', { turn: 2, step: 2, callId, name: 'run_code', arguments: JSON.stringify(args) });
   try {
     const signal = AbortSignal.timeout(30000);
-    const result = await ctx.tools.execute({ callId, name: 'run_code', arguments: args, agent, signal });
+    const result = await executeProbeTool(ctx, { callId, name: 'run_code', arguments: args, agent, signal });
     assert.equal(result.isError, false, 'Canonical per-call compression failed: ' + JSON.stringify(result));
     const resultEvent = session.append('tool/result', { turn: 2, step: 2, message: createToolResultMessage({ callId,
       content: result.content, isError: result.isError }) }, { surfaceOp: 'append', sourceEventSeqs: [call.seq] });
@@ -152,9 +157,10 @@ async function inspect(ctx, config) {
       // Mirror the Agent step: render the static prompt, then refresh and render runtime context.
       const prompt = verifyPromptRendering(id, () => ({ prompt: renderPrompt(assembly),
         context: renderContextSnapshot(ctx.systemPrompt.refreshContext(assembly, assembleContextFor(agent))) }));
-      results.push({ ...verifyToolCatalog(id, schemas, assembly, { acp: config.acp }), prompt });
+      const nativeTools = config.nativeTools[id];
+      results.push({ ...verifyToolCatalog(id, schemas, assembly, { acp: config.acp, nativeTools }), prompt });
       const code = 'return { agents: await tools.list_agents({}) };';
-      const execution = await ctx.tools.execute({ callId: `smoke-${randomUUID()}`, name: 'run_code',
+      const execution = await executeProbeTool(ctx, { callId: `smoke-${randomUUID()}`, name: 'run_code',
         arguments: { code, description: 'Verify scoped profile tool SDK' }, agent, signal: AbortSignal.timeout(30000) });
       if (execution.isError) throw new Error(`${id}: run_code failed: ${JSON.stringify(execution.content)}`);
     }

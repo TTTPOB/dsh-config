@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { root, readDependencyCatalog, readYaml, validatePatch, withoutExternalPrivateRows } from '../scripts/lib.mjs';
+import { root, readDependencyCatalog, readYaml, renderMachine, validatePatch, withoutExternalPrivateRows } from '../scripts/lib.mjs';
+import { isolatedTest } from '../scripts/deployment.mjs';
 import { verifyToolCatalog, verifyDumpConfiguration, verifyPromptRendering } from '../scripts/profile-smoke-checks.mjs';
 import { runProfileSmoke, launchHost, runSmokeCommand, openSmokePage } from '../scripts/profile-smoke.mjs';
 import { probeInvalidCompression, createProbeAgent } from '../scripts/profile-smoke-probe.mjs';
@@ -35,7 +36,7 @@ test('probe Agent creation explicitly mounts its selected preset before publicat
 
 function catalog(team) {
   return [...(team ? ['spawn_teammate', 'list_agent_models', 'wait_agent', 'team_task_create', 'team_task_list', 'team_task_get', 'team_task_update'] : ['subagent', 'subagent_fork']),
-    'send_message', 'list_agents', 'interrupt_agent', 'run_code', 'workflow', 'ralph', 'context_compress']
+    'send_message', 'list_agents', 'interrupt_agent', 'workflow', 'ralph', 'context_compress']
     .map(name => ({ name, parameters: { type: 'object', properties: name === 'send_message' ? { [team ? 'target' : 'agent_id']: {} } : name === 'spawn_teammate' ? { provider: {}, model: {}, reasoning_effort: {} } : {} } }));
 }
 const runtimeRows = [{ id: 'ptc-runtime',
@@ -71,6 +72,16 @@ test('profile assertions reject Team leakage, wrong message implementation and a
     { name: 'tools:sdk', text: 'tools.list_agents' },
   ] }), /PTC SDK/);
   assert.throws(() => verifyToolCatalog('standard-ptc', [...catalog(false), catalog(false)[0]], assembly), /duplicate/);
+});
+
+test('PTC wire tools include only the transport and configured native exceptions, independently of registry schemas', () => {
+  const schemas = [...catalog(false), { name: 'fixture_probe' }];
+  const nativeTools = ['fixture_probe', 'context_compress'];
+  const wire = { ...assembly, tools: ['run_code', ...nativeTools].map(name => ({ name })) };
+  verifyToolCatalog('standard-ptc', schemas, wire, { nativeTools });
+  assert.throws(() => verifyToolCatalog('standard-ptc', schemas, { ...wire, tools: schemas }, { nativeTools }), /PTC transport/);
+  assert.throws(() => verifyToolCatalog('standard-ptc', schemas, { ...wire, tools: assembly.tools }, { nativeTools }), /model-visible PTC tools/);
+  assert.throws(() => verifyToolCatalog('standard-ptc', schemas, { ...wire, tools: [...wire.tools, { name: 'subagent' }] }, { nativeTools }), /model-visible PTC tools/);
 });
 
 test('prompt rendering failures name the preset that would fail its first model request', () => {
@@ -183,12 +194,13 @@ test('ACP process probe requires canonical input validation and an unchanged Sur
   const agent = { session };
   const messages = { createAssistantMessage: value => value, createToolResultMessage: value => value };
   const ctx = { tools: { execute: async execution => {
-    assert.equal(execution.arguments.code, 'return await tools.context_compress({"regions":[]});');
-    return { isError: true, content: [{ type: 'text', text: 'ACP: submit 1-16 non-overlapping regions' }] };
+    assert.equal(execution.calls.length, 1);
+    assert.equal(JSON.parse(execution.calls[0].arguments).code, 'return await tools.context_compress({"regions":[]});');
+    return { results: [{ callId: execution.calls[0].id, result: { isError: true, content: [{ type: 'text', text: 'ACP: submit 1-16 non-overlapping regions' }] } }] };
   } } };
   assert.equal((await probeInvalidCompression(ctx, agent, messages)).surfaceUnchanged, true);
   assert.equal(events.at(-1).type, 'turn/end');
-  ctx.tools.execute = async () => ({ isError: true, content: [{ type: 'text', text: 'ACP: independent call required' }] });
+  ctx.tools.execute = async () => ({ results: [{ result: { isError: true, content: [{ type: 'text', text: 'ACP: independent call required' }] } }] });
   await assert.rejects(probeInvalidCompression(ctx, agent, messages), /did not reach ACP input validation/);
 });
 
@@ -217,8 +229,33 @@ test('preparation stages credential-free full preset input and an executable tar
   }
   const output = join(directory, 'output');
   execFileSync(process.execPath, [join(root, 'scripts/prepare-profile-smoke.mjs'), assets, output], { encoding: 'utf8' });
-  const machine = readYaml(join(output, 'machine.yaml'));
+  const machinePath = join(output, 'machine.yaml');
+  const machine = readYaml(machinePath);
+  // Prepared input must remain usable by the documented offline check, without a real installation.
+  execFileSync(process.execPath, [join(root, 'scripts/dsh-config.mjs'), 'check', machinePath], { stdio: 'pipe' });
+  const planned = renderMachine(machinePath, 'fixture', undefined, { stage: false });
+  assert.ok(planned.localPlugins.every(file => file.path.startsWith(machine.deployment.home + '/')));
   const rows = validatePatch(machine.deployment.smoke.homePatch).map(row => row.entry);
+  for (const file of planned.localPlugins) {
+    const row = rows.find(row => row.id === file.id);
+    assert.ok(existsSync(row.name), 'Controlled local plugin must be importable before deployment');
+    assert.equal(readFileSync(row.name, 'utf8'), file.contents);
+  }
+  for (const patch of [machine.deployment.smoke.homePatch, machine.deployment.smoke.webPatch]) {
+    const clients = validatePatch(patch).map(row => row.entry).filter(row => row.name === '@deepseek-ai/dsh-mcp-client');
+    assert.ok(clients.every(row => row.disabled === true), 'Smoke must not load external MCP clients or credentials');
+  }
+  const tarballs = [...packages.keys()].map((name, index) => name + '=' + join(assets, index + '.tgz'));
+  let isolatedHome;
+  const isolated = isolatedTest(machinePath, 'fixture', tarballs, (_argv, _cwd, env) => {
+    isolatedHome = env.DSH_HOME;
+    writeFileSync(join(env.DSH_CONFIG_TEST_ROOT, machine.deployment.smoke.resultFile), '{}');
+    assert.notEqual(isolatedHome, machine.deployment.home);
+    assert.ok(isolatedHome.startsWith(env.DSH_CONFIG_TEST_ROOT + '/'));
+  }, { generatedDir: directory });
+  assert.equal(isolated.cleaned, true);
+  assert.ok(!existsSync(isolatedHome));
+  assert.ok(!existsSync(machine.deployment.home), 'Preview home must never be installed by preparation or isolated execution');
   assert.ok(!rows.some(row => row.id === 'mcp-codegraph'));
   assert.ok(!rows.some(row => row.id === 'mcp-playwright'));
   assert.ok(!machine.deployment.smoke.ownsInstallation);

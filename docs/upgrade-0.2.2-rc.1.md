@@ -1,6 +1,6 @@
 # DSH 0.2.2-rc.1 组合验收
 
-本页记录目标组合、已执行的配置侧验证和后续成品验收。配置分支为 `upgrade/0.2.2-rc.1`，从 `feat/subagent-default-route` 创建，保留 fresh 路由、Responses 退化阈值与测试清理提交。当前尚未安装或激活这套组合；正式流程见[升级手册](<upstream-upgrade.md>)与[安装指南](<install.md>)，上一版结果仅作[历史实例](<upgrade-rc1.md>)。
+本页记录目标组合、已执行的配置侧验证和后续成品验收。配置分支为 `upgrade/0.2.2-rc.1`，从 `feat/subagent-default-route` 创建，保留 fresh 路由、Responses 退化阈值与测试清理提交。当前仅完成受控隔离组合验收，尚未安装或激活日用组合；正式流程见[升级手册](<upstream-upgrade.md>)与[安装指南](<install.md>)，上一版结果仅作[历史实例](<upgrade-rc1.md>)。
 
 ## 1. 组合与依赖
 
@@ -20,7 +20,7 @@ Pi 已有[正式 Release 资产](<https://github.com/TTTPOB/pi/releases/download
 | `dsh-mcp-panel` | `0.6.24-fork2` |
 | `dsh-web-mobile` | `3.5.0` |
 
-已对照目标源码 lockfile：LibreOffice Kit `0.1.5`、native loader／require-builtin `0.1.9`、`wsl-utils@1.0.0` 和 `@smithy/core@3.35.0` 均仍匹配，保留这些 pins。未重发的 Firecrawl、image-recovery、visualize、Better Sidebar 已发布资产已下载到隔离验收暂存；下载与 manifest 匹配不等于它们已通过新 runtime 的组合验收。
+已对照目标源码 lockfile：LibreOffice Kit `0.1.5`、native loader／require-builtin `0.1.9`、`wsl-utils@1.0.0` 和 `@smithy/core@3.35.0` 均仍匹配，保留这些 pins。未重发的 Firecrawl、image-recovery、visualize、Better Sidebar 已发布资产已下载到隔离验收暂存；这些资产已参与下文的受控隔离组合验收。
 
 ## 2. 模板迁移与上游名称审计
 
@@ -60,28 +60,17 @@ export NODE_OPTIONS=--max-old-space-size=4096
 node scripts/dsh-config.mjs check --machine nas
 ```
 
-- 完整单元测试共 147 项：141 通过、0 失败；需要显式 `DSH_CLI_PACKAGE` 的 6 个既有 installed-Loader 集成用例按约定 skip，不将其报告为目标 runtime 成品通过。
+- 完整单元测试共 148 项：142 通过、0 失败；需要显式 `DSH_CLI_PACKAGE` 的 6 个 installed-Loader 集成用例按约定 skip。其中工具指引的目标 runtime 集成另在一次性安装中运行通过，见下文。
 - 三机私有输入均存在，`check` 全部退出 `0` 并列出待发布来源；公开 workstation、server、active-context、local-plugins 示例全部完成内存渲染和 patch 结构校验。
-- 每个公开示例及三机的每个已生成 preset，persona／plan section 都经目标源码的真实 `renderPrompt` 成功渲染；变量名从目标 `agent-loop` 注册提取。没有读取 literal prompt-overlay 文件，未装载完整插件 assembly；完整 `renderContextSnapshot` 和成品提示词检查仍待下一阶段。
+- 每个公开示例及三机的每个已生成 preset，persona／plan section 都经目标源码的真实 `renderPrompt` 成功渲染；变量名从目标 `agent-loop` 注册提取。没有读取 literal prompt-overlay 文件，该项仅覆盖配置文本；完整 `renderContextSnapshot` 和成品提示词检查见下文隔离组合验收。
 - 三机 `update --offline --json` 都退出 `2`，各报告 32 个缺来源条目；这是发布资产阻塞，不是配置结构失败。未执行 `--apply`。
 - 五项变异检查分别删除 Team fresh 路由、忽略 required dependency、移除 executor 唯一性检查、绕过 smoke/catalog runtime 对齐、删除旧 tools 行迁移锚点；对应行为测试均失败，恢复实现后回归通过。未删除测试或添加兼容层。
 
-## 4. 当前验收暂存：只差七个插件 tarball
+## 4. 受控输入与离线预览
 
-本次生成的 `generated/upgrade-0.2.2-rc.1/assets/` 已包含本轮 22 个核心 tarball 的链接、校验过的 Pi tarball 链接和 4 个未变插件的正式资产。只扫目录根层，每个包仅放一个 tarball；不要把 CI 的重复 `raw/` 输入展开到同一目录。
+`generated/upgrade-0.2.2-rc.1/assets/` 已备齐 34 个 tarball：22 个核心 fork、Pi、表中 7 个新插件和 4 个未变插件。每个包在目录根层只保留一个 tarball；这些忽略目录不随 Git 提交交付，换机器时需重新收集同版资产。
 
-```sh
-export NODE_OPTIONS=--max-old-space-size=4096
-node scripts/prepare-profile-smoke.mjs \
-  generated/upgrade-0.2.2-rc.1/assets \
-  generated/upgrade-0.2.2-rc.1/input
-```
-
-实际结果：退出 `1`，仅报告本页版本表中七个插件包缺失；没有缺核心、Pi 或其他插件。prepare 在安装和 Host 启动前停止，未生成可执行的完整成品输入。这些暂存是本机忽略文件，不随配置 Git 提交交付；换机器时需重新下载／收集同版资产。
-
-## 5. 待执行：插件到位后的组合验收
-
-先把表中七个正确版本 tarball 放入上面的 assets 目录，同一包不得重复；下列准备与预览命令在配置仓库根执行，不安装、不启动 Host：
+以下命令已执行。prepare 输出 `Prepared 3 presets and 34 tarballs`，`check` 退出 `0`；离线 update 退出 `2`，报告 32 个待发布来源。本地成品不补齐正式 Release URL。
 
 ```sh
 export NODE_OPTIONS=--max-old-space-size=4096
@@ -90,29 +79,41 @@ export NODE_OPTIONS=--max-old-space-size=4096
 node scripts/dsh-config.mjs check generated/upgrade-0.2.2-rc.1/input/machine.yaml
 export NODE_OPTIONS=--max-old-space-size=4096
 node scripts/dsh-config.mjs update generated/upgrade-0.2.2-rc.1/input/machine.yaml --offline --verbose
-export NODE_OPTIONS=--max-old-space-size=4096
-node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/assets --private workstation
-export NODE_OPTIONS=--max-old-space-size=4096
-node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/assets --private server
-export NODE_OPTIONS=--max-old-space-size=4096
-node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/assets --private nas
 ```
 
-本地 tarball 的准备不补齐正式 Release URL，因此离线 update 预览仍应退出 `2`；不得为让预览退出 `0` 编造来源或写兼容例外。
+prepare 为机器输入声明输出目录下的 `deployment.home`，供 `check`／update 预览解析共享本地插件路径；预览不安装该 home。`isolatedTest` 仍使用自己拥有并自动清理的临时 home。受控 smoke patch 从仓库源码加载本地插件，并在 Loader 求值凭据表达式前禁用外部 MCP；三机私有变体保留本地行与字面表达式，不请求真实 provider／MCP。
 
-**另获隔离 Host 执行授权后**，逐个运行，不并发安装或启动实例：
+## 5. 已执行：隔离组合验收
+
+以下命令按顺序执行，每个 smoke 使用独立临时 DSH_HOME、独立端口，并在成功或失败后回收本次 Host 与暂存目录。
 
 ```sh
 export NODE_OPTIONS=--max-old-space-size=4096
 flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/input/argv.json
 export NODE_OPTIONS=--max-old-space-size=4096
+node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/assets --private workstation
+export NODE_OPTIONS=--max-old-space-size=4096
 flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/profile-smoke-input-workstation/argv.json
 export NODE_OPTIONS=--max-old-space-size=4096
+node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/assets --private server
+export NODE_OPTIONS=--max-old-space-size=4096
 flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/profile-smoke-input-server/argv.json
+export NODE_OPTIONS=--max-old-space-size=4096
+node scripts/prepare-profile-smoke.mjs generated/upgrade-0.2.2-rc.1/assets --private nas
 export NODE_OPTIONS=--max-old-space-size=4096
 flock /tmp/dsh-heavy-build.lock node scripts/run-profile-smoke.mjs generated/profile-smoke-input-nas/argv.json
 ```
 
-这些步骤尚未执行。完整 smoke 需要核对实际解析版本、唯一 executor、普通／Team 工具隔离、PTC native exceptions、每个 preset 的真实 prompt/context assembly、真实 per-call SDK 调用与 ACP 成功／拒绝路径。浏览器、手机真机、SSH helper、真实 provider／MCP 请求也尚未验收；外部请求另行授权。私有 prepare 按既有实现会使用本机存在的 prompt 文件，执行前须确认对 runtime 文本的读取授权。
+公开输入、workstation、server、NAS 均退出 `0`，三份私有 prepare 也均输出 3 presets／34 tarballs。每个输入的 standard、Team、redteam 三个 preset 均完成真实 prompt/context assembly、工具隔离与实际模块版本检查，模型可见工具恰为 `run_code` 和配置声明的 native exceptions（本轮为 `context_compress`、`mcp_probe`）；真实 per-call SDK 调用、ACP 拒绝输入不改 Surface、成功提交及次步归档均通过。报告为 `modelRequests: 0`、`cleaned: true`，Web 验证只覆盖认证交换与页面 HTTP 请求，`browserChecked: false`。配置侧仍报告 `renderedConfigurationVerified: false`：验收的是受控组合，不是整份日用配置。
 
-最后等待 Release 发布，下载核验精确 URL／SHA256后再写入清单；按实际 runtime 拒绝决定是否需要新的精确兼容记录。正式安装、`update --apply` 和日用 Host 切换不属于本次工作。
+### 失败根因与回归
+
+- 初次 `profile-install` 退出 `1` 来自外层组合验收步骤：日志显示 pnpm 安装、兼容检查与 Host 启动已完成，未发现包安装失败。HTTP `500` 来自本地 `GET /__dsh-config-smoke`，其 handler 将探针断言 `standard-ptc: missing run_code` 返回给客户端；随后客户端的 `500 !== 200` 是同一失败。
+- DSH 0.2.2 的 `run_code` 是 executor 生成的 transport，不属于 `tools.schemas()` 的能力注册表。探针分别校验注册能力和最终 `assembly.tools`，后者严格要求 transport 加已声明的 native exceptions；`tools.execute()` 探针调用也使用本轮 batch `calls`／`results` API。`dsh-progressive-tools/ptc` 已组合上游 PTC executor，无需再装一行 executor。
+- 本地 runtime-tooling-guidance 使用公开 presentation waterfall；DSH 0.2.2 在该事件结束后才附加 tools。插件根据上游 executor 的 `tools:ptc-only`／`tools:sdk` section 及当前 scope／step 可见能力生成指引，不访问私有 executor 方法。prepare 的共享本地插件 home 缺失和受控模块路径／MCP 隔离缺口也已修复。
+- 相关配置／部署／smoke 测试 88 项：87 通过，1 项未设置 `DSH_CLI_PACKAGE` 时按约定 skip。另复用一次性目标安装运行真实 Loader 集成测试：2 项通过、0 skip；上游 Native/PTC executor 均从临时 YAML 经 Include 加载。Native scope 成功组装并生成 native 指引；将它错误交给 PTC 专用校验的负向用例按预期拒绝，PTC scope 正常通过并生成 PTC 指引。
+- 五项新增变异均使对应行为测试失败，恢复后通过：删除预览 home、删除本地模块路径改写、启用外部 MCP、恢复旧 `assembled.tools` 读取、改错上游 PTC section id。未新增兼容层或豁免，也未修改任何插件包／DSH fork 源码。
+
+## 6. 待执行
+
+浏览器操作、手机真机、SSH helper、真实 provider／MCP 请求仍待验收，外部请求另行授权。正式 Release 尚需下载核验精确 URL／SHA256 后写入清单；真实安装、`update --apply` 和日用 Host 切换未执行。

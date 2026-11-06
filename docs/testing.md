@@ -48,6 +48,8 @@ node scripts/dsh-config.mjs test --machine workstation \
 
 入口在独立临时目录中建立安装声明、受控 patch 和 tarball 副本，向子进程传入独立 `DSH_HOME`／`DSH_CONFIG_TEST_ROOT`，并在成功或失败结束后自动清理本次暂存。测试命令必须等待其子进程结束并负责停止自己启动的服务。受控 patch 使用测试会话路径、索引和端口；MCP／外部服务按测试需要禁用或改用测试目标。
 
+`prepare-profile-smoke.mjs` 生成的机器输入可直接运行 `check` 和离线 update 预览：`deployment.home` 指向输出目录下的预览 home，供共享本地插件路径解析，不安装该目录。隔离测试另用临时 home；受控 patch 从仓库源码加载本地插件，并在 Loader 求值前禁用外部 MCP。PTC 校验分别检查能力注册表和模型最终 `assembly.tools`，要求 executor 生成的 `run_code` 以及配置声明的 native exceptions，不能用注册表里是否存在 `run_code` 判断 executor。
+
 配置侧结果固定报告 `renderedConfigurationVerified: false`：它准备测试输入，不自动证明整份日用配置已经通过 Loader。消费副本的测试遇到缺失 Release 资产时，需要对应 tarball 才能继续；自建安装布局的 smoke 可聚焦验证自身组合，同时报告未解决的其他资产。
 
 ## 3. 配置逻辑回归
@@ -62,7 +64,7 @@ node --test tests/deployment-paths.test.mjs tests/deployment.test.mjs tests/conf
 
 ACP 配置回归使用[公开示例](<../examples/active-context-machine.yaml>)，检查每个生成 preset 的 Basic 行已禁用、ACP 在同一 isolation group、原生策略完整、默认提醒比例为最大上下文的 70%／65%、提醒 routes 为空。成品烟测由 ACP 源码仓库提供，使用 capture-capable Query 与 ACP tarball、仅安装 ACP 的 profile、干净 peer 布局和正式 Host resolver／Loader，直接以原文端点验证压缩；本地 tarball 只进入隔离测试，不写入正式来源。
 
-本地 ESM 插件另有[源模块 HTTP 测试](<../tests/siyuan-tools.test.mjs>)、[声明与渲染测试](<../tests/local-plugins.test.mjs>)及[部署回滚测试](<../tests/deployment.test.mjs>)。HTTP 测试向 loopback mock 上传真实 bytes、检查双端路由、凭据读取与 UA，并验证失败不重试；不访问真实思源。设置 DSH_CLI_PACKAGE 为已安装 CLI 的 manifest 绝对路径后，思源测试会复用该 runtime 的正式 Loader 加载临时复制模块，验证作用域注册及撤销，不启动日用 Host。未设置时明确 skip 此集成用例。
+本地 ESM 插件另有[源模块 HTTP 测试](<../tests/siyuan-tools.test.mjs>)、[声明与渲染测试](<../tests/local-plugins.test.mjs>)及[部署回滚测试](<../tests/deployment.test.mjs>)。HTTP 测试向 loopback mock 上传真实 bytes、检查双端路由、凭据读取与 UA，并验证失败不重试；不访问真实思源。设置 DSH_CLI_PACKAGE 为已安装 CLI 的 manifest 绝对路径后，思源测试会复用该 runtime 的正式 Loader 加载临时复制模块，验证作用域注册及撤销，不启动日用 Host。未设置时明确 skip 此集成用例。[运行时工具指引测试](<../tests/runtime-tooling-guidance.test.mjs>)使用同一环境变量，读取该安装的上游 Native／PTC executor，经临时 YAML 和真实 Loader 验证 scoped 指引、限制与卸载；可在 `isolatedTest` 的 `execute` 回调中复用一次性安装运行，避免触及日用环境。
 
 ## 4. 定位失败
 
@@ -72,6 +74,8 @@ ACP 配置回归使用[公开示例](<../examples/active-context-machine.yaml>)�
 | compatibility preflight 拒绝成品 | 原始拒绝原因；实际组合验收后再授权精确例外 |
 | 裸 Node 导入缺 peer | Host resolver 与共享依赖布局，见[共享 peer 解析验收](install.md#共享-peer-解析验收) |
 | import 通过但工具未注册 | Loader 加载与真实工具行为 |
+
+组合 smoke 的 `profile-install` 是外层步骤名，失败不一定来自 pnpm。若 `GET /__dsh-config-smoke` 返回 `500`，先读取响应中的探针错误，再区分安装日志、Host Loader 异常和验收断言。测试结束会清理临时日志；需要留证时，在忽略目录中的调试调用给 `isolatedTest` 注入 `execute` 回调，待命令结束后把 stdout／stderr 另存为私有 `profile-install.log`，并将 `DSH_CONFIG_TEST_ROOT` 下的 `host.log`、dump 与报告复制到私有暂存，再返回或抛出，保留正常自动清理。Host 日志可能包含 launch token，不得公开打印或提交。
 
 ## 5. 发布与日用切换
 

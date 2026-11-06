@@ -51,6 +51,8 @@ for (const item of catalog.packages.filter(item => item.policy === 'release')) {
 assert.equal(missing.length, 0, `Missing required smoke tarballs: ${missing.join(', ')}`);
 mkdirSync(output, { recursive: true, mode: 0o700 });
 const machine = readYaml(join(root, 'examples/workstation-machine.yaml'));
+// Offline check/update need an explicit preview home; isolatedTest supplies its own temporary home.
+machine.deployment = { home: join(output, 'home') };
 machine.features = { sessionTools: true, activeContext: true, promptOverlay: true };
 machine.acp = { pressureDefault: { nudgeAtRatio: 0.70, resetBelowRatio: 0.65 }, pressureRoutes: [] };
 machine.promptSections = { modulePath: join(root, 'plugins/prompt-sections.mjs'),
@@ -74,20 +76,36 @@ machine.installation = { globalWorkspace: { packages: ['.'] }, webPackage: { pri
   dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dsh-web-mobile', 'dsh-mcp-panel'] } } } };
 const machinePath = join(output, 'machine.yaml');
 writeFileSync(machinePath, YAML.stringify(machine), { mode: 0o600 });
-const { rendered } = renderMachine(machinePath, 'profile-smoke', catalog, { stage: false });
+const { rendered, localPlugins } = renderMachine(machinePath, 'profile-smoke', catalog, { stage: false });
 const homeRows = validatePatch(rendered.home).map(row => row.entry);
 const presets = homeRows.filter(row => row.name === '@deepseek-ai/dsh-agent-preset').map(row => row.config.id);
 const expectedEntries = catalog.packages.map(item => ({ name: item.package, version: item.version, scope: item.scope,
   ...(item.scope === 'profile' ? { profile: 'web' } : {}) }));
-const config = { runtimeVersion: catalog.runtimeVersion, presets, acp: true, privateMachine: privateMachine ?? null,
+const nativeTools = Object.fromEntries(homeRows.filter(row => row.name === '@deepseek-ai/dsh-agent-preset')
+  .map(row => [row.config.id, row.config.plugins.find(plugin => plugin.name === 'dsh-progressive-tools/ptc').config.ptcNativeTools]));
+const config = { runtimeVersion: catalog.runtimeVersion, presets, nativeTools, acp: true, privateMachine: privateMachine ?? null,
   pressureDefault: machine.acp.pressureDefault, expectedBasic: readYaml(join(root, 'shared/defaults.yaml')).defaults.compaction,
   expectedPackages: [...expectedEntries.map(item => ({ ...item, profileOwned: resolvesFromProfile(item, expectedEntries, 'web') })),
     { name: '@deepseek-ai/dsh-client-ui-settings', version: catalog.runtimeVersion, scope: 'global-override' }],
   compatibility: [...new Set(catalog.packages.filter(item => item.policy === 'release').map(item => `${item.package}@${item.version}`))] };
-const controlledHome = rendered.home + YAML.stringify([
+function controlledPatch(text) {
+  const document = YAML.parseDocument(text, { customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: expression => expression }] });
+  for (const operation of document.contents.items) {
+    const entries = operation.has('insert') ? operation.get('insert').items : [operation];
+    for (const entry of entries) {
+      // Disable external clients before Loader evaluates credential-file expressions.
+      if (entry.get('name') === '@deepseek-ai/dsh-mcp-client') entry.set('disabled', true);
+      // Load repository sources, not files deployed to the preview home.
+      const local = localPlugins.find(file => file.id === entry.get('id'));
+      if (local) entry.set('name', local.source);
+    }
+  }
+  return document.toString();
+}
+const controlledHome = controlledPatch(rendered.home) + YAML.stringify([
   { insert: [{ id: 'profile-smoke-probe', name: join(root, 'scripts/profile-smoke-probe.mjs'), config }] },
 ]);
-const controlledWeb = rendered.web + YAML.stringify([
+const controlledWeb = controlledPatch(rendered.web) + YAML.stringify([
   { id: 'webserver', config: { host: '127.0.0.1', port: 0, compression: 'none' } },
   { id: 'directory-picker', disabled: true },
   { insert: [
@@ -96,8 +114,8 @@ const controlledWeb = rendered.web + YAML.stringify([
   ] },
   { insert: [{ id: 'firecrawl-fetch-smoke', name: '@firecrawl/dsh-firecrawl/fetch', config: { apiKey: 'smoke-unused-key' } }] },
 ]);
-machine.deployment = { smoke: { cwd: root, resultFile: 'profile-smoke-report.json', argv: [process.execPath, join(root, 'scripts/profile-smoke.mjs'), '{testRoot}', '{home}'],
-  homePatch: controlledHome, webPatch: controlledWeb } };
+machine.deployment.smoke = { cwd: root, resultFile: 'profile-smoke-report.json', argv: [process.execPath, join(root, 'scripts/profile-smoke.mjs'), '{testRoot}', '{home}'],
+  homePatch: controlledHome, webPatch: controlledWeb };
 writeFileSync(machinePath, YAML.stringify(machine), { mode: 0o600 });
 const argv = [process.execPath, join(root, 'scripts/dsh-config.mjs'), 'test', machinePath];
 for (const name of new Set([...catalog.packages.filter(item => item.policy === 'release').map(item => item.package), ...locals.keys()])) {

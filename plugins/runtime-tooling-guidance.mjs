@@ -48,17 +48,18 @@ export function apply(ctx, config) {
   }));
   ctx.on("system-prompt/assemble", async (_assembly, context, next) => {
     const assembled = await next();
-    const direct = new Map(assembled.tools.map(tool => [tool.name, tool]));
-    const sdk = direct.has("run_code")
-      && assembled.sections.some(section => section.name === "tools:sdk" && section.text.trim());
-    const tool = name => direct.get(name) ?? (sdk ? ctx.tools.get(name, context.scope) : undefined);
+    // @deepseek-ai/dsh-tool-executor-ptc owns the tools:ptc-only and tools:sdk section ids.
+    const ptc = assembled.sections.some(section => section.name === "tools:ptc-only" && section.text.trim());
+    const sdk = ptc && assembled.sections.some(section => section.name === "tools:sdk" && section.text.trim());
+    const visible = new Map(ctx.tools.schemas(context.scope, context.toolSet).map(tool => [tool.name, tool]));
+    const tool = name => !ptc || sdk ? visible.get(name) : undefined;
     const selected = [];
     if (sdk) {
       const language = ctx.get("ptcRuntime")?.language;
       if (language === "typescript" || language === "python") {
         selected.push(config.text[language], config.text.output);
       }
-    } else if (direct.size && !direct.has("run_code")) {
+    } else if (!ptc && visible.size) {
       selected.push(config.text.native);
     }
     const background = ["bash", "workflow"].some(name =>

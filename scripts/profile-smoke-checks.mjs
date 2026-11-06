@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 
-export function verifyToolCatalog(id, schemas, assembly, { acp = true } = {}) {
+export function verifyToolCatalog(id, schemas, assembly, { acp = true, nativeTools = [] } = {}) {
   const names = schemas.map(tool => tool.name);
   assert.equal(new Set(names).size, names.length, `${id}: duplicate tool names`);
   const team = id === 'standard-ptc-team';
   const required = team
     ? ['spawn_teammate', 'list_agent_models', 'send_message', 'list_agents', 'interrupt_agent', 'wait_agent', 'team_task_create', 'team_task_list', 'team_task_get', 'team_task_update']
     : ['subagent', 'subagent_fork', 'send_message', 'list_agents', 'interrupt_agent'];
-  for (const name of [...required, 'run_code', 'workflow', 'ralph']) assert.ok(names.includes(name), `${id}: missing ${name}`);
+  for (const name of [...required, 'workflow', 'ralph']) assert.ok(names.includes(name), `${id}: missing ${name}`);
   for (const name of team ? ['subagent', 'subagent_fork'] : ['spawn_teammate', 'wait_agent', 'team_task_create']) {
     assert.ok(!names.includes(name), `${id}: unexpected ${name}`);
   }
@@ -20,14 +20,23 @@ export function verifyToolCatalog(id, schemas, assembly, { acp = true } = {}) {
   const send = schemas.find(tool => tool.name === 'send_message');
   assert.ok(send.parameters.properties[team ? 'target' : 'agent_id'], `${id}: wrong send_message implementation`);
   assert.ok(!send.parameters.properties[team ? 'agent_id' : 'target'], `${id}: mixed send_message implementations`);
-  assert.ok(assembly.tools.some(tool => tool.name === 'run_code'), `${id}: PTC transport is not model-visible`);
+  const modelTools = verifyPtcModelTools(id, schemas, assembly, nativeTools);
   if (acp) {
     assert.ok(names.includes('context_compress'), `${id}: ACP is not registered`);
     const sdk = assembly.sections.filter(section => section.name === 'tools:sdk').map(section => section.text).join('\n');
     assert.match(sdk, /context_compress/, `${id}: ACP is missing from the PTC SDK`);
   }
   assert.ok(!names.includes('present'), `${id}: present is disabled for every preset`);
-  return { id, tools: names.sort(), ptc: true, acp };
+  return { id, tools: names.sort(), modelTools, ptc: true, acp };
+}
+
+export function verifyPtcModelTools(id, schemas, assembly, nativeTools) {
+  // In 0.2.2 run_code is executor-owned, outside the registered capability schemas.
+  const modelTools = assembly.tools.map(tool => tool.name).sort();
+  assert.ok(modelTools.includes('run_code'), `${id}: PTC transport is not model-visible`);
+  for (const name of nativeTools) assert.ok(schemas.some(tool => tool.name === name), `${id}: missing native exception ${name}`);
+  assert.deepEqual(modelTools, ['run_code', ...nativeTools].sort(), `${id}: unexpected model-visible PTC tools`);
+  return modelTools;
 }
 
 // Model requests render the prompt only after assembly; unknown {{variables}} fail there.

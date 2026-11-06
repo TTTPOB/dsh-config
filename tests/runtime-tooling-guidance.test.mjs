@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import * as Plugin from "../plugins/runtime-tooling-guidance.mjs";
+import { verifyPtcModelTools } from "../scripts/profile-smoke-checks.mjs";
 
 test("validates only six literal wording overrides", () => {
   const validate = Plugin.Config["~standard"].validate;
@@ -27,8 +28,10 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   const { default: SystemPrompt, renderPrompt } = await load(persona, "@deepseek-ai/dsh-system-prompt");
   const { createScope } = await load(persona, "@deepseek-ai/dsh-scope");
   const { default: Tools, defineTool } = await load(runtime, "@deepseek-ai/dsh-tools");
-  const resolver = createRequire(runtime.resolve("@deepseek-ai/dsh-tools"));
+  const resolver = createRequire(runtime.resolve("@deepseek-ai/dsh-tool-executor-ptc"));
   const { PtcRuntime } = await load(resolver, "@deepseek-ai/dsh-ptc-runtime");
+  const NativeExecutor = pathToFileURL(runtime.resolve("@deepseek-ai/dsh-tool-executor-native")).href;
+  const PtcExecutor = pathToFileURL(runtime.resolve("@deepseek-ai/dsh-tool-executor-ptc")).href;
   const { default: Agents } = await load(runtime, "@deepseek-ai/dsh-agent");
   const { default: Sessions } = await load(runtime, "@deepseek-ai/dsh-session");
   const subagentResolver = createRequire(runtime.resolve("@deepseek-ai/dsh-subagent"));
@@ -44,11 +47,17 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   }
   const directory = mkdtempSync(join(tmpdir(), "runtime-guidance-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
+  async function mountExecutor(context, module) {
+    const path = join(directory, module === NativeExecutor ? "native.yml" : "ptc.yml");
+    writeFileSync(path, JSON.stringify([{ id: "fixture-executor", name: module }]));
+    return context.plugin(Include, { path: pathToFileURL(path).href });
+  }
   const ctx = new Context();
   t.after(() => ctx.fiber.dispose());
   await ctx.plugin(Loader);
   await ctx.plugin(SystemPrompt, { includeHarnessIdentity: false });
-  await ctx.plugin(Tools, { mode: "native" });
+  await ctx.plugin(Tools);
+  await mountExecutor(ctx, NativeExecutor);
   await ctx.plugin(AssemblyRuntime);
   await ctx.plugin(Sessions);
   await ctx.plugin(Agents);
@@ -82,12 +91,17 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   child.session.append("subagent/descriptor", { version: SUBAGENT_DESCRIPTOR_VERSION, mode: "continuable", provider: "fixture", label: "child" });
   const assemble = (agent = root) => ctx.systemPrompt.assemble({ scope: agent.key, agent });
   const before = await assemble();
-  let baselineMode = child.ctx.tools.presentAs("ptc");
+  let childExecutor;
+  async function selectExecutor(plugin) {
+    await childExecutor?.dispose();
+    childExecutor = await mountExecutor(child.ctx, plugin);
+  }
+  await selectExecutor(PtcExecutor);
   const beforeTs = await assemble(child);
   ctx.ptcRuntime.language = "python";
   const beforePython = await assemble(child);
   ctx.ptcRuntime.language = "typescript";
-  baselineMode();
+  await selectExecutor(NativeExecutor);
   const modulePath = join(directory, "runtime-tooling-guidance.mjs");
   copyFileSync(new URL("../plugins/runtime-tooling-guidance.mjs", import.meta.url), modulePath);
   const yaml = join(directory, "cordis.yml");
@@ -102,13 +116,15 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   }
   const native = await assemble();
   selected(native, ["native", "background"]);
+  assert.throws(() => verifyPtcModelTools("fixture", ctx.tools.schemas(root.key), native, []), /PTC transport/);
   assert.deepEqual(native.tools, before.tools);
   assert.deepEqual(native.sections.filter(row => row.name !== Plugin.SECTION), before.sections);
   selected(await assemble(child), ["native", "background", "child"]);
   for (let i = 0; i < 3; i++) assert.deepEqual(await assemble(), native);
-  let mode = child.ctx.tools.presentAs("ptc");
+  await selectExecutor(PtcExecutor);
   const ts = await assemble(child);
   selected(ts, ["typescript", "output", "background", "child"]);
+  verifyPtcModelTools("fixture", ctx.tools.schemas(child.key), ts, []);
   assert.deepEqual(ts.tools.map(row => row.name), ["run_code"]);
   assert.deepEqual(ts.tools, beforeTs.tools);
   assert.deepEqual(ts.sections.filter(row => row.name !== Plugin.SECTION), beforeTs.sections);
@@ -121,7 +137,7 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   assert.deepEqual(python.sections.filter(row => row.name !== Plugin.SECTION), beforePython.sections);
   ctx.ptcRuntime.language = "typescript";
   assert.deepEqual(await assemble(child), ts);
-  mode();
+  await selectExecutor(NativeExecutor);
   selected(await assemble(child), ["native", "background", "child"]);
   const descriptor = mode => ({ version: SUBAGENT_DESCRIPTOR_VERSION, mode, provider: "fixture", label: "fixture" });
   const oneShot = await agent("one-shot", { parentSession: root.id, origin: "subagent" });
@@ -153,9 +169,9 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   hideBackground();
   const restrict = child.ctx.tools.restrict({ deny: ["job_kill", "send_message"] });
   selected(await assemble(child), ["native"]);
-  const restrictedMode = child.ctx.tools.presentAs("ptc");
+  await selectExecutor(PtcExecutor);
   selected(await assemble(child), ["typescript", "output"]);
-  restrictedMode(); restrict();
+  await selectExecutor(NativeExecutor); restrict();
   const complete = child.ctx.systemPrompt.section({ name: "complete", order: 0, complete: true, interpolate: false, text: "authoritative" });
   assert.equal(renderPrompt(await assemble(child)), "authoritative");
   complete();
@@ -163,9 +179,9 @@ test("installed Loader selects fresh runtime capabilities without changing tools
     const value = await next();
     return { ...value, sections: value.sections.filter(row => row.name !== "tools:sdk") };
   });
-  mode = child.ctx.tools.presentAs("ptc");
+  await selectExecutor(PtcExecutor);
   selected(await assemble(child), []);
-  hideSdk(); mode();
+  hideSdk(); await selectExecutor(NativeExecutor);
   const hideAll = root.ctx.tools.restrict({ deny: Object.keys(disposers) });
   selected(await assemble(), []);
   hideAll();
