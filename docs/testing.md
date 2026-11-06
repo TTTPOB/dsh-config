@@ -29,7 +29,7 @@
 
 ## 2. 接入配置侧隔离测试
 
-在私有机器参数的 `deployment.smoke` 中声明测试命令 `argv` 和绝对工作目录 `cwd`。包级测试入口由源码仓库提供，本仓库不要求源码位于相邻目录。个人 profile 组合验证是例外：本仓库提供 [profile-smoke.mjs](<../scripts/profile-smoke.mjs>)，负责 CLI／全部插件的组合安装与隔离 Host 工具注册验收，当前目标和执行方法见[0.2.2-rc.1 组合验收](<upgrade-0.2.2-rc.1.md>)，旧版实例保留在[0.2.1-rc.1 记录](<upgrade-rc1.md>)。
+在私有机器参数的 `deployment.smoke` 中声明测试命令 `argv` 和绝对工作目录 `cwd`。包级测试入口由源码仓库提供，本仓库不要求源码位于相邻目录。个人 profile 组合验证是例外：本仓库提供 [profile-smoke.mjs](<../scripts/profile-smoke.mjs>)，负责 CLI／全部插件的组合安装与隔离 Host 工具注册验收，当前目标和执行方法见[0.2.2-rc.1 组合验收](<upgrade-0.2.2-rc.1.md>)。
 
 两种接入方式：
 

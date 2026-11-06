@@ -25,7 +25,7 @@ node scripts/dsh-config.mjs update --machine workstation
 - [正式安装与更新](docs/install.md)：机器参数、目标来源、doctor、显式 apply、精确豁免和维护切换。Doctor/update 默认突出变化与问题，`--verbose` 展开完整明细，`--json` 独立切换输出格式。
 - [隔离成品测试](docs/testing.md)：源码聚焦验证、本地 tarball 测试副本及已有 smoke。
 - [上游升级手册](<docs/upstream-upgrade.md>)：基线盘点、fork 文件、验证与 Actions 发布顺序、授权边界和已知阻塞。
-- [0.2.2-rc.1 组合验收](<docs/upgrade-0.2.2-rc.1.md>)：当前目标组合、配置验证、缺失插件与后续隔离验收命令；[0.2.1-rc.1 实例](<docs/upgrade-rc1.md>)仅作历史参考。
+- [0.2.2-rc.1 组合验收](<docs/upgrade-0.2.2-rc.1.md>)：当前正式成品组合、已执行验证与剩余待办；旧记录从 Git 历史查阅。
 
 ## 配置与依赖归属
 

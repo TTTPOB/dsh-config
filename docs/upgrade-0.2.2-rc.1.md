@@ -1,6 +1,6 @@
 # DSH 0.2.2-rc.1 组合验收
 
-本页记录目标组合、已执行的配置侧验证和后续成品验收。配置分支为 `upgrade/0.2.2-rc.1`，从 `feat/subagent-default-route` 创建，保留 fresh 路由、Responses 退化阈值与测试清理提交。当前仅完成受控隔离组合验收，尚未安装或激活日用组合；正式流程见[升级手册](<upstream-upgrade.md>)与[安装指南](<install.md>)，上一版结果仅作[历史实例](<upgrade-rc1.md>)。
+本页记录目标组合、已执行的配置侧验证和后续成品验收。配置分支为 `upgrade/0.2.2-rc.1`，从 `feat/subagent-default-route` 创建，保留 fresh 路由、Responses 退化阈值与测试清理提交。当前仅完成受控隔离组合验收，尚未安装或激活日用组合；正式流程见[升级手册](<upstream-upgrade.md>)与[安装指南](<install.md>)，旧版验收记录从 Git 历史查阅。
 
 ## 1. 组合与依赖
 

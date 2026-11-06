@@ -26,7 +26,7 @@
 | 6. 合并发布分支 | 验证通过的升级分支合并进长期发布分支（DSH 与 Pi 均为 `daily-driver`），推送后在该分支跑 CI；两边分叉时用合并提交，不 reset、不 force push | 发布分支 CI 通过；待发布 commit 位于发布分支上 |
 | 7. Actions 发布 | 只从合并后的发布分支 commit 打 tag。先 Pi，再依赖它的 DSH 能力组，再发布消费核心资产的插件；插件间依赖也按顺序发布 | 每项有成功 Actions run、源码 commit、不可变 tag、资产包名／版本、精确 URL 和 SHA256 |
 | 8. 配置选版 | 把已下载核验的精确 Release 资产 URL 填入依赖清单，更新必要的 runtime／pins／retired overrides；先完成组合验收，再登记兼容例外 | 无猜测 URL 或缺来源阻塞；`verifiedCompatibility` 仅含 runtime 真正拒绝且行为已验证的精确 package/runtime 组合 |
-| 9. 成品组合验收 | 从正式 Release 下载全套输入，运行 prepare → check → 离线 update 预览 → 隔离 profile smoke → Playwright；profile smoke 另用 `--private workstation` 与 `--private server` 各跑一次真实私有配置 | 独立 Home／端口，实际版本和 preset／工具行为正确，每个 preset 的提示词都能渲染；手机与桌面关键路径有证据；未测项单列，测试 Host 和暂存已清理 |
+| 9. 成品组合验收 | 从正式 Release 下载全套输入，运行 prepare → check → 离线 update 预览 → 隔离 profile smoke → Playwright；profile smoke 另用 `--private workstation` 与 `--private server` 各跑一次真实私有配置 | 独立 Home／端口，实际版本和 preset／工具行为正确，每个 preset 的提示词都能渲染；手机与桌面关键路径有证据；未测项单列，测试 Host 和暂存已清理；新验收记录已替换上一份 |
 | 10. 真实只读预览 | 在目标机器执行 doctor 与不带 `--apply` 的 live update，审查版本／来源、移除项、配置变化和阻塞 | 保存脱敏摘要；明确“预览未应用”，不把离线或隔离结果当作真实部署 |
 | 11. 用户切换与收尾 | 向用户交付选定提交、预览、风险和恢复入口；用户按安装指南 apply 并安排 Host 激活，验收后清理临时 worktree／分支 | 分别报告已发布／已安装／已激活状态；有实际 doctor 与原服务／页面验收才宣称部署完成 |
 
@@ -39,7 +39,7 @@ node dsh-config/scripts/dsh-config.mjs doctor --machine workstation
 node dsh-config/scripts/dsh-config.mjs update --machine workstation --verbose
 ```
 
-测试范围按当前组合决定，不沿用旧版本的 preset 数量或旧包清单。[rc.1 组合验收](<upgrade-rc1.md>)保留一次具体升级的组合、命令与覆盖范围，可作为实例，不能直接当成未来版本的完成证明。
+测试范围按当前组合决定，不沿用旧版本的 preset 数量或旧包清单。[0.2.2-rc.1 组合验收](<upgrade-0.2.2-rc.1.md>)记录当前组合、命令与覆盖范围；旧记录从 Git 历史查阅，不能当成未来版本的完成证明。
 
 ## 3. 每次重建分支都核对的 fork 文件
 
