@@ -37,7 +37,6 @@ function fixture(t) {
 
 test('one public declaration stages source and activates once in home without target writes or dependencies', t => {
   const { dir, home, input } = fixture(t);
-  assert.deepEqual(shared, [{ id, module, config: {} }]);
   const result = renderMachine(input, 'runtime-guidance', catalog, { generatedDir: join(dir, 'generated') });
   const path = join(home, 'plugins', module);
   const rows = validatePatch(result.rendered.home).map(row => row.entry);

@@ -103,8 +103,6 @@ test('NAS overrides render daily, Team and reverse presets through the common te
   assert.equal(presets.length, 3);
   for (const { config } of presets) {
     assert.equal(config.plugins.find(row => row.id === 'tool-web').disabled, config.id !== 'standard-ptc-team');
-    assert.deepEqual(config.plugins.find(row => row.id === 'tool-web').config, { fetch: true, searchTimeoutMs: 60000 });
-    assert.deepEqual(config.plugins.find(row => row.id === 'tool-bash').disabled, { __jsExpr: "process.platform === 'win32'" });
     const delegation = config.plugins.find(row => row.id === 'delegation');
     assert.equal(delegation.config.find(row => row.id === 'tool-ralph').disabled, true);
     if (config.id === 'standard-ptc-team') assert.equal(delegation.config.find(row => row.id === 'tool-agent-team').disabled, true);

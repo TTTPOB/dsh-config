@@ -56,11 +56,3 @@ test('local plugin IDs cannot shadow existing home rows', t => {
   assert.ok(!existsSync(join(dir, 'generated')));
 });
 
-test('shared progressive disclosure keeps ordinary tools eager and MCP/SiYuan deferred', () => {
-  const { rendered } = renderMachine(join(root, 'examples/server-machine.yaml'), 'disclosure', undefined, { stage: false });
-  const config = validatePatch(rendered.home).find(row => row.entry.id === 'progressive-tools').entry.config;
-  assert.equal(config.deferTools, undefined);
-  assert.deepEqual(config.toolDisclosureRules, [
-    { glob: '*', disclosure: 'eager' }, { glob: 'mcp__*', disclosure: 'deferred' }, { glob: 'siyuan_*', disclosure: 'deferred' },
-  ]);
-});

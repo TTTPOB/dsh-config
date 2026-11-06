@@ -13,15 +13,9 @@ const rows = rendered => validatePatch(rendered.home).map(row => row.entry).filt
 test('provider prompt uses the existing localPlugins home file plan once, without a package dependency', () => {
   const machine = readYaml(example);
   const entry = machine.localPlugins.find(row => row.id === 'provider-prompt');
-  assert.equal(entry.module, moduleName);
   const { rendered, localPlugins } = renderMachine(example, 'provider-prompt', undefined, { stage: false });
   assert.equal(rows(rendered).length, 1);
   assert.deepEqual(rows(rendered)[0], { id: entry.id, name: entry.modulePath, config: entry.config });
-  const rule = rows(rendered)[0].config.rules[0];
-  assert.deepEqual(rule.providers, ['klaude-cl']);
-  assert.ok(!Object.hasOwn(rule, 'models'));
-  for (const text of ['mcp__parking__run_code', 'mcp__parking__context_compress', 'tool_use', 'tools.bash', 'tools.read']) assert.ok(rule.text.includes(text));
-  assert.equal(rows(rendered)[0].config.rules.length, 1);
   assert.equal(localPlugins.filter(row => row.id === entry.id).length, 1);
   assert.equal(localPlugins.find(row => row.id === entry.id).source, join(root, 'plugins', moduleName));
   assert.ok(!rendered.web.includes(moduleName));

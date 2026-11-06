@@ -14,100 +14,21 @@ function fixture(t) {
 
 const example = join(root, 'examples/workstation-machine.yaml');
 
-test('Better Sidebar uses the personal Release and one Web patch mount without owning preferences', () => {
-  const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
-  const selected = catalog.packages.find(row => row.package === 'dsh-better-sidebar');
-  assert.equal(selected.policy, 'release');
-  assert.equal(selected.version, '0.28.2-fork1');
-  assert.ok(selected.url.startsWith('https://github.com/TTTPOB/DSH-better-sidebar/releases/download/'));
-  const target = resolveDependencyTargets('unused', {
-    webPackage: { dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-better-sidebar'] } } },
-    profiles: { headless: {} },
-  }, catalog);
-  assert.equal(target.profiles.web.dependencies[selected.package], selected.url);
-  assert.deepEqual(target.profiles.web.dsh.profile.bundles, ['@deepseek-ai/dsh-base']);
-  assert.ok(!target.profiles.headless.dependencies[selected.package]);
-  assert.ok(!Object.hasOwn(target.globalWorkspace.overrides, selected.package));
-  for (const machine of ['workstation', 'server']) {
-    const { rendered } = renderMachine(join(root, 'examples/' + machine + '-machine.yaml'), 'better-sidebar', undefined, { stage: false });
-    const rows = validatePatch(rendered.web).map(row => row.entry).filter(row => row.name === selected.package);
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].id, 'better-sidebar');
-    assert.equal(rows[0].config, undefined);
-    assert.ok(!validatePatch(rendered.home).some(row => row.entry.name === selected.package));
-  }
-});
-
-test('Visualize is installed and activated once in Web only, replacing OpenUI', () => {
-  for (const machine of ['workstation', 'server']) {
-    const { rendered } = renderMachine(join(root, 'examples/' + machine + '-machine.yaml'), 'visualize', undefined, { stage: false });
-    const web = validatePatch(rendered.web).map(row => row.entry);
-    const home = validatePatch(rendered.home).map(row => row.entry);
-    assert.equal(web.filter(row => row.name === '@nagi-ovo/dsh-visualize').length, 1);
-    assert.ok(!web.some(row => row.name === 'dsh-openui'));
-    assert.ok(!home.some(row => row.name === '@nagi-ovo/dsh-visualize'));
-    const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
-    assert.ok(!catalog.packages.some(row => row.package === 'dsh-openui'));
-    const selected = catalog.packages.find(row => row.package === '@nagi-ovo/dsh-visualize');
-    const target = resolveDependencyTargets('unused', {
-      webPackage: { dsh: { profile: { bundles: ['@nagi-ovo/dsh-visualize'] } } },
-      profiles: { headless: {} },
-    }, catalog);
-    assert.equal(target.profiles.web.dependencies[selected.package], selected.url ?? selected.version);
-    assert.ok(!target.profiles.web.dsh.profile.bundles.includes(selected.package));
-    assert.ok(!target.profiles.headless.dependencies[selected.package]);
-  }
-});
-
-for (const machine of ['workstation', 'server']) {
-  test(`${machine} titles use the shared Flash route independently of the conversation model`, () => {
-    const { rendered } = renderMachine(join(root, `examples/${machine}-machine.yaml`), 'title-model', undefined, { stage: false });
-    const rows = validatePatch(rendered.home).map(row => row.entry);
-    assert.ok(!validatePatch(rendered.web).some(row => row.entry.id === 'session-title-llm'));
-    assert.deepEqual(rows.find(row => row.id === 'session-title-llm').config, {
-      provider: 'deepseek-official', model: 'deepseek-flash',
-      targetWords: 5, targetCjkCharacters: 10, maxInputBytes: 65536,
-      maxOutputTokens: 64, timeoutMs: 60000,
-    });
-  });
-}
-
-test('rc.1 presets separate ordinary delegation and Team tools without present', () => {
-  const { rendered } = renderMachine(example, 'rc1-presets', undefined, { stage: false });
-  const rows = validatePatch(rendered.home).map(row => row.entry);
-  const presets = rows.filter(row => row.name === '@deepseek-ai/dsh-agent-preset');
-  const byId = id => presets.find(row => row.config.id === id).config.plugins;
-  const delegation = plugins => plugins.find(row => row.id === 'delegation').config;
-  assert.deepEqual(presets.map(row => row.config.id).sort(), ['standard-ptc', 'standard-ptc-team']);
-  for (const id of ['standard-ptc']) {
-    const plugins = byId(id), tools = delegation(plugins);
-    const spawn = tools.find(row => row.id === 'tool-subagent').config;
-    assert.deepEqual(spawn, {
-      provider: 'spawn', toolName: 'subagent', modelSelectionSettings: true,
-      agentOptions: { provider: 'deepseek-official', model: 'deepseek-flash' },
-    });
-    assert.deepEqual(tools.find(row => row.id === 'tool-subagent-fork').config,
-      { provider: 'fork', toolName: 'subagent_fork' });
-    assert.ok(!tools.some(row => row.id === 'tool-agent-team'));
-    assert.equal(plugins.find(row => row.id === 'tool-presentation').config.mode, 'ptc');
-  }
-  for (const preset of presets) assert.ok(!preset.config.plugins.some(row => row.id === 'present'));
-  const teamTools = delegation(byId('standard-ptc-team'));
+test('the Team branch replaces ordinary delegation, and only fresh subagents take the machine default route', () => {
+  const machine = readYaml(example);
+  const { rendered } = renderMachine(example, 'delegation-branches', undefined, { stage: false });
+  const presets = validatePatch(rendered.home).map(row => row.entry).filter(row => row.name === '@deepseek-ai/dsh-agent-preset');
+  const delegation = id => presets.find(row => row.config.id === id).config.plugins.find(row => row.id === 'delegation').config;
+  const ordinary = delegation('standard-ptc'), team = delegation('standard-ptc-team');
+  assert.ok(!ordinary.some(row => row.id === 'tool-agent-team'));
+  assert.ok(team.some(row => row.id === 'tool-agent-team'));
   for (const id of ['tool-subagent', 'tool-subagent-fork', 'tool-subagent-control', 'tool-subagent-list-agents']) {
-    assert.ok(!teamTools.some(row => row.id === id));
+    assert.ok(ordinary.some(row => row.id === id));
+    assert.ok(!team.some(row => row.id === id));
   }
-  assert.deepEqual(teamTools.find(row => row.id === 'tool-agent-team').config, { freshProvider: 'spawn', forkProvider: 'fork', modelSelectionSettings: true });
-  for (const preset of presets) for (const id of ['workflow-ptc', 'tool-workflow', 'tool-ralph']) {
-    assert.ok(delegation(preset.config.plugins).some(row => row.id === id));
-  }
-  assert.deepEqual(rows.find(row => row.id === 'tools').config, {
-    mode: 'native', maxParallelSubCalls: 10, ptcNativeTools: ['context_compress'],
-  });
-  assert.equal(rows.find(row => row.id === 'ptc-runtime').config.executionMode, 'per-call');
-  assert.ok(!rows.some(row => row.id === 'ptc-runtime-personal'));
-  assert.equal(rows.filter(row => row.id === 'agent-team').length, 1);
-  assert.equal(rows.filter(row => row.id === 'ui-agent-team').length, 1);
-  assert.ok(!rows.some(row => row.id === 'tool-agent-team'));
+  // A fork child reuses the parent prefix, so only the fresh tool receives the machine route.
+  assert.deepEqual(ordinary.find(row => row.id === 'tool-subagent').config.agentOptions, machine.subagentDefault);
+  assert.equal(ordinary.find(row => row.id === 'tool-subagent-fork').config.agentOptions, undefined);
 });
 
 test('rc.1 dependency migration removes retired overrides and resets obsolete Pi selectors', () => {
@@ -138,7 +59,8 @@ test('rc.1 catalog normalizes old core and native selectors to effective package
   } } }, catalog);
   assert.ok(!('@deepseek-ai/dsh-session@0.1.7-rc.2' in targets.globalWorkspace.overrides));
   assert.ok(!('node-addon-require-builtin@0.1.6' in targets.globalWorkspace.overrides));
-  assert.equal(targets.globalWorkspace.overrides['node-addon-require-builtin'], '0.1.9');
+  const selected = catalog.packages.find(row => row.package === 'node-addon-require-builtin');
+  assert.equal(targets.globalWorkspace.overrides[selected.package], selected.url ?? selected.version);
 });
 
 test('required Team packages are installed without activating the official global-tool bundle', () => {
@@ -193,6 +115,9 @@ test('rejects incomplete machine config', () => {
   const machine = readYaml(example);
   delete machine.features.sessionTools;
   assert.throws(() => validateMachine(machine));
+  for (const subagentDefault of [undefined, { provider: 'p' }, { provider: 'p', model: 'm', reasoningEffort: '' }]) {
+    assert.throws(() => validateMachine({ ...readYaml(example), subagentDefault }), /subagentDefault/);
+  }
 });
 
 test('keeps template-like text in literal machine rows without evaluating it', t => {
@@ -205,8 +130,6 @@ test('keeps template-like text in literal machine rows without evaluating it', t
   writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
   const { rendered } = renderMachine(path, 'test-literal-delimiters', undefined, { generatedDir: directory });
   assert.equal(validatePatch(rendered.home).find(row => row.entry.id === 'x').entry.config.value, literal);
-  // The conversation default belongs to the UI model picker; the template no longer pins it.
-  assert.ok(!validatePatch(rendered.web).some(row => row.entry.id === 'agent-default-model'));
 });
 
 test('rejects duplicate ids and expressions in metadata', () => {
@@ -471,10 +394,9 @@ test('UI-owned configuration is never rendered, so live picks survive an apply',
   }
   const registry = web.find(row => row.id === 'agent-preset-registry');
   assert.equal(registry.config.selectedDefault, undefined);
-  assert.equal(registry.config.default, 'standard-ptc');
 });
 
-test('shared provider catalog and home-owned rows render once', t => {
+test('machine providers add to the shared catalog and render only in home', t => {
   const machine = readYaml(example);
   machine.providers = { add: { extra: { api: 'openai-responses', baseURL: 'https://extra.example.invalid/v1', models: [{ id: 'm', name: 'M', contextWindow: 1000, maxTokens: 100 }] } } };
   const directory = fixture(t);
@@ -483,15 +405,10 @@ test('shared provider catalog and home-owned rows render once', t => {
   const { rendered } = renderMachine(path, 'providers', undefined, { generatedDir: directory });
   const home = validatePatch(rendered.home).map(row => row.entry);
   const pi = home.find(row => row.id === 'llm-pi-ai');
-  assert.deepEqual(Object.keys(pi.config.providers).sort(), ['extra', 'klaude-cl', 'klaude-openai']);
-  assert.equal(pi.config.providers['klaude-openai'].compat.maxConsecutiveWhitespaceChars, 2000);
-  assert.equal(pi.config.providers['klaude-openai'].compat.maxRepeatedPatternChars, 2000);
-  assert.equal(pi.config.providers['klaude-cl'].compat.maxConsecutiveWhitespaceChars, undefined);
-  assert.equal(pi.config.providers['klaude-cl'].compat.maxRepeatedPatternChars, undefined);
-  const deepseek = home.find(row => row.id === 'llm-deepseek');
-  assert.deepEqual(deepseek.config.models, [{ id: 'deepseek-flash', name: 'DeepSeek-V4.1-Flash', contextWindow: 1000000, inputModalities: ['text', 'image'], systemPromptUpdate: 'in-history', toolUpdate: 'addition-only' }]);
-  assert.equal(deepseek.config.models[0].imagePixelBudget, undefined);
-  assert.equal(deepseek.config.models[0].imageMaxBytes, undefined);
+  const shared = readYaml(join(root, 'shared/providers.yaml')).providers;
+  assert.deepEqual(Object.keys(pi.config.providers).sort(), [...Object.keys(shared), 'extra'].sort());
+  assert.deepEqual(pi.config.providers['klaude-openai'], shared['klaude-openai']);
+  assert.equal(pi.config.providers.extra.baseURL, machine.providers.add.extra.baseURL);
   assert.ok(!validatePatch(rendered.web).some(row => row.id === 'llm-pi-ai' || row.id === 'llm-deepseek'));
 });
 

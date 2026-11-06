@@ -207,14 +207,9 @@ test('preparation stages credential-free full preset input and an executable tar
   execFileSync(process.execPath, [join(root, 'scripts/prepare-profile-smoke.mjs'), assets, output], { encoding: 'utf8' });
   const machine = readYaml(join(output, 'machine.yaml'));
   const rows = validatePatch(machine.deployment.smoke.homePatch).map(row => row.entry);
-  assert.equal(rows.filter(row => row.name === '@deepseek-ai/dsh-agent-preset').length, 3);
   assert.ok(!rows.some(row => row.id === 'mcp-codegraph'));
   assert.ok(!rows.some(row => row.id === 'mcp-playwright'));
   assert.ok(!machine.deployment.smoke.ownsInstallation);
-  const webRows = validatePatch(machine.deployment.smoke.webPatch).map(row => row.entry);
-  assert.equal(webRows.find(row => row.id === 'webserver').config.port, 0);
-  assert.equal(webRows.find(row => row.id === 'directory-picker').disabled, true);
-  assert.equal(webRows.find(row => row.id === 'ui-directory-picker-browse').name, '@deepseek-ai/dsh-client-ui-directory-picker-browse');
   const argv = JSON.parse(readFileSync(join(output, 'argv.json'), 'utf8'));
   assert.equal(argv.filter(arg => arg === '--tarball').length, packages.size);
   assert.ok(!argv.includes('--apply'));

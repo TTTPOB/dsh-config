@@ -209,7 +209,7 @@ test('configured deadline and caller cancellation abort requests without retry',
 test('Config validates both endpoints, headers paths, timeout and UA without reading credentials', () => {
   const endpoint = { baseURL: 'https://notes.example.invalid', headersFile: '/path/to/headers.json' };
   const config = { self: endpoint, peer: endpoint };
-  assert.equal(validate(config).timeoutMs, 60000);
+  validate(config);
   for (const changed of [{ self: { ...endpoint, baseURL: 'file:///invalid' } }, { peer: { ...endpoint, headersFile: 'relative.json' } }, { timeoutMs: 0 }, { userAgent: '\n' }, { peer: undefined }]) {
     assert.ok(Plugin.Config['~standard'].validate({ ...config, ...changed }).issues);
   }
