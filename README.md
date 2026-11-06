@@ -25,7 +25,7 @@ node scripts/dsh-config.mjs update --machine workstation
 - [正式安装与更新](docs/install.md)：机器参数、目标来源、doctor、显式 apply、精确豁免和维护切换。Doctor/update 默认突出变化与问题，`--verbose` 展开完整明细，`--json` 独立切换输出格式。
 - [隔离成品测试](docs/testing.md)：源码聚焦验证、本地 tarball 测试副本及已有 smoke。
 - [上游升级手册](<docs/upstream-upgrade.md>)：基线盘点、fork 文件、验证与 Actions 发布顺序、授权边界和已知阻塞。
-- [rc.1 组合验收](docs/upgrade-rc1.md)：本次 PTC／子代理／Team 组合、已发布成品与隔离 Host 验证命令。
+- [0.2.2-rc.1 组合验收](<docs/upgrade-0.2.2-rc.1.md>)：当前目标组合、配置验证、缺失插件与后续隔离验收命令；[0.2.1-rc.1 实例](<docs/upgrade-rc1.md>)仅作历史参考。
 
 ## 配置与依赖归属
 
@@ -42,7 +42,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 `private/`、`generated/` 和真实参数均被 Git 忽略。公开示例没有真实端点或凭据；新机器从示例开始，私有参数通过私有通道传递。会话、数据库、索引、缓存和 storages 不同步。
 
-机器参数提供 `features`、`mcp`、`subagentModels`、`subagentDefault`、`providers`、`rowOps`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。对话默认模型不在机器参数里：它属于会话与界面的状态。`subagentDefault` 是 `subagent` 调用未指定模型时的子代理路由，避免新子代理静默沿用较贵的父模型；`subagent_fork` 不配置它，继续沿用父路由以复用对话前缀。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。provider 目录由 [shared/providers.yaml](shared/providers.yaml) 共用，机器只写 add／set／remove 差异：set 只覆盖该 provider 的顶层键，嵌套值（如 models）整体替换；专属 MCP 行仍保留为私有输入，不进行通用深合并。
+机器参数提供 `features`、`mcp`、`subagentModels`、`subagentDefault`、`providers`、`rowOps`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。对话默认模型不在机器参数里：它属于会话与界面的状态。`subagentDefault` 是 fresh `subagent` 与 Team fresh teammate 未指定模型时的路由，避免新子代理静默沿用较贵的父模型；`subagent_fork` 不配置它，继续沿用父路由以复用对话前缀。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。provider 目录由 [shared/providers.yaml](shared/providers.yaml) 共用，机器只写 add／set／remove 差异：set 只覆盖该 provider 的顶层键，嵌套值（如 models）整体替换；专属 MCP 行仍保留为私有输入，不进行通用深合并。
 
 共用 `klaude-openai.compat` 将 `maxConsecutiveWhitespaceChars` 和 `maxRepeatedPatternChars` 均设为 2000，限制每个 Responses 输出项的连续空白与短周期重复；其他 provider 保持 pi-ai 默认阈值。对应 pi-ai 与 DSH 适配器的精确成品由依赖清单统一选择。
 
@@ -50,7 +50,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 [共用默认配置](<shared/defaults.yaml>)和机器参数的 `localPlugins` 将仓库内小型 ESM 模块纳入 render/check 和 update 文件计划；显式 apply 与配置 patch 一同备份、写入和回滚，不增加 npm 依赖。见[安装声明](<docs/install.md#本地-esm-插件>)、[中性示例](<examples/local-plugins-machine.yaml>)和[思源上传／双端同步工具](<plugins/siyuan-tools.md>)。源码不包含机器端点或凭据，认证继续引用目标机器已有 headers JSON。
 
-共用 progressive-tools 配置使用有序 toolDisclosureRules：普通工具 eager，mcp__* 和 siyuan_* deferred。对应资产版本由[依赖清单](<shared/dependencies.yaml>)选定。
+0.2.2-rc.1 使用 scoped progressive executor：Host 挂载一次 discovery 与 Native executor，每个自定义 PTC preset 挂载 `dsh-progressive-tools/ptc` 并禁用上游 executor；PTC 配置保留并行限制及 `context_compress`／`mcp_probe` 原生例外。共用有序 toolDisclosureRules 让普通工具 eager、mcp__* 和 siyuan_* deferred。版本和缺来源原因由[依赖清单](<shared/dependencies.yaml>)选定。
 
 ### 运行时工具指引
 
@@ -62,7 +62,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 ### 可视化插件
 
-Web profile 统一启用 `@nagi-ovo/dsh-visualize`，使用依赖清单中的 npm 精确版本；其他 profile 不自动安装。插件由共用 Web patch 激活，不重复加载 bundle。OpenUI 不再由配置安装或激活，已安装的旧包在维护窗口通过 pnpm 卸载。
+Web profile 统一启用 `@nagi-ovo/dsh-visualize`，使用依赖清单中的精确 GitHub Release 资产；其他 profile 不自动安装。插件由共用 Web patch 激活，不重复加载 bundle。OpenUI 不再由配置安装或激活，已安装的旧包在维护窗口通过 pnpm 卸载。
 
 ### Better Sidebar
 
