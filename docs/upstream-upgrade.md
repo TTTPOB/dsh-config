@@ -39,7 +39,7 @@ node dsh-config/scripts/dsh-config.mjs doctor --machine workstation
 node dsh-config/scripts/dsh-config.mjs update --machine workstation --verbose
 ```
 
-测试范围按当前组合决定，不沿用旧版本的 preset 数量或旧包清单。[0.2.2-rc.1 组合验收](<upgrade-0.2.2-rc.1.md>)记录当前组合、命令与覆盖范围；旧记录从 Git 历史查阅，不能当成未来版本的完成证明。
+测试范围按当前组合确定。[0.2.2-rc.1 组合验收](<upgrade-0.2.2-rc.1.md>)记录上一次升级的组合、命令与覆盖范围，可作参考；更早的记录从 Git 历史查阅。
 
 ## 3. 每次重建分支都核对的 fork 文件
 

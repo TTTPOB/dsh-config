@@ -79,7 +79,7 @@ image-recovery、visualize、Better Sidebar 沿用已发布版本。Firecrawl �
 ## 4. 结果
 
 - `pnpm test`：148 项，142 通过；6 项需要 `DSH_CLI_PACKAGE` 的 installed-Loader 用例跳过。
-- 三台机器的 `check` 和 `update --offline --verbose --json` 都退出 `0`，没有缺来源阻塞。离线预览的变化条目：workstation 41、server 42、nas 41。这是与 installation 输入的比较，不代表目标机器当前实际安装的版本。
+- 三台机器的 `check` 和 `update --offline --verbose --json` 都退出 `0`，没有缺来源阻塞。离线预览的变化条目：workstation 41、server 42、nas 41。预览对比的是 installation 输入；目标机器实际安装的版本以部署前的 doctor 为准。
 - 四套隔离验收（公开、workstation、server、nas）都退出 `0`。每套 34 个 tarball、44 项包和安装归属检查；standard、Team、redteam 三个 preset 都完成提示词和上下文渲染、工具隔离和模块版本检查。PTC preset 的模型可见工具只有 `run_code` 和配置的 native exceptions（`context_compress`、`mcp_probe`）。真实 SDK 调用、ACP 拒绝不修改 Surface、压缩成功提交与下一步归档都通过。
 - 每套都是 `modelRequests: 0`、`cleaned: true`。Web 只验证了认证交换和页面 HTTP 请求，没有浏览器交互（`browserChecked: false`）。
 

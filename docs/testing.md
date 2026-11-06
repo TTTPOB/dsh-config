@@ -48,7 +48,7 @@ node scripts/dsh-config.mjs test --machine workstation \
 
 入口在独立临时目录中建立安装声明、受控 patch 和 tarball 副本，向子进程传入独立 `DSH_HOME`／`DSH_CONFIG_TEST_ROOT`，并在成功或失败结束后自动清理本次暂存。测试命令必须等待其子进程结束并负责停止自己启动的服务。受控 patch 使用测试会话路径、索引和端口；MCP／外部服务按测试需要禁用或改用测试目标。
 
-`prepare-profile-smoke.mjs` 生成的机器输入可直接运行 `check` 和离线 update 预览：`deployment.home` 指向输出目录下的预览 home，供共享本地插件路径解析，不安装该目录。隔离测试另用临时 home；受控 patch 从仓库源码加载本地插件，并在 Loader 求值前禁用外部 MCP。PTC 校验分别检查能力注册表和模型最终 `assembly.tools`，要求 executor 生成的 `run_code` 以及配置声明的 native exceptions，不能用注册表里是否存在 `run_code` 判断 executor。
+`prepare-profile-smoke.mjs` 生成的机器输入可直接运行 `check` 和离线 update 预览：`deployment.home` 指向输出目录下的预览 home，供共享本地插件路径解析，不安装该目录。隔离测试另用临时 home；受控 patch 从仓库源码加载本地插件，并在 Loader 求值前禁用外部 MCP。PTC 校验检查模型最终的 `assembly.tools`，其中应有 `run_code` 和配置的 native exceptions；`run_code` 由 executor 生成，不在能力注册表里。
 
 配置侧结果固定报告 `renderedConfigurationVerified: false`：它准备测试输入，不自动证明整份日用配置已经通过 Loader。消费副本的测试遇到缺失 Release 资产时，需要对应 tarball 才能继续；自建安装布局的 smoke 可聚焦验证自身组合，同时报告未解决的其他资产。
 
@@ -75,7 +75,7 @@ ACP 配置回归使用[公开示例](<../examples/active-context-machine.yaml>)�
 | 裸 Node 导入缺 peer | Host resolver 与共享依赖布局，见[共享 peer 解析验收](install.md#共享-peer-解析验收) |
 | import 通过但工具未注册 | Loader 加载与真实工具行为 |
 
-组合 smoke 的 `profile-install` 是外层步骤名，失败不一定来自 pnpm。若 `GET /__dsh-config-smoke` 返回 `500`，先读取响应中的探针错误，再区分安装日志、Host Loader 异常和验收断言。测试结束会清理临时日志；需要留证时，在忽略目录中的调试调用给 `isolatedTest` 注入 `execute` 回调，待命令结束后把 stdout／stderr 另存为私有 `profile-install.log`，并将 `DSH_CONFIG_TEST_ROOT` 下的 `host.log`、dump 与报告复制到私有暂存，再返回或抛出，保留正常自动清理。Host 日志可能包含 launch token，不得公开打印或提交。
+组合 smoke 的 `profile-install` 步骤包括安装、启动 Host 和验收探针。`GET /__dsh-config-smoke` 返回 `500` 时，响应里是探针的错误信息；先读它，再查安装日志和 Host 日志。测试结束会清理临时日志；需要留证时，在忽略目录中的调试调用给 `isolatedTest` 注入 `execute` 回调，待命令结束后把 stdout／stderr 另存为私有 `profile-install.log`，并将 `DSH_CONFIG_TEST_ROOT` 下的 `host.log`、dump 与报告复制到私有暂存，再返回或抛出，保留正常自动清理。Host 日志可能包含 launch token，不得公开打印或提交。
 
 ## 5. 发布与日用切换
 
