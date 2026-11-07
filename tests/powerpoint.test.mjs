@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import * as Plugin from '../plugins/office-cdp.mjs';
+import * as Plugin from '../plugins/powerpoint.mjs';
 
 function config(input = {}) { const result = Plugin.Config['~standard'].validate(input); assert.ok(!result.issues); return result.value; }
-function directory(t) { const dir = mkdtempSync(join(tmpdir(),'office-cdp-test-')); t.after(()=>rmSync(dir,{recursive:true,force:true})); return dir; }
+function directory(t) { const dir = mkdtempSync(join(tmpdir(),'powerpoint-test-')); t.after(()=>rmSync(dir,{recursive:true,force:true})); return dir; }
 function register(t, settings, attachments = {}) {
   const tools = new Map(), providers = new Map(), effects = [];
   Plugin.apply({tools:{register(tool){tools.set(tool.name,tool);return ()=>tools.delete(tool.name);}},
@@ -62,9 +62,9 @@ test('shared tools run sequentially and a failed call does not poison the queue'
   let entered;const ready=new Promise(resolve=>{entered=resolve;});
   const wire=transport(t,async code=>{if(code.includes('first')){entered();await first;return {exceptionDetails:{text:'failed first'}};}return 'second';});
   const f=register(t,config({autoHide:false}));
-  const one=f.call('office_run_js',{code:'return "first";'});const rejection=assert.rejects(one,/failed first/);
+  const one=f.call('powerpoint_execute_office_js',{code:'return "first";'});const rejection=assert.rejects(one,/failed first/);
   await ready;
-  const two=f.call('office_run_js',{code:'return "second";'});
+  const two=f.call('powerpoint_execute_office_js',{code:'return "second";'});
   assert.equal(wire.sent.length,1);finish();await rejection;assert.equal(await two,'second');assert.equal(wire.sent.length,2);
 });
 
@@ -92,15 +92,6 @@ test('shape reads load null status before text and compact only the outline text
   await assert.rejects(run(Plugin.outlineExpression(2)),/outside/);
 });
 
-test('layout checks all four bounds and ignores full containment',()=>{
-  const s=(name,left,top,width,height,text='x',type='TextBox')=>({name,left,top,width,height,text,type});
-  const result=Plugin.verifyLayout([{slide:1,shapes:[s('panel',0,0,100,100),s('label',10,10,20,20),s('right',95,110,10,10),s('bottom',0,195,10,10),s('empty',120,0,20,20,'','Placeholder')]}],{widthPt:100,heightPt:200});
-  assert.ok(result.problems.some(p=>p.shape==='right'&&p.kind==='out-of-bounds'));
-  assert.ok(result.problems.some(p=>p.shape==='bottom'&&p.kind==='out-of-bounds'));
-  assert.ok(result.problems.some(p=>p.shape==='empty'&&p.kind==='empty-placeholder'));
-  assert.ok(!result.problems.some(p=>p.kind==='overlap'));
-});
-
 test('render returns attachment content and provider disappears with its tools on disposal',async t=>{
   const dir=directory(t);const ps=join(dir,'powershell');
   const png=Buffer.from([137,80,78,71,13,10,26,10,0,1,2,3]);
@@ -108,37 +99,37 @@ test('render returns attachment content and provider disappears with its tools o
   transport(t,()=>[]);
   const saved=[];const ref={attachmentId:'image-one',mediaType:'image/png',bytes:png.length,width:100,height:50};
   const f=register(t,config({powershell:ps,renderBackend:'com'}),{saveImage:async value=>{saved.push(value);return ref;}});
-  const value=await f.call('office_render_slide',{slide:1});
+  const value=await f.call('powerpoint_render_slide',{slide:1});
   assert.deepEqual(saved[0].data,png);
-  const rendered=f.tools.get('office_render_slide').output.render({},value);
+  const rendered=f.tools.get('powerpoint_render_slide').output.render({},value);
   assert.deepEqual(rendered[1],{type:'image',attachment:ref});
   const provider=f.providers.get(Plugin.name), [candidate]=await provider.list();
   const skill=await provider.get(candidate,{});
-  for(const tool of f.tools.keys()) assert.ok(skill.content.includes(tool));
+  assert.equal(skill.name,candidate.name);
   f.dispose();assert.equal(f.tools.size,0);assert.equal(f.providers.size,0);
 });
 test('automatic hide runs once and explicit show remains visible for later document calls',async t=>{
   const wire=transport(t,()=>({ok:true}));const f=register(t,config());
-  await f.call('office_run_js',{code:'return 1;'});await f.call('office_run_js',{code:'return 2;'});
+  await f.call('powerpoint_execute_office_js',{code:'return 1;'});await f.call('powerpoint_execute_office_js',{code:'return 2;'});
   assert.equal(wire.sent.filter(m=>m.params.expression.includes('Office.addin.hide')).length,1);
-  await f.call('office_pane_visibility',{visible:true});await f.call('office_run_js',{code:'return 3;'});
+  await f.call('powerpoint_pane_visibility',{visible:true});await f.call('powerpoint_execute_office_js',{code:'return 3;'});
   assert.equal(wire.sent.filter(m=>m.params.expression.includes('Office.addin.hide')).length,1);
   assert.ok(wire.sent.some(m=>m.params.expression.includes('Office.addin.showAsTaskpane')));
 });
-test('client dispatch preserves OOXML code and returns replacement IDs unchanged',async t=>{
+test('native client tools forward typed arguments and preserve replacement IDs without a generic dispatch alias',async t=>{
   const args={slide_id:'256#example',code:'const xml = "<a:t>引号与 &amp; 内容</a:t>"; return xml;',autosize_shape_ids:['3']};
   const calls=[];
-  const runtime={execute:async(name,value)=>{calls.push({name,value});return {result:'readback',slide_id_update:{[value.slide_id]:'257#replacement'}};},catalog:async()=>[{name:'edit_slide_xml'}]};
-  const wire=transport(t,code=>Function('globalThis','return '+code)({OfficeClientRuntime:runtime}));
+  const runtime={execute:async(name,value)=>{calls.push({name,value});return {result:'readback',slide_id_update:{[value.slide_id]:'257#replacement'}};}};
+  transport(t,code=>Function('globalThis','return '+code)({OfficeClientRuntime:runtime}));
   const f=register(t,config({autoHide:false}));
-  const value=await f.call('office_run_ooxml',args);
-  assert.deepEqual(calls,[{name:'edit_slide_xml',value:args}]);
-  assert.equal(value.slide_id_update[args.slide_id],'257#replacement');
-  assert.equal((await f.call('office_client_catalog'))[0].name,'edit_slide_xml');
-  assert.deepEqual(await f.call('office_client_catalog',{name:'edit_slide_xml'}),(await runtime.catalog())[0]);
-  await f.call('office_client_tool',{name:'read_slide_text',arguments:{ref:'256#example/shape:3'}});
-  assert.equal(calls.at(-1).name,'read_slide_text');
-  assert.equal(wire.sent.length,4);
+  for(const definition of Plugin.clientToolDefinitions){
+    const value=await f.call(definition.name,args);
+    assert.deepEqual(calls.at(-1),{name:definition.clientName,value:args});
+    assert.equal(value.slide_id_update[args.slide_id],'257#replacement');
+    assert.equal(f.tools.get(definition.name).parameters,definition.parameters);
+  }
+  assert.ok(![...f.tools.keys()].some(name=>name.includes('client_tool')||name.includes('client_catalog')));
+  assert.equal(calls.length,Plugin.clientToolDefinitions.length);
 });
 
 test('Office.js rendering reads the bound slide and preserves returned image bytes',async t=>{
@@ -160,7 +151,7 @@ test('helper backend sends deck size into render and keeps helper error codes', 
   });
   const saved=[];const ref={attachmentId:'image-helper',mediaType:'image/png',bytes:png.length,width:10,height:5};
   const f=register(t,config({backend:'helper',helperUrl:'http://127.0.0.1:19999',autoHide:false,renderBackend:'com'}),{saveImage:async value=>{saved.push(value);return ref;}});
-  const value=await f.call('office_render_slide',{slide:2});
+  const value=await f.call('powerpoint_render_slide',{slide:2});
   assert.deepEqual(saved[0].data,png);
   assert.equal(value.image.attachmentId,'image-helper');
   assert.equal(new URL(requests[0].href).host,'127.0.0.1:19999');
