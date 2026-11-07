@@ -26,7 +26,7 @@ Windows helper 使用 `transport: addin` 时，由自有加载项主动建立 We
 
 ## 操作流程
 
-1. 加载 `powerpoint` skill，读取 `powerpoint_deck_info` 和所需页面信息。
+1. 加载英文 `powerpoint` 操作手册，读取 `powerpoint_deck_info` 和所需页面信息。手册覆盖 Office.js 与 OOXML 的编辑流程、段落与主题继承、表格、图表、备注、母版和视觉检查；演示文稿与回复沿用用户的语言。
 2. 按需发现目标工具并读取完整 schema；使用当前文档返回的页 ID、形状 ID 和版式信息。
 3. 普通操作优先使用 Office.js。图表、备注或属性等 Office.js 覆盖不足的操作，使用对应客户端 OOXML 工具。
 4. 修改后读回结果，再用 `powerpoint_render_slide` 渲染受影响页面并检查视觉效果。
