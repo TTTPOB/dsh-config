@@ -12,9 +12,10 @@ export const Config = {
   '~standard': { version: 1, vendor: name, validate(input) {
     const value = { backend: 'cdp', endpoint: 'http://127.0.0.1:9224', helperUrl: 'http://127.0.0.1:18766',
       helperToken: '', targetUrl: 'https://pivot.claude.ai/', timeoutMs: 90000,
-      powershell: 'powershell.exe', renderWidth: 1280, renderHeight: 720, autoHide: true, ...input };
+      powershell: 'powershell.exe', renderBackend: 'officejs', renderWidth: 1280, renderHeight: 720, autoHide: true, ...input };
     const issues = [];
     if (!['cdp', 'helper'].includes(value.backend)) issues.push({ message: "backend must be 'cdp' or 'helper'", path: ['backend'] });
+    if (!['officejs','com'].includes(value.renderBackend)) issues.push({ message: 'renderBackend must be officejs or com', path: ['renderBackend'] });
     if (typeof value.helperToken !== 'string') issues.push({ message: 'helperToken must be a string', path: ['helperToken'] });
     for (const key of ['endpoint', 'helperUrl', 'targetUrl']) {
       try { if (!['http:', 'https:'].includes(new URL(value[key]).protocol)) throw new Error('protocol'); }
@@ -167,9 +168,18 @@ export function verifyLayout(data, page) {
   return { slidesChecked: data.length, problems, note: 'Heuristic only: containment is ignored; inspect rendered slides for clipping and intentional overlaps.' };
 }
 
-/** Export PNG through PowerPoint COM, locally or through the Windows helper, and return bytes. */
+/** Render the taskpane-bound slide through Office.js, or opt into the COM transport. */
 export async function renderSlide(config, slide, options = {}) {
   if (!Number.isSafeInteger(slide) || slide < 1) throw new Error('slide must be a positive integer');
+  if (config.renderBackend === 'officejs') {
+    const expression = office('const items=await slides(ctx);const slide=at(items,'+JSON.stringify(slide)+');'
+      +'if(typeof slide.getImageAsBase64!=="function") throw new Error("This Office runtime does not support slide images; select renderBackend: com.");'
+      +'const image=slide.getImageAsBase64({width:'+config.renderWidth+'});await ctx.sync();return image.value;');
+    const encoded = await evaluate(config, expression, options.signal);
+    const bytes = Buffer.from(encoded, 'base64');
+    if (!bytes.subarray(0,8).equals(PNG_MAGIC)) throw new Error('Office.js did not return a PNG');
+    return bytes;
+  }
   const expected = Number(options.expectSlides ?? 0);
   if (config.backend === 'helper') {
     const bytes = await helperRequest(config, '/render',
@@ -212,6 +222,15 @@ const textRender = (_args, value) => [{type:'text',text:JSON.stringify(value)}];
 const slideParam = {type:'integer',description:'One-based slide index in the current deck.'};
 const imageSchema = {type:'object',properties:{attachmentId:{type:'string'},mediaType:{type:'string'},bytes:{type:'integer'},width:{type:'integer'},height:{type:'integer'},name:{type:'string'},originalDimensions:{type:'object',properties:{width:{type:'integer'},height:{type:'integer'}},required:['width','height'],additionalProperties:false}},required:['attachmentId','mediaType','bytes','width','height'],additionalProperties:false};
 
+/** Build a dispatch request without interpreting model-supplied argument strings as code. */
+export function clientCallExpression(name, args = {}) {
+  const available = 'if(!globalThis.OfficeClientRuntime) throw new Error("Client execution runtime is not loaded. Open the independent Office Helper add-in.");';
+  if(name === 'catalog') return '(async()=>{'+available+'const tools=await globalThis.OfficeClientRuntime.catalog();const name='+JSON.stringify(args.name??null)+';'
+    +'if(name){const tool=tools.find(t=>t.name===name);if(!tool)throw new Error("Unknown client tool: "+name);return tool;}'
+    +'return tools.map(t=>({name:t.name,description:t.description,supported:t.supported,inputs:Object.keys(t.parameters?.properties??{}),required:t.parameters?.required??[]}));})()';
+  return '(async()=>{'+available+'return await globalThis.OfficeClientRuntime.execute('+JSON.stringify(name)+','+JSON.stringify(args)+');})()';
+}
+
 /** Register tools and the embedded provider; serialize operations across agents sharing the deck. */
 export function apply(ctx, config) {
   let tail = Promise.resolve();
@@ -233,14 +252,24 @@ export function apply(ctx, config) {
         return execute(args,exec);
       })}));
   };
-  add('office_pane_visibility','Hide or show the Office taskpane without closing its document runtime. Hiding preserves CDP control; closing the pane with × does not.',{visible:{type:'boolean'}},['visible'],objectSchema,async(a,e)=>{
+  add('office_pane_visibility','Hide or show the Office taskpane. Hiding keeps the document runtime available. The independent add-in uses a long shared runtime; a borrowed CDP taskpane can lose its runtime when closed.',{visible:{type:'boolean'}},['visible'],objectSchema,async(a,e)=>{
     const result=await evaluate(config,'(async()=>{await Office.addin.'+(a.visible?'showAsTaskpane':'hide')+'();return {visible:'+a.visible+'};})()',e.signal);
     hidden = true;
     return result;
   });
-  add('office_deck_info','Read the live PowerPoint deck slide IDs, dimensions, masters and layouts. Use before editing; Office pane must stay open.',{},[],objectSchema,(_a,e)=>evaluateNow(infoExpression(),e));
+  add('office_deck_info','Read the live PowerPoint deck slide IDs, dimensions, masters and layouts. Use before editing; the document runtime must be loaded.',{},[],objectSchema,(_a,e)=>evaluateNow(infoExpression(),e));
   add('office_slide_outline','Read compact shape geometry and text (first 200 characters per shape). Omit slide for whole deck.',{slide:slideParam},[],{type:'array',items:objectSchema},(a,e)=>evaluateNow(outlineExpression(a.slide,true),e));
   add('office_slide_shapes','Read complete text and geometry for all shapes on one slide.',{slide:slideParam},['slide'],{type:'array',items:objectSchema},(a,e)=>evaluateNow(outlineExpression(a.slide),e));
+  add('office_client_catalog','List compact client tool summaries and input field names from the loaded Office runtime. Supply name to read the full original input schema and description for one tool. Use before office_client_tool.',{name:{type:'string',description:'Optional exact client tool name; omit for compact summaries.'}},[],jsonSchema,(a,e)=>evaluateNow(clientCallExpression('catalog',a),e));
+  add('office_client_tool','Execute a client tool from office_client_catalog in the independent Office runtime. Uses the extracted client implementation, not the Claude model or agent loop. Read the catalog for argument names. OOXML writeback may replace slide IDs; use slide_id_update in subsequent calls. Do not retry unknown writes.',{
+    name:{type:'string',description:'Exact client tool name from office_client_catalog.'},
+    arguments:{type:'object',additionalProperties:true,description:'Arguments accepted by that client tool.'},
+  },['name','arguments'],jsonSchema,(a,e)=>evaluateNow(clientCallExpression(a.name,a.arguments),e));
+  add('office_run_ooxml','Run an async JavaScript body against one slide PPTX archive. Provides zip, markDirty, DOMParser, XMLSerializer and escapeXml. Read-only return without markDirty does not import a replacement. After markDirty writeback confirms the replacement before deleting the original; inspect slide_id_update for the new slide ID.',{
+    slide_id:{type:'string',description:'Current slide ID from office_deck_info, not a page number.'},
+    code:{type:'string',description:'Async function body receiving { zip, markDirty }; call markDirty() only when files were modified.'},
+    autosize_shape_ids:{type:'array',items:{type:'string'}},
+  },['slide_id','code'],jsonSchema,(a,e)=>evaluateNow(clientCallExpression('edit_slide_xml',a),e));
   add('office_run_js','Execute an async JavaScript body in the live Office pane. Office and PowerPoint are available. Use return for a JSON-serializable result. This is not the Claude sandbox: insertImage, blobs and JSZip helpers are not supplied. No automatic retries; changes may be partial on failure.',{code:{type:'string',description:'Async function body, normally using await PowerPoint.run(async ctx => {...}).'}},['code'],jsonSchema,(a,e)=>evaluateNow('(async () => {'+a.code+'})()',e));
   add('office_verify_layout','Check slide bounds, empty placeholders and possible overlaps. Heuristic only; also render and inspect slides.',{slide:slideParam},[],objectSchema,async(a,e)=>{
     const info=await evaluateNow(infoExpression(),e); const data=await evaluateNow(outlineExpression(a.slide),e); return verifyLayout(data,info.page);
@@ -255,19 +284,19 @@ export function apply(ctx, config) {
     const placement={}; for (const [key,target] of [['left','imageLeft'],['top','imageTop'],['width','imageWidth'],['height','imageHeight']]) if(a[key]!==undefined) placement[target]=a[key];
     return evaluateNow(imageExpression(a.slide,base64,placement),e);
   });
-  add('office_render_slide','Render a slide with PowerPoint COM and return its PNG directly for visual inspection. With backend helper the Windows helper renders; with backend cdp the local DSH machine renders through PowerShell. Either way the active presentation must be the deck bound to the taskpane.',{slide:slideParam},['slide'],{type:'object',properties:{slide:slideParam,image:imageSchema},required:['slide','image'],additionalProperties:false},async(a,e)=>{
+  add('office_render_slide','Render the taskpane-bound slide through Office.js and return PNG directly for visual inspection. When explicitly configured renderBackend: com, render through the Windows helper or local PowerShell; that mode uses ActivePresentation and requires the intended deck to stay active.',{slide:slideParam},['slide'],{type:'object',properties:{slide:slideParam,image:imageSchema},required:['slide','image'],additionalProperties:false},async(a,e)=>{
     const guard=await evaluateNow(deckSizeExpression(a.slide),e);
     const data=await renderSlide(config,a.slide,{signal:e.signal,expectSlides:guard?.slideCount});
     const image=await ctx.attachments.saveImage({data,mediaType:'image/png',name:'slide-'+a.slide+'.png'});
     return {slide:a.slide,image:{...image,attachmentId:String(image.attachmentId)}};
   },(_a,v)=>[{type:'text',text:JSON.stringify({slide:v.slide,width:v.image.width,height:v.image.height})},{type:'image',attachment:v.image}]);
-  const summary={name:'ppt-officejs',description:'通过 office_* 原生工具和 CDP 读写正在打开的 PowerPoint，生成、修改演示文稿、插入图片并查看页面渲染。',provider:name,source:'bundled',invocation:{modelInvocable:true,userInvocable:true}};
+  const summary={name:'ppt-officejs',description:'通过 office_* 原生工具操作当前 PowerPoint；自有加载项提供客户端工具执行层，支持 Office.js、OOXML 及页面渲染，不依赖 Claude 登录或模型。',provider:name,source:'bundled',invocation:{modelInvocable:true,userInvocable:true}};
   ctx.effect(()=>ctx.skills.registerProvider(()=>({name,list:async()=>[{...summary,rank:600,locator:'embedded'}],get:async()=>({...summary,content:skillContent})})));
 }
 
 const skillContent = `# PowerPoint Office.js 操作手册
 
-本插件复用当前 Office 侧栏的 Office.js 运行时，不使用 Claude 模型或 agent loop。侧栏运行时和 CDP 必须保持开启，不需要登录。默认首次文档调用自动隐藏侧栏；office_pane_visibility({visible:false}) 隐藏，{visible:true} 恢复显示。隐藏后可以继续控制，不要点 × 关闭侧栏。由 DSH agent 决策，可用 subagent 分工；共享文档的工具调用串行执行。
+当前 PowerPoint 文档是唯一真实状态，DSH agent 负责决策，不使用 Claude 模型或 agent loop。自有 Office Helper 加载项通过共享长运行时连接 Windows helper，不需要 Claude 侧栏、登录或 CDP；旧 cdp backend 仅在借用其他侧栏时需要调试端口。默认首次文档调用自动隐藏侧栏；office_pane_visibility({visible:false}) 隐藏，{visible:true} 恢复显示。隐藏后可以继续控制。自有加载项可显式启用随文档自动启动并保存，首次文档仍需加载；不承诺所有新文档静默加载。借用的旧 CDP 侧栏不要关闭。由 DSH agent 决策，可用 subagent 分工；共享文档的工具调用串行执行。
 
 ## 工具与编辑循环
 
@@ -275,7 +304,7 @@ const skillContent = `# PowerPoint Office.js 操作手册
 2. 调用 office_slide_outline 获取摘要，office_slide_shapes 获取单页完整文本和形状。
 3. 用 office_run_js 执行异步函数体；必须显式 return 返回 JSON 结果。它不是 SES 沙箱，没有 insertImage、blobs、JSZip 等 Claude 私有 helper。
 4. 用 office_insert_image 插入图片；filePath 是 DSH 机器上的路径，不是 Windows 路径。也可传裸 base64。无需先上传到 Windows。
-5. 修改后调用 office_render_slide，工具直接返回 PNG 图片，亲眼检查后再判断排版。渲染走 PowerPoint COM：本机由 DSH 机器调 PowerShell，远端由 Windows helper 转发。确保目标文档是该侧栏绑定的活动演示文稿，切换窗口会让渲染拒绝并报 presentation-mismatch。
+5. 修改后调用 office_render_slide，工具直接返回 PNG 图片，亲眼检查后再判断排版。默认使用当前文档的 Office.js getImageAsBase64；显式配置 renderBackend: com 才使用本机或 helper 的 COM 导出，该模式需保持目标文档为活动文稿。
 6. 最后调用 office_verify_layout。几何结果仅作提示，不替代视觉检查；容器内文字等完全包含关系被忽略，部分重叠可能是有意设计。无告警不代表视觉正确。
 
 按单页小步修改、渲染、检查、修正。同一问题三轮仍未解决就说明现状。错误或超时可能发生在部分修改之后，先读取现状，不盲目重试。不要删除用户已有内容来消除告警。
@@ -293,7 +322,17 @@ const skillContent = `# PowerPoint Office.js 操作手册
 - 表格高度应通过行高和内容控制，直接写 shape.height 不一定生效。
 - 修改 textFrame.textRange.text 可能丢失原来的局部文字格式，保留格式时先检查对象。
 - 图片通过 Office.context.document.setSelectedDataAsync(base64,{coercionType:"image",...}) 插入当前选中页；使用 office_insert_image 自动先跳转目标页。只传 width 时保持宽高比。
-- 复杂图表和母版 OOXML 操作没有封装好的专用工具；不要假称支持。若自行做 zip 往返，要保留 sourceSlideIds 和相关关系，并检查母版增长；页面没有预装 JSZip 的保证。
+- 普通对象操作默认使用 Office.js；Office.js 未覆盖的属性使用 office_run_ooxml。先读当前 XML，再修改；只读不调用 markDirty()，避免无意义导入。
+- 调用 office_client_catalog 获取摘要，传 name 按需读取某一工具的完整原始 schema；office_client_tool 使用原客户端工具名执行，不臆造工具或参数。
+- 需要创建普通图表时优先调用 create_slide_chart；先 read_chart_style 了解原图表。图表形状是原生 Chart，不要用矩形冒充；复杂形式用 edit_slide_chart。图表 spec 的 position 使用 EMU，不是 pt。
+- read_slide_text 返回段落 XML，edit_slide_text 接收原始 a:p 段落（不是 JavaScript），保留正文容器属性；ref 使用 list_slide_shapes 返回的 slideId:shapeId，不能凭页码拼。
+- find_and_replace 支持 include_notes 和 dry_run；读备注可在 office_run_ooxml 中读取 notesSlide XML，无备注时需要创建 notes part、rels 和 content type，不假定文件已经存在。
+- edit_slide_master 按原实现编辑第 1 页所属母版；不是任意 master_id 定位工具。只迁移原母版的版式关联页，其它母版不做全局归一化。
+- verify_slide_visual 的原模型 reviewer 与 export_deck_outline 的 Conductor 广播不离线搬运：视觉复核用 office_render_slide 返回图片由当前 DSH agent 完成；本地摘要用 office_slide_outline。
+- 原模板图表写入原生 chart XML 和数据缓存；不凭此声称生成了可在 Excel 中编辑的内嵌工作簿。已有嵌入 XLSX 修改由提取的真实 workbook validator 检查。
+- 图标通过原 search_icons/insert_icon 流程，先搜索再插入，插入保留 SVG 和 PNG fallback；需要外部图标服务的网络连接。
+- OOXML 写回可能更换 slide ID；检查返回的 slide_id_update，随后用新 ID。需要时重新读取页面摘要，不能继续缓存旧对象。
+- 母版编辑的影响范围由运行时工具定义；不把所有页面强制统一到一个母版，不以“多个母版”本身作为缺陷。
 
 ## 设计规则
 

@@ -25,13 +25,16 @@ localPlugins:
 | `office_deck_info` | 文档页数、尺寸、母版和版式 ID |
 | `office_slide_outline` | 全文档或单页形状摘要，文本截至 200 字符 |
 | `office_slide_shapes` | 单页完整文本及几何信息 |
-| `office_run_js` | 执行异步函数体，使用 `return` 返回 JSON 数据 |
+| `office_run_js` | 执行异步 Office.js 函数体，使用 `return` 返回 JSON 数据 |
+| `office_run_ooxml` | 单页 ZIP 读写，显式 `markDirty()` 后才替换页面 |
+| `office_client_catalog` | 查看自有加载项实际加载的客户端工具和参数 |
+| `office_client_tool` | 按原客户端工具名调用已提取的执行实现 |
 | `office_insert_image` | 读取 DSH 机器上的文件，或接收裸 base64，按 pt 插图 |
-| `office_render_slide` | PowerPoint COM 渲染 PNG，直接返回原生图片附件 |
+| `office_render_slide` | 默认 Office.js 渲染 PNG，直接返回原生图片附件；可显式选 COM |
 | `office_verify_layout` | 边界、空占位符和潜在重叠提示 |
 | `office_pane_visibility` | `visible: false` 隐藏，`true` 恢复侧栏 |
 
-默认首次文档调用自动隐藏侧栏；显式恢复显示后，本插件实例不会再次自动隐藏。隐藏不关闭 Office.js 运行时；不要点击侧栏 ×。实例重新加载后会重新执行一次自动隐藏。
+默认首次文档调用自动隐藏侧栏；显式恢复显示后，本插件实例不会再次自动隐藏。隐藏保留运行时。自有加载项使用 long shared runtime，可按文档显式设置自动启动；借用的旧 CDP 侧栏关闭后可能销毁运行时。实例重新加载后会重新执行一次自动隐藏。
 
 模型通过 `skill` 工具加载 `ppt-officejs`，再进行“读页面 → 修改 → 渲染检查”。工具按需披露；所有文档操作在本插件实例内排队执行，避免多个 agent 同时改选中页。超时和异常不自动重试，修改可能已经部分完成，应先读取现状。
 
@@ -45,15 +48,26 @@ localPlugins:
 - `timeoutMs`：每个工具及请求超时，默认 90000。
 - `autoHide`：首次文档调用自动隐藏，默认 `true`。
 - `powershell`：`backend: cdp` 时使用的本机 PowerShell，默认 `powershell.exe`。
-- `renderWidth` / `renderHeight`：COM 导出像素尺寸，默认 1280 × 720。
+- `renderBackend`：默认 `officejs`，对侧栏绑定的当前文档调用 `getImageAsBase64`；旧宿主可显式改为 `com`。
+- `renderWidth` / `renderHeight`：默认 1280 × 720。Office.js 使用宽度并保持原页比例；COM 使用两项尺寸。
 
-渲染使用 COM 的 `ActivePresentation`，导出前比对页数，不一致时报 `presentation-mismatch` 而不是悄悄渲染错文档。`backend: cdp` 需要 DSH 机器能调 PowerShell，远端只转发 CDP 无法渲染。
+默认渲染使用当前文档的 Office.js，不需要 COM 或 Windows 文件路径。显式使用 `renderBackend: com` 时，导出前比对 `ActivePresentation` 的页数，不一致时报 `presentation-mismatch`；这一备用模式在 `backend: cdp` 下需要 DSH 机器能调用 PowerShell，远端则由 helper 执行。
 
-`backend: helper` 时 CDP 端口留在 Windows 本机，远端只连 helper；helper 不保存任何文档状态，每次请求重新发现侧栏并重新附加 COM，所以开机时 PowerPoint 未运行、侧栏重载或换文档都不需要重启服务。同类失败分别返回 `powerpoint-not-running`、`taskpane-not-open`、`pane-unreachable`。
+`backend: helper` 时远端只连接 Windows helper。helper 的 `transport: addin` 使用自有加载项主动发起的 WebSocket，不需要 Claude 侧栏、登录或 CDP；旧 `transport: cdp` 仍可借用调试侧栏。文档状态始终由 PowerPoint 持有，COM 仅用于当前渲染接口；打开文档或重新加载侧栏无需重启 helper。
 
 `office_run_js` 直接运行 Office 页面代码，不提供 Claude 的 SES 沙箱或 `insertImage`、`blobs`、`JSZip` 私有 helper。该插件具有本机文档控制权，只给可信 agent 使用；CDP 端口不要直接暴露到公网。
 
-几何检查只是启发式提示，完整包含关系会被忽略；零告警不代表没有遮挡、文字溢出或视觉问题。当前没有封装 OOXML 图表、母版修改或图标检索专用工具。
+几何检查只是启发式提示，完整包含关系会被忽略；零告警不代表没有遮挡、文字溢出或视觉问题。客户端执行能力以 `office_client_catalog` 为准：自有加载项必须加载相应提取模块才能使用；只有八个基础 Office.js 工具的旧加载项会明确报客户端运行时未加载，不会静默改用薄封装。OOXML 写回的 `slide_id_update` 必须用于后续操作，出错后应先读当前文档，不盲目重试。
+
+## 客户端执行能力
+
+自有加载项加载当前 bundle 提取的 15 个本地业务 handler：形状、单页 XML、母版、图表创建／读取样式／替换／原始 XML、文字段落读写、批量替换含备注、复制页、跨页图片复制、几何检查及图标搜索／插入。原输入 schema、默认值和预处理保留；调用前按原 schema 校验。
+
+`office_client_catalog` 默认只返回摘要，传 `name` 获取单项完整 schema。`office_client_tool` 接受原工具名和 `arguments`。单页 JavaScript 操作可直接用 `office_run_ooxml`，只读不调用 `markDirty()`；修改后必须读取 `slide_id_update`。母版工具按原实现针对第 1 页所属母版，保留条件迁移与清理，不是任意母版 ID 编辑器。
+
+原 `verify_slide_visual` 需要模型 reviewer，原 `export_deck_outline` 向 Conductor 广播；两者在离线客户端中明确不可用，分别使用 DSH 自身看图与本地摘要能力替代。通用代码编译明确改为可信 AsyncFunction，未搬 SES、Claude Files blobs、Conductor、产品权限 UI 或模型 loop。图表模板生成 chart XML 和缓存；已有内嵌 XLSX 修改保留原始 workbook 验证器，不等于模板自动生成 Excel 工作簿。
+
+图标客户端通过 helper 的同源代理请求原公开图标服务，仍依赖网络；不把接口数据缓存当作本地自有图标库。完整源提取与生成入口归属于 Windows helper 的 extraction 目录，插件自身不在每次调用时下载或解析 bundle。
 
 ## 本地打包
 

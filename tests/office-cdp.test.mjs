@@ -107,7 +107,7 @@ test('render returns attachment content and provider disappears with its tools o
   writeFileSync(ps,'#!/usr/bin/env node\nprocess.stdout.write('+JSON.stringify(png.toString('base64'))+');\n',{mode:0o700});
   transport(t,()=>[]);
   const saved=[];const ref={attachmentId:'image-one',mediaType:'image/png',bytes:png.length,width:100,height:50};
-  const f=register(t,config({powershell:ps}),{saveImage:async value=>{saved.push(value);return ref;}});
+  const f=register(t,config({powershell:ps,renderBackend:'com'}),{saveImage:async value=>{saved.push(value);return ref;}});
   const value=await f.call('office_render_slide',{slide:1});
   assert.deepEqual(saved[0].data,png);
   const rendered=f.tools.get('office_render_slide').output.render({},value);
@@ -125,6 +125,31 @@ test('automatic hide runs once and explicit show remains visible for later docum
   assert.equal(wire.sent.filter(m=>m.params.expression.includes('Office.addin.hide')).length,1);
   assert.ok(wire.sent.some(m=>m.params.expression.includes('Office.addin.showAsTaskpane')));
 });
+test('client dispatch preserves OOXML code and returns replacement IDs unchanged',async t=>{
+  const args={slide_id:'256#example',code:'const xml = "<a:t>引号与 &amp; 内容</a:t>"; return xml;',autosize_shape_ids:['3']};
+  const calls=[];
+  const runtime={execute:async(name,value)=>{calls.push({name,value});return {result:'readback',slide_id_update:{[value.slide_id]:'257#replacement'}};},catalog:async()=>[{name:'edit_slide_xml'}]};
+  const wire=transport(t,code=>Function('globalThis','return '+code)({OfficeClientRuntime:runtime}));
+  const f=register(t,config({autoHide:false}));
+  const value=await f.call('office_run_ooxml',args);
+  assert.deepEqual(calls,[{name:'edit_slide_xml',value:args}]);
+  assert.equal(value.slide_id_update[args.slide_id],'257#replacement');
+  assert.equal((await f.call('office_client_catalog'))[0].name,'edit_slide_xml');
+  assert.deepEqual(await f.call('office_client_catalog',{name:'edit_slide_xml'}),(await runtime.catalog())[0]);
+  await f.call('office_client_tool',{name:'read_slide_text',arguments:{ref:'256#example/shape:3'}});
+  assert.equal(calls.at(-1).name,'read_slide_text');
+  assert.equal(wire.sent.length,4);
+});
+
+test('Office.js rendering reads the bound slide and preserves returned image bytes',async t=>{
+  const png=Buffer.from([137,80,78,71,13,10,26,10,4,3,2,1]);const requests=[];
+  const shapes=[{id:'first'},{id:'second',getImageAsBase64(options){requests.push(options);return {value:png.toString('base64')};}}];
+  const PowerPoint={run:fn=>fn({presentation:{slides:{load(){},items:shapes}},sync:async()=>{}})};
+  transport(t,code=>Function('PowerPoint','return '+code)(PowerPoint));
+  assert.deepEqual(await Plugin.renderSlide(config({renderWidth:987}),2),png);
+  assert.deepEqual(requests,[{width:987}]);
+});
+
 test('helper backend sends deck size into render and keeps helper error codes', async t => {
   const requests=[];
   const png=Buffer.from([137,80,78,71,13,10,26,10,9,9]);
@@ -134,7 +159,7 @@ test('helper backend sends deck size into render and keeps helper error codes', 
     return {ok:true,arrayBuffer:async()=>png};
   });
   const saved=[];const ref={attachmentId:'image-helper',mediaType:'image/png',bytes:png.length,width:10,height:5};
-  const f=register(t,config({backend:'helper',helperUrl:'http://127.0.0.1:19999',autoHide:false}),{saveImage:async value=>{saved.push(value);return ref;}});
+  const f=register(t,config({backend:'helper',helperUrl:'http://127.0.0.1:19999',autoHide:false,renderBackend:'com'}),{saveImage:async value=>{saved.push(value);return ref;}});
   const value=await f.call('office_render_slide',{slide:2});
   assert.deepEqual(saved[0].data,png);
   assert.equal(value.image.attachmentId,'image-helper');
