@@ -35,6 +35,22 @@ localPlugins:
 - `word_insert_image`：从 DSH 机器上的 `filePath` 或裸 `base64` 插入内联图片；无需 Windows 路径。`where` 可为 `documentStart`、`documentEnd`、`selection`，后者替换选区。尺寸单位 pt，单边尺寸锁定比例，两边均给时显式设置大小。
 - `word_pane_visibility`：显隐加载项，不关闭运行时。`autoHide` 控制首次文档调用前是否自动隐藏；实际可用性由 Word 的加载项运行时支持决定。
 
+## Zotero 原生引文
+
+以下工具经 Windows helper 的 `POST /word/zotero` 操作原生 Zotero 字段，而不是生成静态引用文本：
+
+- `word_zotero_insert_citation({items, anchor_text?, position?, style_id?, refresh?})`：每项为 `{uri, itemData, locator?, label?, prefix?, suffix?, suppressAuthor?}`。`uri` 和 CSL-JSON `itemData` 必须从已有 Zotero MCP 读取真实条目；不猜本地 itemID/libraryID，不编造元数据。没有 Zotero preferences 的文档必须提供 `style_id`，由 helper 校验；已有文档保留 preferences。
+- `word_zotero_insert_bibliography({anchor_text?, position?, refresh?})`：插入原生参考文献表。
+- `word_zotero_refresh({})`：刷新当前文档中的 Zotero 引文和参考文献表。
+- `word_zotero_inspect({})`：读取当前文档、字段与 preferences；超时或结果不确定时先调用它，不盲目再次插入。
+- `word_zotero_set_style({style_id, refresh?})`：显式切换 CSL 样式。
+
+`position` 为 `before`、`after`、`replace`、`end` 或 `selection`；`anchor_text` 用于定位唯一锚点。插入和改样式时 `refresh` 默认 `true`，可显式设为 `false`。位置缺省规则与锚点校验由 helper 负责。
+
+每次调用先从文档绑定的加载项求值 `(Office.context.document.url || "")`，再发送 `{action, documentUrl, ...args}`；helper 按 URL 绑定已保存的当前文档，不盲用另一活动窗口。结果包含 `document`、`fields:[{kind,text,start,citationID?,uris?}]`、`preferences`、`refreshTriggered`、`pendingFormatting`。`refreshTriggered` 仅表示已触发官方宏；`pendingFormatting` 仅检测空白和占位符，不证明样式更新完成。刷新后调用 inspect 核对预期的引文和书目文字。工具复用同一串行队列、认证、取消和不重试机制。
+
+执行层使用 Windows PowerShell 和 Word COM；MSO 自定义文档属性通过静态反射访问，不依赖 Python 或 pywin32。需要运行 Zotero、加载官方 Word 模板并保存目标文档。当前插入支持正文中的 Field 引文，暂不支持脚注／尾注或 Bookmark 引文，也不自动操作官方 Add/Edit Citation 选文献弹窗。上述工具需要提供 `/word/zotero` 的 Windows helper；DSH 插件部署本身不安装或重启 helper 或 Zotero。
+
 ## 工作方式与限制
 
 工具调用串行执行，避免多个 agent 同时改写同一选区。断线、超时或原处理器失败后先读回文档，工具不重放可能已应用的写入。页面渲染使用 Word 当前导出的 PDF；修订显示与 Word 的当前导出设置相关，应查看图片而不是据文本结果推测版式。

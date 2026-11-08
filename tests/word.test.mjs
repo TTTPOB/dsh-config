@@ -130,3 +130,80 @@ test('rasterizer rejects invalid PDF input and leaves no owned temporary directo
   await assert.rejects(Plugin.renderPdfPage(config(),Buffer.from('not pdf').toString('base64'),1),/did not return a PDF/);
   const after=new Set(readdirSync(tmpdir()).filter(n=>n.startsWith('dsh-word-render-')));assert.deepEqual(after,before);
 });
+
+test('Zotero tools bind each action to the taskpane document and preserve item data and helper results',async t=>{
+  let documentUrl='file:///C:/Documents/First%20paper.docx';
+  const result={document:{url:documentUrl},fields:[{kind:'citation',code:'ADDIN ZOTERO_ITEM data',text:'(Example, 2024)'}],preferences:{style:'test-style'},refresh:{status:'pending'}};
+  const settings=config({autoHide:false,helperToken:'synthetic-token'});
+  const requests=transport(t,request=>new URL(request.url).pathname==='/eval'
+    ? Function('Office','return '+request.body.code)({context:{document:{url:documentUrl}}}) : result);
+  const f=register(t,settings);
+  const items=[{uri:'http://zotero.org/users/123/items/ABCD1234',itemData:{id:'ABCD1234',type:'article-journal',title:'Synthetic fixture',author:[{family:'Example'}],issued:{'date-parts':[[2024]]},custom:{nested:true}},locator:'12–14',label:'page',prefix:'see ',suffix:', discussion',suppressAuthor:true}];
+  const cases=[
+    ['insert_citation',{items,anchor_text:'Unique anchor "quoted"',position:'after',style_id:'test-style'},true],
+    ['insert_bibliography',{anchor_text:'References',position:'replace',refresh:false},false],
+    ['refresh',{},undefined],['inspect',{},undefined],
+    ['set_style',{style_id:'different-style'},true],
+    ['insert_citation',{items,position:'selection',refresh:false},false],
+    ['insert_bibliography',{position:'end'},true],
+    ['set_style',{style_id:'different-style',refresh:false},false],
+  ];
+  for(const [action,args,refresh] of cases){
+    documentUrl=documentUrl.replace('First','Current')+'x';
+    assert.deepEqual(await f.call('word_zotero_'+action,args),result);
+    const [evaluation,request]=requests.slice(-2);
+    assert.equal(new URL(evaluation.url).pathname,'/eval');
+    assert.equal(new URL(request.url).pathname,'/word/zotero');
+    assert.equal(request.options.method,'POST');
+    assert.equal(request.options.headers.authorization,'Bearer '+settings.helperToken);
+    assert.deepEqual(request.body,{...args,action,documentUrl,...(refresh===undefined?{}:{refresh})});
+  }
+  documentUrl='';
+  await f.call('word_zotero_inspect');
+  assert.equal(requests.at(-1).body.documentUrl,'');
+  const provider=[...f.providers.values()][0];
+  assert.equal((await provider.get()).name,'word');
+  f.dispose();assert.equal(f.tools.size,0);assert.equal(f.providers.size,0);
+});
+
+test('Zotero writes are not retried after transport or helper failure and inspection remains available',async t=>{
+  let failure='transport';let writes=0;
+  const requests=transport(t,request=>{
+    if(new URL(request.url).pathname==='/eval')return 'file:///C:/Documents/Bound.docx';
+    if(request.body.action==='inspect')return {fields:[],refresh:{status:'unknown'}};
+    writes++;
+    if(failure==='transport')throw new Error('timeout after insertion');
+    return {error:{code:'zotero-refresh-pending',message:'inspect before retrying'}};
+  });
+  const f=register(t,config({autoHide:false}));
+  await assert.rejects(f.call('word_zotero_insert_bibliography'),/timeout after insertion/);
+  assert.equal(writes,1);
+  assert.deepEqual(await f.call('word_zotero_inspect'),{fields:[],refresh:{status:'unknown'}});
+  failure='helper';
+  await assert.rejects(f.call('word_zotero_set_style',{style_id:'fixture-style'}),/zotero-refresh-pending.*inspect before retrying/);
+  assert.equal(writes,2);
+  assert.equal(requests.length,6);
+});
+
+test('Zotero URL lookup failure prevents helper writes and cancellation prevents document access',async t=>{
+  const requests=transport(t,()=>{throw new Error('taskpane unavailable');});
+  const f=register(t,config({autoHide:false}));
+  await assert.rejects(f.call('word_zotero_refresh'),/taskpane unavailable/);
+  assert.equal(requests.length,1);assert.equal(new URL(requests[0].url).pathname,'/eval');
+  const controller=new AbortController();controller.abort(new Error('cancelled'));
+  await assert.rejects(f.call('word_zotero_inspect',{},controller.signal),/cancelled/);
+  assert.equal(requests.length,1);
+});
+
+test('Zotero and existing Word tools share the selection queue',async t=>{
+  let entered,release;
+  const ready=new Promise(resolve=>{entered=resolve;});const wait=new Promise(resolve=>{release=resolve;});
+  const requests=transport(t,async request=>{
+    if(new URL(request.url).pathname==='/word/zotero'){entered();await wait;return {fields:[]};}
+    return 'file:///C:/Documents/Bound.docx';
+  });
+  const f=register(t,config({autoHide:false}));
+  const first=f.call('word_zotero_refresh');await ready;
+  const second=f.call('word_verify_doc');assert.equal(requests.length,2);
+  release();await first;await second;assert.equal(requests.length,3);
+});
