@@ -1,98 +1,77 @@
-# dsh-powerpoint：当前 PowerPoint 文档原生工具
+# PowerPoint 原生工具
 
-`dsh-powerpoint` 通过 PowerPoint 加载项操作当前打开的演示文稿，提供 21 个 `powerpoint_*` 原生工具和 `powerpoint` skill。模型按需发现并直接调用具名工具，不需要预先加载全部工具说明；通用分派仅保留在插件内部。
+[powerpoint.mjs](<powerpoint.mjs>) 提供 PowerPoint 文稿读写、OOXML 编辑、图表和页面检查工具，并内置英文 powerpoint skill。
 
-## 接入与打包
+使用前提：Windows 上运行 Office helper，并在目标文稿中打开 PowerPoint Helper 加载项。
 
-插件源文件为 [powerpoint.mjs](powerpoint.mjs)。在机器私有配置中声明以下本地插件；`modulePath` 替换为目标 Harness home 下的路径：
+## 接入
 
-```yaml
-localPlugins:
-  - id: powerpoint
-    module: powerpoint.mjs
-    modulePath: /path/to/harness-home/plugins/powerpoint.mjs
-    config:
-      backend: helper
-      helperUrl: http://127.0.0.1:18766
-      renderBackend: officejs
-      autoHide: true
-```
+通过 [localPlugins 安装流程](<../docs/install.md#本地-esm-插件>) 部署 powerpoint.mjs。需要独立 tarball 时，运行 [pack-powerpoint.mjs](<../scripts/pack-powerpoint.mjs>)，按包内 README 安装。
 
-Windows helper 使用 `transport: addin` 时，由自有加载项主动建立 WebSocket 连接，不需要 Claude 登录、Claude 侧栏或 CDP。helper 的 `transport: cdp` 路径仍可用于连接调试侧栏。加载项必须加载完整客户端 runtime；工具执行仍由该 runtime 完成。
+使用自有加载项时，将插件项 config 的 backend 设为 helper，helperUrl 指向 DSH 能访问的 Windows helper 地址。机器专用地址保存在私有参数中。配置字段与默认值以 [Config](<powerpoint.mjs>) 为准：
 
-使用 `node scripts/dsh-config.mjs update --machine <机器名>` 预览同步，只有用户授权后才加 `--apply`。同步不负责启停 Host；运行中的 Host 未热加载插件时，由用户决定何时重启。
+| 配置 | 用途 |
+|---|---|
+| backend | helper 使用 Windows helper；cdp 直连调试侧栏 |
+| helperUrl | helper 的 HTTP 入口，可使用 loopback 或 SSH 转发 |
+| helperToken | 非空时发送 Authorization: Bearer 请求头；当前 helper 不校验此头，只有前置代理实现校验时才提供 token 访问控制 |
+| endpoint / targetUrl | 直连 CDP 的入口与页面匹配前缀，必须唯一匹配 |
+| timeoutMs | 工具请求超时 |
+| autoHide | 每个任务窗格首次文档操作前自动隐藏；显式显示后保持显示 |
+| renderBackend | officejs 从所选文稿渲染；com 使用活动文稿 |
+| renderWidth / renderHeight | 渲染尺寸；Office.js 按宽度保持比例，COM 使用两项尺寸 |
+| powershell | 本机 CDP 后端使用的 PowerShell |
 
-`node scripts/pack-powerpoint.mjs` 使用 pnpm 打包，产物为 `generated/powerpoint-package/dsh-powerpoint-0.1.0.tgz`。本机接入使用上述 `localPlugins`，目标插件文件为 `/path/to/harness-home/plugins/powerpoint.mjs`。
+helper 的部署与接口见 ops 仓库的 Office Helper 文档。`backend: cdp` 是早期直连 Claude 调试侧栏的方式，新部署使用 helper。
 
 ## 操作流程
 
-1. 加载英文 `powerpoint` 操作手册，读取 `powerpoint_deck_info` 和所需页面信息。手册覆盖 Office.js 与 OOXML 的编辑流程、段落与主题继承、表格、图表、备注、母版和视觉检查；演示文稿与回复沿用用户的语言。
-2. 按需发现目标工具并读取完整 schema；使用当前文档返回的页 ID、形状 ID 和版式信息。
-3. 普通操作优先使用 Office.js。图表、备注或属性等 Office.js 覆盖不足的操作，使用对应客户端 OOXML 工具。
-4. 修改后读回结果，再用 `powerpoint_render_slide` 渲染受影响页面并检查视觉效果。
+1. 加载 powerpoint skill，按请求确定要读取、修改或检查的页面。
+2. 只连了一个文稿时直接操作。连了多个时，先用 powerpoint_list_presentations 查看，再用 powerpoint_select_presentation 选定；选择按 DSH 会话记住。选定的文稿关闭后工具会报错，不会换到别的文稿。
+3. 读取 powerpoint_deck_info 和所需页面信息。页与形状引用使用工具返回的当前值；写回替换页面后使用返回的新页 ID。
+4. 按需编辑；修改后读回，再用 powerpoint_render_slide 检查受影响页面。
 
-PowerPoint 持有真实文档状态，不以模型记忆或预先生成的结构替代读回。同一插件实例内的文档操作排队执行；超时或异常不会自动重试，因为修改可能已部分完成，应先读取现状。
+工具参数以运行时 schema 为准。
 
-## 21 个原生工具
+## 文稿与页面工具
 
-### 客户端工具（16 个）
-
-原始客户端 Zod schema 负责完整参数校验、默认值及预处理；主插件投影出的原生 schema 只负责工具发现和初步校验。它保留字段、必填项、枚举和图表分支，将互斥 number/null 的 anyOf 改为 oneOf；长度、数值范围、正则等约束继续由客户端校验。投影随插件固化，不在每次调用时下载或解析源 bundle。具体参数以按需获取的工具 schema 为准。
-
-| 工具 | 用途与范围 |
+| 工具 | 用途与重要限制 |
 |---|---|
-| `powerpoint_list_slide_shapes` | 读取形状引用、名称、类型和几何信息；正文用 `powerpoint_read_slide_text` 读取 |
-| `powerpoint_create_slide_chart` | 创建图表 |
-| `powerpoint_read_chart_style` | 读取图表样式 |
-| `powerpoint_edit_built_chart` | 修改已构建图表 |
-| `powerpoint_edit_slide_chart` | 修改页面图表的 OOXML |
-| `powerpoint_edit_slide_master` | 编辑首张页所属母版；只迁移该母版关联页，保留其他母版 |
-| `powerpoint_edit_slide_xml` | 读取或修改单页 OOXML；显式标记修改后才替换页面 |
-| `powerpoint_duplicate_slide` | 复制页面 |
-| `powerpoint_verify_slides` | 检查页面几何布局，提供启发式提示 |
-| `powerpoint_read_slide_text` | 读取页面文本及段落结构 |
-| `powerpoint_edit_slide_text` | 编辑页面文本及段落 |
-| `powerpoint_find_and_replace` | 查找替换，包括工具支持的备注范围 |
-| `powerpoint_search_icons` | 通过 helper 同源代理搜索公开图标服务 |
-| `powerpoint_insert_icon` | 插入公开图标服务提供的图标 |
-| `powerpoint_copy_image_between_slides` | 跨页复制图片 |
-| `powerpoint_execute_office_js` | 执行可信异步 Office.js 代码 |
+| powerpoint_list_presentations | 列出已连接文稿和当前选择；仅 helper 后端支持 |
+| powerpoint_select_presentation | 选择后续操作的文稿；仅 helper 后端支持 |
+| powerpoint_deck_info | 读取页面、尺寸、母版和版式信息 |
+| powerpoint_slide_outline | 读取文稿或单页的形状摘要 |
+| powerpoint_list_slide_shapes | 读取形状引用和几何信息 |
+| powerpoint_read_slide_text | 读取形状的文本及段落格式 |
+| powerpoint_edit_slide_text | 修改形状内的段落 |
+| powerpoint_find_and_replace | 批量替换文字，覆盖支持的备注范围 |
+| powerpoint_duplicate_slide | 复制页面 |
+| powerpoint_edit_slide_xml | 读取或修改单页 OOXML；调用 markDirty 后才替换页面 |
+| powerpoint_edit_slide_master | 编辑首张页所属母版，只迁移该母版关联页，保留其他母版 |
+| powerpoint_copy_image_between_slides | 跨页复制图片及其媒体关系 |
+| powerpoint_insert_image | 插入 DSH 机器上的图片或图片字节 |
+| powerpoint_execute_office_js | 执行可信异步 Office.js 代码 |
+| powerpoint_verify_slides | 检查布局、边界与文字对比度；仍需结合渲染检查 |
+| powerpoint_render_slide | 渲染页面并返回图片 |
+| powerpoint_pane_visibility | 显示或隐藏任务窗格，保留运行时 |
 
-### 独立本机工具（5 个）
+## 图表与图标工具
 
-| 工具 | 用途与范围 |
+| 工具 | 用途与重要限制 |
 |---|---|
-| `powerpoint_deck_info` | 读取页数、尺寸、页 ID、母版及版式信息 |
-| `powerpoint_slide_outline` | 读取全稿或单页形状摘要；每个形状文本截取前 200 字符 |
-| `powerpoint_insert_image` | 从 DSH 机器路径或裸 base64 插图；坐标单位为 pt |
-| `powerpoint_render_slide` | 渲染当前文档页面，返回图片附件 |
-| `powerpoint_pane_visibility` | 隐藏或显示加载项侧栏，保留隐藏侧栏的运行时 |
+| powerpoint_create_slide_chart | 创建原生可编辑图表 |
+| powerpoint_read_chart_style | 读取已有图表的样式 |
+| powerpoint_edit_built_chart | 替换模板支持的图表内容，保留图表对象 |
+| powerpoint_edit_slide_chart | 修改图表 OOXML |
+| powerpoint_search_icons | 搜索公开图标服务，需要网络 |
+| powerpoint_insert_icon | 插入搜索结果中的矢量图标 |
 
-## 配置
+图表模板生成 chart XML 和数据缓存，不自动生成内嵌 XLSX。修改已有内嵌工作簿时仍受 workbook 验证器约束。
 
-| 字段 | 说明 |
-|---|---|
-| `backend` | `cdp`（默认）直连 CDP；`helper` 将文档操作发给 Windows helper |
-| `endpoint` | CDP HTTP(S) 地址；默认 `http://127.0.0.1:9224`，可经端口转发连接 |
-| `helperUrl` | helper 地址；默认 `http://127.0.0.1:18766` |
-| `helperToken` | 非空时发送 Bearer 鉴权；默认空，可由 SSH 隧道提供访问控制 |
-| `targetUrl` | CDP 页面 URL 匹配前缀；需要唯一匹配，零个或多个匹配均报错 |
-| `timeoutMs` | 工具和请求超时，默认 90000 毫秒 |
-| `autoHide` | 首次文档调用自动隐藏侧栏，默认 `true` |
-| `powershell` | 本机 CDP 后端使用的 PowerShell，默认 `powershell.exe` |
-| `renderBackend` | 默认 `officejs`；备用 COM 必须显式配置为 `com` |
-| `renderWidth` / `renderHeight` | 默认 1280 × 720；Office.js 按宽度保持页面比例，COM 使用两项尺寸 |
+## 写入与渲染
 
-默认渲染调用当前加载项绑定文档的 `getImageAsBase64`，不依赖 COM。备用 COM 由本机 PowerShell或 Windows helper 执行，要求预期文档处于活动状态；导出前比对 `ActivePresentation` 页数，不一致时报 `presentation-mismatch`。页数相同本身不足以证明文档身份，使用者仍应确认活动文档。
+超时、断线或失败后先读回文稿：修改可能已经生效，工具不会自动重试。powerpoint_execute_office_js 运行的是可信代码，能访问 Office 宿主的全部能力。
 
-显式显示侧栏后，本插件实例不再自动隐藏；实例重新加载后重新进行首次自动隐藏。自有加载项的 long shared runtime 可按文档设置 `startupLoad`，不能据此保证全新文档静默自动启动。关闭调试侧栏可能销毁其运行时；隐藏与关闭不同。
+默认用 Office.js 渲染所选文稿。`renderBackend: com` 渲染的是 PowerPoint 当前激活的文稿：页数不一致时会报 presentation-mismatch，但页数相同并不代表是同一份文稿，渲染前要确认目标文稿处于激活状态。
 
-## 使用边界
-
-- `powerpoint_edit_slide_xml` 只读且不调用 `markDirty()` 时不替换页面。修改写回返回的 `slide_id_update` 是后续操作必须采用的新页 ID；写回失败或超时后先重新读取文档。
-- `powerpoint_edit_slide_master` 仅针对首张页所属母版，不接受“任意母版编辑”的能力假设；只迁移该母版关联页，并保留其他母版。
-- `powerpoint_execute_office_js` 以可信 `AsyncFunction` 执行代码，不提供 SES 沙箱、Claude blobs、Conductor 或模型 reviewer。仅允许可信 agent 使用，不向公网直接开放文档控制端口。
-- 图表模板生成的是 chart XML 和缓存，不自动生成 XLSX。已有内嵌工作簿的修改仍受客户端 workbook 验证器约束。
-- 图标依赖 helper 同源代理和公开服务网络连接，不是离线图标库。
-- `powerpoint_insert_image` 的 `filePath` 指 DSH 机器路径，不是 Windows helper 路径；也可使用裸 base64。省略高度时保持图片比例。
-- `powerpoint_verify_slides` 是几何启发式检查，不提供模型视觉审阅；某些有意布局也可能触发提示，零告警不能证明没有遮挡、文字溢出或其他视觉问题。必须结合真实渲染检查。
+隐藏任务窗格与关闭不同：隐藏保留运行时，关闭调试侧栏可能销毁运行时。

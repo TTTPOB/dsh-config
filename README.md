@@ -1,6 +1,6 @@
-# DSH 双机配置与维护
+# DSH 多机配置与维护
 
-用共用模板和选定依赖管理两台机器；各机保存自己的 MCP、模型、认证引用和专属插件。本仓库提供配置渲染、静态比对、依赖预览、只读诊断、隔离测试及显式更新入口。
+用共用模板和选定依赖管理多台机器；各机保存自己的 MCP、模型、认证引用和专属插件。本仓库提供配置渲染、静态比对、依赖预览、只读诊断、隔离测试及显式更新入口。
 
 ## 从这里开始
 
@@ -25,7 +25,7 @@ node scripts/dsh-config.mjs update --machine workstation
 - [正式安装与更新](docs/install.md)：机器参数、目标来源、doctor、显式 apply、精确豁免和维护切换。Doctor/update 默认突出变化与问题，`--verbose` 展开完整明细，`--json` 独立切换输出格式。
 - [隔离成品测试](docs/testing.md)：源码聚焦验证、本地 tarball 测试副本及已有 smoke。
 - [上游升级手册](<docs/upstream-upgrade.md>)：基线盘点、fork 文件、验证与 Actions 发布顺序、授权边界和已知阻塞。
-- [0.2.2-rc.1 组合验收](<docs/upgrade-0.2.2-rc.1.md>)：当前正式成品组合、已执行验证与剩余待办；旧记录从 Git 历史查阅。
+- [0.2.2-rc.1 组合验收](<docs/upgrade-0.2.2-rc.1.md>)：该次验收的成品组合、已执行验证与未覆盖项；旧记录从 Git 历史查阅。
 
 ## 配置与依赖归属
 
@@ -48,7 +48,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 ### 本地 JS 插件
 
-[共用默认配置](<shared/defaults.yaml>)和机器参数的 `localPlugins` 将仓库内小型 ESM 模块纳入 render/check 和 update 文件计划；显式 apply 与配置 patch 一同备份、写入和回滚，不增加 npm 依赖。见[安装声明](<docs/install.md#本地-esm-插件>)、[中性示例](<examples/local-plugins-machine.yaml>)和[思源上传／双端同步工具](<plugins/siyuan-tools.md>)。源码不包含机器端点或凭据，认证继续引用目标机器已有 headers JSON。
+[共用默认配置](<shared/defaults.yaml>)和机器参数的 `localPlugins` 将仓库内小型 ESM 模块纳入 render/check 和 update 文件计划；显式 apply 与配置 patch 一同备份、写入和回滚，不增加 npm 依赖。见[安装声明](<docs/install.md#本地-esm-插件>)、[中性示例](<examples/local-plugins-machine.yaml>)和[本机插件目录](<plugins/README.md>)。源码不包含机器端点或凭据，认证继续引用目标机器已有 headers JSON。
 
 0.2.2-rc.1 使用 scoped progressive executor：Host 挂载一次 discovery 与 Native executor，每个自定义 PTC preset 挂载 `dsh-progressive-tools/ptc` 并禁用上游 executor；PTC 配置保留并行限制及 `context_compress`／`mcp_probe` 原生例外。共用有序 toolDisclosureRules 让普通工具 eager、mcp__* 和 siyuan_* deferred。版本和缺来源原因由[依赖清单](<shared/dependencies.yaml>)选定。
 

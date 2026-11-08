@@ -1,4 +1,4 @@
-# 两机正式安装与更新
+# 多机正式安装与更新
 
 本指南管理个人 DSH 的安装、配置应用与维护切换。源码开发和成品验收见[隔离测试](testing.md)。在每台目标机器上执行命令；`--machine` 选择私有参数，不会连接远程服务器。
 
@@ -12,7 +12,7 @@ pnpm render --machine workstation
 pnpm check --machine workstation
 ```
 
-另一台机器使用自己的 `--machine server` 参数。通过私有通道保存各机 `private/machines/<name>/machine.yaml`；保留各机 MCP、relay、模型、认证引用、浏览器路径和专属插件。服务器不因共用配置更新而增加工作机的逆向 preset、session-tools 或 mobile。不要同步 credentials、sessions、storages、数据库或附件。
+服务器使用 `--machine server`，NAS 使用 `--machine nas`。通过私有通道保存各机 `private/machines/<name>/machine.yaml`；保留各机 MCP、relay、模型、认证引用、浏览器路径和专属插件。服务器不因共用配置更新而增加工作机的逆向 preset、session-tools 或 mobile。不要同步 credentials、sessions、storages、数据库或附件。
 
 当前配置目标为 DSH `0.2.2-rc.1`，组合和验收结果见[当前组合验收](<upgrade-0.2.2-rc.1.md>)。目标版本和来源由[依赖清单](<../shared/dependencies.yaml>)选定，按包名、包版本和实际资产 URL 核对。Release tag 里的 fork 号是发布批次编号，与包版本里的 fork 号无关：
 
@@ -30,14 +30,18 @@ pnpm check --machine workstation
 
 ### 本地 ESM 插件
 
-小型无 npm 依赖的模块可通过机器参数 localPlugins 声明，完整示例见[本地插件示例](<../examples/local-plugins-machine.yaml>)；思源三工具及凭据格式见[思源工具](<../plugins/siyuan-tools.md>)。
+小型无 npm 依赖的模块通过 `localPlugins` 纳入 render/check/update。完整示例见[本地插件示例](<../examples/local-plugins-machine.yaml>)；各插件用法见[插件目录](<../plugins/README.md>)。
 
-每项只接受 id、module、modulePath、config：
+共用声明写在 [shared/defaults.yaml](<../shared/defaults.yaml>)，每项接受 `id`、`module`、`config`，目标固定为 DSH home 下的 `plugins/<module>`。机器参数中的同 id 声明整项替换共用项，包括模块、路径和完整 config；同一共用模块不能用另一个 id 再部署一份。
+
+机器级声明接受 `id`、`module`、`modulePath`、`config`：
 
 - id 是 home patch 顶层唯一行 ID；自动生成 insert 行，不要在其他 patch 中重复声明。
 - module 是仓库 plugins 目录内已存在的 .mjs 文件名，例如 siyuan-tools.mjs；未知、缺失或包含目录穿越的模块报错。
 - modulePath 是执行目标上的绝对 .mjs 文件路径，同时写入 Loader 行的 name；不会隐式展开环境变量或波浪号。
-- config 是完整的字面对象，原样传给插件，不做深合并或 !!js 求值。省略 localPlugins 等同于空数组。
+- config 是完整的字面对象，原样传给插件，不做深合并或 !!js 求值。省略机器级 localPlugins 表示不增加机器专属项。
+
+live update/apply 使用解析后的目标 home。render/check 和 `update --offline` 使用机器声明的字面绝对 `deployment.home`；省略时，仅从已有本地插件统一的 `home/plugins` 目录推导。路径缺失或有歧义则报错。省略 `deployment.home` 时，live 解析的 home 若与现有模块目录不一致会阻塞，须明确声明目标 home。公开示例使用中性绝对路径。
 
 render 将源文件复制到生成目录的 plugins/<id>.mjs，patch 中仍引用最终 modulePath；check 只在内存中验证与规划，不导入模块、不读取凭据。live update preview 按字节比较源码目标，并在 files 中报告 kind: local-plugin；offline 只列 source → path 计划（planned: true），不读取真实目标。预览不会创建模块目标或目标父目录。
 
@@ -177,7 +181,7 @@ Apply 在 stderr 即时报告 pre-install doctor、global install、profile inst
 
 由用户按原方式启动原 Host，核对最终组合及受影响功能。`--dump-config` 可能展开凭据，应私下检查，避免把完整输出发布到日志或对话。UI 包更新还需核对原 Host 发布的 graph、实际服务脚本和认证页面加载，再在目标浏览器／手机验收。另起测试服务器、磁盘版本或最新 manifest 都不能证明日用页面已应用新版。
 
-两机可以分开维护；先验证本机，再让服务器选择同一稳定提交和它自己的参数。远端执行 update 直接消费 Release URL，不通过 SCP tarball 维持长期依赖。只停止目标 DSH 服务，避免 `pkill node` 影响其他用户服务。
+各机分别维护，选择已验证的稳定提交和自己的参数。远端执行 update 直接消费 Release URL，不通过 SCP tarball 维持长期依赖。只停止目标 DSH 服务，避免 `pkill node` 影响其他用户服务。
 
 ### 用临时 systemd 任务无人值守切换
 

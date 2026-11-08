@@ -1,31 +1,20 @@
 # 本机 JS 模块
 
-仓库模块可以通过 localPlugins 纳入配置部署文件计划，见[安装指南](<../docs/install.md#本地-esm-插件>)。思源工具配置与行为见[上传和双端同步](<siyuan-tools.md>)。
+仓库模块可以通过 localPlugins 纳入配置部署文件计划，见[安装指南](<../docs/install.md#本地-esm-插件>)。
+
+- [思源上传和双端同步](<siyuan-tools.md>)
+- [Word 与 Zotero 原生工具](<word.md>)
+- [PowerPoint 原生工具](<powerpoint.md>)
+
+Office 插件可沿本仓库的 `localPlugins` 流程部署，也可用 `scripts/pack-word.mjs` 或 `scripts/pack-powerpoint.mjs` 生成独立 tarball。包内 README 说明独立安装步骤；两种方式选一种。
 
 ## 运行时工具指引
 
 [runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`output`、`background`、`child`。工具 schema 和运行时权限仍决定实际可调用能力。
 
-### 一处共用声明
+### 部署
 
-[共用默认配置](<../shared/defaults.yaml>) 已声明此模块，无需在各机私有输入重复添加：
-
-```yaml
-localPlugins:
-  - id: runtime-tooling-guidance
-    module: runtime-tooling-guidance.mjs
-    config: {}
-```
-
-共用数组只接受 `id`、`module`、`config`，目标固定为 DSH home 下的 `plugins/<module>`。机器级 `localPlugins` 保留原有绝对 `modulePath` 接口；不接受 `!!js`、相对路径或待求值的表达式。机器与共用项同 id 时，机器声明**整项替换**，包括模块、路径和整个 config，不深合并；同一共用模块不能用另一个 id 再部署一份。
-
-路径规则：
-
-1. live update/apply 使用 `normalizeDeployment` 已解析的目标 home。
-2. render/check 和 `update --offline` 使用机器声明的字面绝对 `deployment.home`；省略时，仅从已有本地插件统一的 `home/plugins` 目录推导。路径缺失或有歧义则报错；不查询 pnpm、真实安装或检查者的 HOME，不展开环境变量或 `~`。
-3. 省略 `deployment.home` 时，live 解析的 home 若与现有模块目录不一致会阻塞，须明确声明目标 home。这样不会将另一机器的离线检查路径误当本机部署位置。公开示例使用中性绝对路径。
-
-模块只在 home 激活一次，源码沿现有文件计划暂存、预览、备份和部署。Git 同步后，在各目标机器运行原有显式 apply 流程即可更新；模块重新加载和 Host 激活仍属于既有维护流程。
+共用声明、机器覆盖和路径规则见[本地 ESM 插件](<../docs/install.md#本地-esm-插件>)。
 
 ### 本地验证
 
@@ -39,7 +28,7 @@ server、nas 使用各自机器名；check 和离线预览只消费本地输入�
 
 ## Provider 路由提示词
 
-[provider-prompt.mjs](<provider-prompt.mjs>) 使用现有 `localPlugins` 声明部署：每机只添加一项 `id: provider-prompt`、`module: provider-prompt.mjs`、`modulePath: /path/to/harness-home/plugins/provider-prompt.mjs`，`config.rules` 写在该项内。完整示例见[本地插件参数](<../examples/local-plugins-machine.yaml>)。每机的 `modulePath` 沿已有本地插件目录设置；不需要包依赖、公开仓库或 Release，也没有共享配置的隐式合并或 fallback。
+[provider-prompt.mjs](<provider-prompt.mjs>) 的 `config.rules` 写在对应插件项内。部署规则见[安装指南](<../docs/install.md#本地-esm-插件>)，声明见[本地插件示例](<../examples/local-plugins-machine.yaml>)。
 
 插件在 home 只挂载一次，不重复放进 preset 或 Web patch。规则为 `{ providers: string[], models?: string[], text: string }`：provider 精确匹配，省略 models 适用于该 provider 的所有模型；提供 models 时必须是非空精确模型列表；text 不插值。当前声明仅 `providers: [klaude-cl]`，省略 models；其他路由不输出。`config: { rules: [] }` 禁用。
 
@@ -61,7 +50,7 @@ server、nas 使用各自的机器名；这些命令只检查本地输入，不�
 
 默认指引只有两条规则：多行或含引号、反斜杠、反引号的文本使用原始文本字面量；shell 脚本通过带引号的 stdin heredoc 或先写文件传入，不能在 ssh／python -c 中嵌套脚本。三个 Wrong／Right 示例分别覆盖 write、edit 和远程 Python，Markdown 围栏示例展示四反引号分隔符。原始文本以 `@` 加 N≥2 个反引号开头，以最大连续长度恰为 N 的反引号结束；内容不转义、不插值，开头紧随的一次换行被移除。必须先发布并安装 lexer-aware Node PTC 运行时，再部署本指引和下述提醒插件。
 
-通过机器参数的 `localPlugins` 在 home 层挂载一次，已有和后续 Agent 按各自组装结果判断。声明示例见[本地插件参数](../examples/local-plugins-machine.yaml)：`id: ptc-string-guidance`、`module: ptc-string-guidance.mjs`、`modulePath: /path/to/harness-home/plugins/ptc-string-guidance.mjs`、`config: {}`。可通过 `config.text` 整体替换默认指引；不接受空白文本或未知配置键。
+部署见[安装指南](<../docs/install.md#本地-esm-插件>)，声明见[本地插件示例](<../examples/local-plugins-machine.yaml>)。已有和后续 Agent 按各自组装结果判断。可通过 `config.text` 整体替换默认指引；不接受空白文本或未知配置键。
 
 每个 TypeScript PTC 请求增加固定指引文本；相同配置下内容稳定，不逐轮累积。指引是提示词约定，不是语法校验器。
 
