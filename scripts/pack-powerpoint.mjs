@@ -31,7 +31,6 @@ profile 的 pnpm workspace 需要设置 autoInstallPeers: false，让插件与 H
 ~~~yaml
 - id: powerpoint
   config:
-    backend: helper
     helperUrl: http://127.0.0.1:<helper-port>
 ~~~
 

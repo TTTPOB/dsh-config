@@ -44,7 +44,7 @@ writeFileSync(join(directory, 'README.md'), readme);
 
 writeFileSync(join(directory, 'package.json'), JSON.stringify({
   name: 'dsh-word', version, type: 'module', main: 'word.mjs',
-  description: 'Native DSH Word client tools with an embedded English skill provider',
+  description: 'Dynamic DSH Word tools and a helper-provided skill',
   engines: { node: '>=24' },
   files: ['word.mjs', 'README.md', 'cordis.patch.yml'],
   dsh: { bundle: { patch: './cordis.patch.yml' } },

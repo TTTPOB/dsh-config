@@ -1,6 +1,6 @@
 # Word 原生工具
 
-[word.mjs](<word.mjs>) 提供读写 Word 文档、页面检查和 Zotero 原生引文工具，并内置英文 word skill。
+[word.mjs](<word.mjs>) 提供读写 Word 文档、页面检查和 Zotero 原生引文工具，并从 helper 目录加载英文 word skill；公开模块不内嵌技能正文。
 
 使用前提：Windows 上运行 Office helper，并在目标文档中打开 Word Helper 加载项。
 
@@ -8,7 +8,7 @@
 
 通过 [localPlugins 安装流程](<../docs/install.md#本地-esm-插件>) 部署 word.mjs。需要独立 tarball 时，运行 [pack-word.mjs](<../scripts/pack-word.mjs>)，按包内 README 安装。
 
-插件项的 config 设置 helperUrl，指向 DSH 能访问的 Windows helper 地址；机器专用地址保存在私有参数中。配置字段与默认值以 [Config](<word.mjs#L7>) 为准：
+插件项的 config 设置 helperUrl，指向 DSH 能访问的 Windows helper 地址；机器专用地址保存在私有参数中。配置字段与默认值以 [Config 源码](<../plugins-src/word/src/config.ts>) 为准；源码和 skill 的编辑、构建及检查见[开发说明](<../plugins-src/README.md>)：
 
 | 配置 | 用途 |
 |---|---|
@@ -27,7 +27,7 @@ helper 的部署与接口见 ops 仓库的 Office Helper 文档。页面在 Wind
 3. 用 word_search_doc_text 定位，再用 word_read_doc_section 读取目标段落或章节。大文档优先按范围读取，避免一次枚举全文。
 4. 修改最小必要范围，读回文字与格式；排版变化用 word_render_page 查看。
 
-工具参数以运行时 schema 为准。
+工具参数以 helper `/catalog` 提供的运行时 schema 为准。目录尚未获取时仅自有工具可用、word skill 暂不列出；离线后保留上次成功获取的工具与 skill。发现、重试与刷新配置见[源码说明](<../plugins-src/README.md#helper-目录与生命周期>)。
 
 ## 文档工具
 

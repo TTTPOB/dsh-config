@@ -48,7 +48,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 ### 本地 JS 插件
 
-[共用默认配置](<shared/defaults.yaml>)和机器参数的 `localPlugins` 将仓库内小型 ESM 模块纳入 render/check 和 update 文件计划；显式 apply 与配置 patch 一同备份、写入和回滚，不增加 npm 依赖。见[安装声明](<docs/install.md#本地-esm-插件>)、[中性示例](<examples/local-plugins-machine.yaml>)和[本机插件目录](<plugins/README.md>)。源码不包含机器端点或凭据，认证继续引用目标机器已有 headers JSON。
+[共用默认配置](<shared/defaults.yaml>)和机器参数的 `localPlugins` 将仓库内小型 ESM 模块纳入 render/check 和 update 文件计划；显式 apply 与配置 patch 一同备份、写入和回滚，不增加 npm 依赖。见[安装声明](<docs/install.md#本地-esm-插件>)、[中性示例](<examples/local-plugins-machine.yaml>)和[本机插件目录](<plugins/README.md>)。源码不包含机器端点或凭据，认证继续引用目标机器已有 headers JSON。Word 与 PowerPoint 的 TypeScript 与 Markdown 源码、构建和产物检查见[本地插件源码](<plugins-src/README.md>)。
 
 0.2.2-rc.1 使用 scoped progressive executor：Host 挂载一次 discovery 与 Native executor，每个自定义 PTC preset 挂载 `dsh-progressive-tools/ptc` 并禁用上游 executor；PTC 配置保留并行限制及 `context_compress`／`mcp_probe` 原生例外。共用有序 toolDisclosureRules 让普通工具 eager、mcp__* 和 siyuan_* deferred。版本和缺来源原因由[依赖清单](<shared/dependencies.yaml>)选定。
 

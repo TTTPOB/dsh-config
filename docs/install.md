@@ -43,7 +43,7 @@ pnpm check --machine workstation
 
 live update/apply 使用解析后的目标 home。render/check 和 `update --offline` 使用机器声明的字面绝对 `deployment.home`；省略时，仅从已有本地插件统一的 `home/plugins` 目录推导。路径缺失或有歧义则报错。省略 `deployment.home` 时，live 解析的 home 若与现有模块目录不一致会阻塞，须明确声明目标 home。公开示例使用中性绝对路径。
 
-render 将源文件复制到生成目录的 plugins/<id>.mjs，patch 中仍引用最终 modulePath；check 只在内存中验证与规划，不导入模块、不读取凭据。live update preview 按字节比较源码目标，并在 files 中报告 kind: local-plugin；offline 只列 source → path 计划（planned: true），不读取真实目标。预览不会创建模块目标或目标父目录。
+Word 的部署源是已提交的 [word.mjs](<../plugins/word.mjs>)；改动 TypeScript 或 skill 后先按[源码说明](<../plugins-src/README.md>)构建并检查。render 不编译源码，将模块复制到生成目录的 plugins/<id>.mjs，patch 中仍引用最终 modulePath；check 只在内存中验证与规划，不导入模块、不读取凭据。live update preview 按字节比较源码目标，并在 files 中报告 kind: local-plugin；offline 只列 source → path 计划（planned: true），不读取真实目标。预览不会创建模块目标或目标父目录。
 
 显式 apply 将模块与现有 patch 一同纳入文件备份：先写源文件，再写引用它的 patch；模块单独变化也会应用，无需重复安装 npm 包。rollback 恢复原源码，若原文件不存在则删除本次新增文件。删除声明只撤销生成的插件行，不自动删除旧源码文件。凭据文件、用户数据和安装目录中的其他文件不在模块同步范围。
 

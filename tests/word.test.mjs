@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { catalog, definitions, settled } from './office-catalog-fixtures.mjs';
 import * as Plugin from '../plugins/word.mjs';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+async function binaryFixture(t, bytes=Buffer.from([0,255,34,128,10,92])) {
+  const directory=await mkdtemp(join(tmpdir(),'word-binary-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  const filePath=join(directory,'input.bin');
+  await writeFile(filePath,bytes);
+  return {directory,filePath,bytes};
+}
 
 function config(input={}) {
   const result=Plugin.Config['~standard'].validate(input);assert.equal(result.issues,undefined);return result.value;
@@ -10,12 +22,14 @@ function register(t, settings, attachments={}) {
   Plugin.apply({tools:{register(tool){tools.set(tool.name,tool);return()=>tools.delete(tool.name);}},
     skills:{registerProvider(create){const provider=create();providers.set(provider.name,provider);return()=>providers.delete(provider.name);}},
     attachments,effect(fn){effects.push(fn());}},settings);
+  const ready=settled();
   const dispose=()=>effects.splice(0).reverse().forEach(fn=>fn());t.after(dispose);
-  return {tools,providers,dispose,call:(name,args={},signal=new AbortController().signal,sessionId)=>tools.get(name).execute(args,{signal,...(sessionId === undefined ? {} : {agent:{session:{id:sessionId}}})})};
+  return {tools,providers,dispose,call:(name,args={},signal=new AbortController().signal,sessionId)=>ready.then(()=>tools.get(name).execute(args,{signal,...(sessionId === undefined ? {} : {agent:{session:{id:sessionId}}})}))};
 }
 function transport(t,respond) {
   const requests=[];
   t.mock.method(globalThis,'fetch',async(url,options)=>{
+    if (new URL(url).pathname === '/catalog') return new Response(JSON.stringify(catalog('Word')));
     const request={url:String(url),options,body:options.body===undefined?undefined:JSON.parse(options.body)};requests.push(request);
     const result=await respond(request);
     const payload=result?.error || new URL(url).pathname!=='/eval' ? result : {value:result};
@@ -36,7 +50,7 @@ test('client dispatch quotes user strings and preserves original handler result 
 test('native definitions forward their arguments and authentication without implicit retries',async t=>{
   const settings=config({helperUrl:'http://word.example.invalid:9999',helperToken:'test-only',autoHide:false});
   const requests=transport(t,request=>({code:request.body.code}));const f=register(t,settings);
-  for(const definition of Plugin.clientToolDefinitions){
+  for(const definition of definitions('Word')){
     const args={probe:definition.clientName};await f.call(definition.name,args);
     assert.equal(requests.at(-1).body.code,Plugin.clientCallExpression(definition.clientName,args));
   }
@@ -85,6 +99,57 @@ test('image insertion transports bytes and uses the requested Word range and dim
   const run=Function('Word','return '+Plugin.imageExpression('YWJj','selection',{width:100}));
   assert.deepEqual(await run(Word),{inserted:true,width:100,height:20});assert.equal(image.lockAspectRatio,true);
   assert.deepEqual(events,[{base64:'YWJj',location:'Replace'}]);
+});
+
+test('Office code receives binary files without changing logged path-only arguments',async t=>{
+  const fixture=await binaryFixture(t), empty=join(fixture.directory,'empty.bin');
+  await writeFile(empty,Buffer.alloc(0));
+  const code='return {image:files.image,template:files.模板,empty:files.$empty};';
+  const args=Object.freeze({code,files:Object.freeze({image:fixture.filePath,模板:fixture.filePath,$empty:empty})});
+  const before=JSON.stringify(args),captured=[];
+  transport(t,request=>Function('globalThis','return '+request.body.code)({WordClientRuntime:{call:async(name,input)=>{
+    captured.push({name,input});
+    return new (Object.getPrototypeOf(async function(){}).constructor)(input.code)();
+  }}}));
+  const f=register(t,config({autoHide:false}));
+  const result=await f.call('word_execute_office_js',args);
+  assert.deepEqual(result,{image:fixture.bytes.toString('base64'),template:fixture.bytes.toString('base64'),empty:''});
+  assert.equal(JSON.stringify(args),before);
+  assert.deepEqual(Object.keys(captured[0].input),['code']);
+  assert.equal(captured[0].name,'execute_office_js');
+  assert.ok(!JSON.stringify(args).includes(fixture.bytes.toString('base64')));
+  assert.deepEqual(await f.call('word_execute_office_js',{code:'return files;',files:{}}),{});
+});
+
+test('Office binary inputs reject invalid identifiers, relative paths and missing files before transport',async t=>{
+  const fixture=await binaryFixture(t);
+  const requests=transport(t,()=>null),f=register(t,config({autoHide:false}));
+  for(const key of ['bad-name','9image','image.path','']){
+    await assert.rejects(f.call('word_execute_office_js',{code:'return 1;',files:{[key]:fixture.filePath}}),/Invalid files identifier/);
+  }
+  for(const files of [null,[],42]) await assert.rejects(f.call('word_execute_office_js',{code:'return 1;',files}),/files must map/);
+  for(const path of ['relative.bin',42]) await assert.rejects(f.call('word_execute_office_js',{code:'return 1;',files:{image:path}}),/files.image must be an absolute/);
+  const missing=join(fixture.directory,'missing.bin');
+  await assert.rejects(f.call('word_execute_office_js',{code:'return 1;',files:{image:missing}}),error=>{
+    assert.match(error.message,/Cannot read files.image/);assert.ok(error.message.includes(missing));return true;
+  });
+  assert.equal(requests.length,0);
+});
+
+test('image tool reads local bytes, preserves arguments and rejects missing paths without transport',async t=>{
+  const fixture=await binaryFixture(t),events=[];
+  const image={width:20,height:30,load(){}};
+  const Word={run:fn=>fn({document:{getSelection:()=>({insertInlinePictureFromBase64(bytes,where){events.push({bytes,where});return image;}})},sync:async()=>{}})};
+  const requests=transport(t,request=>Function('Word','return '+request.body.code)(Word));
+  const f=register(t,config({autoHide:false}));
+  const args=Object.freeze({filePath:fixture.filePath,where:'selection',width:70});
+  assert.deepEqual(await f.call('word_insert_image',args),{inserted:true,width:args.width,height:30});
+  assert.deepEqual(events,[{bytes:fixture.bytes.toString('base64'),where:'Replace'}]);
+  const count=requests.length;
+  await assert.rejects(f.call('word_insert_image',{}),/filePath is required/);
+  await assert.rejects(f.call('word_insert_image',{base64:fixture.bytes.toString('base64')}),/filePath is required/);
+  await assert.rejects(f.call('word_insert_image',{filePath:join(fixture.directory,'missing.bin')}),/ENOENT/);
+  assert.equal(requests.length,count);
 });
 
 test('Zotero tools bind each action to the taskpane document and preserve item data and helper results',async t=>{
@@ -205,6 +270,7 @@ test('render auto-hide runs once per selected pane and does not override an expl
 function paneHelper(t, initialPanes) {
   const state={panes:initialPanes,requests:[],resolved:[],pageCount:3,png:Buffer.from([137,80,78,71,13,10,26,10,1,2,3])};
   t.mock.method(globalThis,'fetch',async(url,options)=>{
+    if (new URL(url).pathname === '/catalog') return new Response(JSON.stringify(catalog('Word')));
     const route=new URL(url),body=options.body === undefined ? undefined : JSON.parse(options.body);
     state.requests.push({route,body,options});
     const reply=(data,status=200)=>new Response(JSON.stringify(data),{status});
@@ -254,11 +320,12 @@ test('selected target reaches client handlers, encoded style lookup, images and 
   const pane=wordPane('pane /+?&','Bound document'),other=wordPane('other','Other document');
   const wire=paneHelper(t,[other,pane]),f=register(t,config({autoHide:false}));
   await f.call('word_select_document',{target:pane.sessionId});
-  for(const definition of Plugin.clientToolDefinitions) await f.call(definition.name,{probe:definition.clientName});
+  for(const definition of definitions('Word')) await f.call(definition.name,{probe:definition.clientName});
   await f.call('word_edit_doc_list',{action:'create_list',items:['item'],list_style:'bullet'});
   const styles=wire.requests.find(r=>r.route.pathname === '/word/list-styles');
   assert.equal(styles.options.method,'GET');assert.equal(styles.route.searchParams.get('target'),pane.sessionId);
-  await f.call('word_insert_image',{base64:'YWJj'});
+  const fixture=await binaryFixture(t);
+  await f.call('word_insert_image',{filePath:fixture.filePath});
   for(const action of ['inspect','refresh','set_style','insert_citation','insert_bibliography']){
     const result=await f.call('word_zotero_'+action,{style_id:'fixture',items:[]});
     assert.equal(result.document.url,pane.documentUrl);

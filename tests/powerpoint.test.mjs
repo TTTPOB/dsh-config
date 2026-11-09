@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { catalog, definitions, settled } from './office-catalog-fixtures.mjs';
 import * as Plugin from '../plugins/powerpoint.mjs';
 
 function config(input = {}) { const result = Plugin.Config['~standard'].validate(input); assert.ok(!result.issues); return result.value; }
@@ -12,50 +13,23 @@ function register(t, settings, attachments = {}) {
   Plugin.apply({tools:{register(tool){tools.set(tool.name,tool);return ()=>tools.delete(tool.name);}},
     skills:{registerProvider(create){const p=create();providers.set(p.name,p);return ()=>providers.delete(p.name);}},
     attachments,effect(fn){effects.push(fn());}},settings);
+  const ready=settled();
   const dispose=()=>effects.splice(0).reverse().forEach(fn=>fn()); t.after(dispose);
-  return {tools,providers,dispose,call:(name,args={},signal=new AbortController().signal,sessionId)=>tools.get(name).execute(args,{signal,...(sessionId === undefined ? {} : {agent:{session:{id:sessionId}}})})};
+  return {tools,providers,dispose,call:(name,args={},signal=new AbortController().signal,sessionId)=>ready.then(()=>tools.get(name).execute(args,{signal,...(sessionId === undefined ? {} : {agent:{session:{id:sessionId}}})}))};
 }
 function transport(t, respond) {
-  const sent=[], sockets=[];
-  t.mock.method(globalThis,'fetch',async()=>({ok:true,json:async()=>[
-    {type:'page',url:'https://unrelated.invalid/',webSocketDebuggerUrl:'ws://wrong.invalid/other'},
-    {type:'page',url:'https://pivot.claude.ai/auth/login',webSocketDebuggerUrl:'ws://localhost:1/devtools/page/office'},
-  ]}));
-  const Original=globalThis.WebSocket;
-  globalThis.WebSocket=class {
-    constructor(url){this.url=String(url);sockets.push(this);queueMicrotask(()=>this.onopen?.());}
-    send(raw){const msg=JSON.parse(raw);sent.push(msg);Promise.resolve().then(()=>respond(msg.params.expression,this)).then(value=>{
-      if(value?.exceptionDetails) this.onmessage?.({data:JSON.stringify({id:msg.id,result:value})});
-      else this.onmessage?.({data:JSON.stringify({id:msg.id,result:{result:{value}}})});
-    });}
-    close(){this.closed=true;}
-  };
-  t.after(()=>{globalThis.WebSocket=Original;});
-  return {sent,sockets};
+  const sent=[];
+  t.mock.method(globalThis,'fetch',async(url, options)=>{
+    if (new URL(url).pathname === '/catalog') return new Response(JSON.stringify(catalog('PowerPoint')));
+    if (new URL(url).pathname === '/panes') return new Response(JSON.stringify({panes:[{sessionId:'test'}]}));
+    const body=JSON.parse(options.body);
+    sent.push({params:{expression:body.code}});
+    const value=await respond(body.code);
+    if (value?.exceptionDetails) throw new Error(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text);
+    return new Response(JSON.stringify({value}));
+  });
+  return {sent};
 }
-
-test('CDP selects Office target, rewrites tunneled host and closes connections on success and exception',async t=>{
-  let fail=false;
-  const wire=transport(t,()=>fail?{exceptionDetails:{exception:{description:'Office sync failed'}}}:{count:3});
-  const c=config({endpoint:'http://127.0.0.1:34567'});
-  assert.deepEqual(await Plugin.evaluate(c,'return-value'),{count:3});
-  assert.equal(new URL(wire.sockets[0].url).host,new URL(c.endpoint).host);
-  assert.equal(new URL(wire.sockets[0].url).pathname,'/devtools/page/office');
-  fail=true;
-  await assert.rejects(Plugin.evaluate(c,'partial-write'),/Office sync failed/);
-  assert.equal(wire.sent.length,2);
-  assert.ok(wire.sockets.every(s=>s.closed));
-});
-
-test('caller abort closes the socket and does not resend an unknown write',async t=>{
-  let entered;const ready=new Promise(resolve=>{entered=resolve;});
-  const wire=transport(t,()=>{entered();return new Promise(()=>{});});
-  const controller=new AbortController();
-  const pending=Plugin.evaluate(config(),'write',controller.signal);
-  await ready;controller.abort();
-  await assert.rejects(pending,/inspect before retrying/);
-  assert.equal(wire.sent.length,1);assert.equal(wire.sockets[0].closed,true);
-});
 
 test('shared tools run sequentially and a failed call does not poison the queue',async t=>{
   let finish;const first=new Promise(resolve=>{finish=resolve;});
@@ -92,13 +66,11 @@ test('shape reads load null status before text and compact only the outline text
   await assert.rejects(run(Plugin.outlineExpression(2)),/outside/);
 });
 
-test('COM render returns attachment content and tools are removed on disposal',async t=>{
-  const dir=directory(t);const ps=join(dir,'powershell');
+test('render returns attachment content and tools are removed on disposal',async t=>{
   const png=Buffer.from([137,80,78,71,13,10,26,10,0,1,2,3]);
-  writeFileSync(ps,'#!/usr/bin/env node\nprocess.stdout.write('+JSON.stringify(png.toString('base64'))+');\n',{mode:0o700});
-  transport(t,()=>[]);
+  transport(t,code=>code.includes('getImageAsBase64')?png.toString('base64'):[]);
   const saved=[];const ref={attachmentId:'image-one',mediaType:'image/png',bytes:png.length,width:100,height:50};
-  const f=register(t,config({powershell:ps,renderBackend:'com'}),{saveImage:async value=>{saved.push(value);return ref;}});
+  const f=register(t,config({autoHide:false}),{saveImage:async value=>{saved.push(value);return ref;}});
   const value=await f.call('powerpoint_render_slide',{slide:1});
   assert.deepEqual(saved[0].data,png);
   const rendered=f.tools.get('powerpoint_render_slide').output.render({},value);
@@ -111,12 +83,13 @@ test('native client tools forward arguments untouched and preserve replacement I
   const runtime={execute:async(name,value)=>{calls.push({name,value});return {result:'readback',slide_id_update:{[value.slide_id]:'257#replacement'}};}};
   transport(t,code=>Function('globalThis','return '+code)({OfficeClientRuntime:runtime}));
   const f=register(t,config({autoHide:false}));
-  for(const definition of Plugin.clientToolDefinitions){
+  const passthrough=definitions('PowerPoint').filter(d=>d.clientName !== 'execute_office_js');
+  for(const definition of passthrough){
     const value=await f.call(definition.name,args);
     assert.deepEqual(calls.at(-1),{name:definition.clientName,value:args});
     assert.equal(value.slide_id_update[args.slide_id],'257#replacement');
   }
-  assert.equal(calls.length,Plugin.clientToolDefinitions.length);
+  assert.equal(calls.length,passthrough.length);
 });
 
 test('Office.js rendering reads the bound slide and preserves returned image bytes',async t=>{
@@ -133,6 +106,7 @@ const presentationPane=(sessionId,label)=>({sessionId,label,documentUrl:'file://
 function paneHelper(t,initialPanes){
   const state={panes:initialPanes,requests:[],resolved:[]};
   t.mock.method(globalThis,'fetch',async(url,options)=>{
+    if (new URL(url).pathname === '/catalog') return new Response(JSON.stringify(catalog('PowerPoint')));
     const route=new URL(url),body=options.body === undefined ? undefined : JSON.parse(options.body);
     state.requests.push({route,body,options});
     const reply=(data,status=200)=>new Response(JSON.stringify(data),{status});
@@ -154,7 +128,7 @@ function paneHelper(t,initialPanes){
 
 test('presentation selection validates panes and isolates DSH sessions and no-agent calls',async t=>{
   const a=presentationPane('pane-a','Research'),b=presentationPane('pane-b','Teaching');
-  const wire=paneHelper(t,[a,b]),f=register(t,config({backend:'helper',autoHide:false}));
+  const wire=paneHelper(t,[a,b]),f=register(t,config({autoHide:false}));
   assert.deepEqual(await f.call('powerpoint_list_presentations',{},undefined,'alpha'),{host:'PowerPoint',panes:[a,b],selectedTarget:null});
   await f.call('powerpoint_select_presentation',{target:a.sessionId},undefined,'alpha');
   await f.call('powerpoint_select_presentation',{target:b.sessionId},undefined,'beta');
@@ -173,14 +147,15 @@ test('presentation selection validates panes and isolates DSH sessions and no-ag
 
 test('selected pane is forwarded through all native handlers, images and both rendering backends',async t=>{
   const pane=presentationPane('pane /+?','Target'),other=presentationPane('other','Other');
+  const filePath=join(directory(t),'image.png');writeFileSync(filePath,helperPng);
   const wire=paneHelper(t,[other,pane]);
   for(const renderBackend of ['officejs','com']){
-    const settings=config({backend:'helper',autoHide:false,renderBackend});
+    const settings=config({autoHide:false,renderBackend});
     const saved=[],image={attachmentId:renderBackend,mediaType:'image/png',bytes:helperPng.length,width:20,height:10};
     const f=register(t,settings,{saveImage:async value=>{saved.push(value);return image;}});
     await f.call('powerpoint_select_presentation',{target:pane.sessionId});
-    for(const definition of Plugin.clientToolDefinitions) await f.call(definition.name,{probe:definition.clientName});
-    await f.call('powerpoint_insert_image',{slide:1,base64:'YWJj'});
+    for(const definition of definitions('PowerPoint')) await f.call(definition.name,{probe:definition.clientName});
+    await f.call('powerpoint_insert_image',{slide:1,filePath});
     await f.call('powerpoint_slide_outline',{slide:1});
     await f.call('powerpoint_render_slide',{slide:2});
     assert.deepEqual(saved[0].data,helperPng);
@@ -194,7 +169,7 @@ test('selected pane is forwarded through all native handlers, images and both re
 
 test('pane failures expose the pane list and select tool without dropping a stale selection',async t=>{
   const a=presentationPane('pane-a','Original deck'),b=presentationPane('pane-b','Not the target');
-  const wire=paneHelper(t,[a,b]),f=register(t,config({backend:'helper',autoHide:false}));
+  const wire=paneHelper(t,[a,b]),f=register(t,config({autoHide:false}));
   await assert.rejects(f.call('powerpoint_deck_info'),error=>{
     assert.match(error.message,/multiple-panes/);assert.ok(error.message.includes(b.label));
     assert.match(error.message,/powerpoint_list_presentations.*powerpoint_select_presentation/);return true;
@@ -212,7 +187,7 @@ test('pane failures expose the pane list and select tool without dropping a stal
 
 test('helper auto-hide is once per pane including auto-picked panes and honors explicit show',async t=>{
   const a=presentationPane('pane-a','A'),b=presentationPane('pane-b','B'),c=presentationPane('pane-c','C');
-  const wire=paneHelper(t,[a]),f=register(t,config({backend:'helper'}));
+  const wire=paneHelper(t,[a]),f=register(t,config());
   await f.call('powerpoint_deck_info');await f.call('powerpoint_deck_info');
   assert.ok(wire.requests.filter(r=>r.body).every(r=>r.body.target === undefined));
   wire.panes=[a,b,c];
@@ -227,15 +202,68 @@ test('helper auto-hide is once per pane including auto-picked panes and honors e
   assert.equal(wire.requests.filter(r=>r.body?.code.includes('Office.addin.hide')).length,3);
 });
 
-test('direct CDP refuses helper document selection instead of silently ignoring it',async t=>{
-  const wire=transport(t,()=>({})),f=register(t,config());
-  await assert.rejects(f.call('powerpoint_list_presentations'),/requires backend: helper/);
-  await assert.rejects(f.call('powerpoint_select_presentation',{target:'pane'}),/requires backend: helper/);
-  assert.equal(wire.sent.length,0);
+test('removed backend options fail configuration instead of being silently ignored',()=>{
+  for (const key of ['backend','endpoint','targetUrl','powershell']) {
+    const result=Plugin.Config['~standard'].validate({[key]:'legacy'});
+    assert.ok(result.issues.some(issue=>issue.path[0]===key));
+  }
 });
 
 test('helper failures surface the helper code instead of a bare status', async t => {
   t.mock.method(globalThis,'fetch',async()=>({ok:false,status:503,json:async()=>({error:{
     code:'powerpoint-not-running',message:'PowerPoint is not running in the current session.'}})}));
-  await assert.rejects(Plugin.evaluate(config({backend:'helper'}),'return 1;'),/powerpoint-not-running: PowerPoint is not running/);
+  await assert.rejects(Plugin.evaluate(config(),'return 1;'),/powerpoint-not-running: PowerPoint is not running/);
+});
+
+test('Office.js file inputs arrive as raw base64 without changing the caller arguments', async t => {
+  const dir=directory(t), image=join(dir,'image.bin'), deck=join(dir,'deck.pptx');
+  const imageBytes=Buffer.from([0,255,10,22]), deckBytes=Buffer.from('synthetic presentation');
+  writeFileSync(image,imageBytes);writeFileSync(deck,deckBytes);
+  const runtime={OfficeClientRuntime:{execute:async(name,args)=>{
+    assert.equal(name,'execute_office_js');
+    const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+    return new AsyncFunction(args.code)();
+  }}};
+  transport(t,expression=>Function('globalThis','return '+expression)(runtime));
+  const f=register(t,config({autoHide:false}));
+  const args={files:{image,deck},code:'return {image:files.image,deck:files.deck};'};
+  const before=structuredClone(args);
+  assert.deepEqual(await f.call('powerpoint_execute_office_js',args),{
+    image:imageBytes.toString('base64'),deck:deckBytes.toString('base64'),
+  });
+  assert.deepEqual(args,before);
+  assert.equal(await f.call('powerpoint_execute_office_js',{code:'return Object.keys(files).length;'}),0);
+});
+
+test('invalid file maps fail before Office dispatch and do not poison subsequent calls', async t => {
+  const dir=directory(t), missing=join(dir,'missing.pptx');
+  const wire=transport(t,()=>true), f=register(t,config({autoHide:false}));
+  for (const [files,pattern] of [
+    [[],/files must map/],
+    [{'bad-name':missing},/Invalid files identifier/],
+    [{deck:'relative.pptx'},/absolute file path/],
+    [{deck:missing},/Cannot read files.deck.*ENOENT/],
+    [{deck:dir},/Cannot read files.deck/],
+  ]) await assert.rejects(f.call('powerpoint_execute_office_js',{files,code:'return true;'}),pattern);
+  assert.equal(wire.sent.length,0);
+  assert.equal(await f.call('powerpoint_execute_office_js',{code:'return true;'}),true);
+});
+
+test('image tool reads file bytes and fails missing inputs before Office dispatch', async t => {
+  const dir=directory(t), filePath=join(dir,'image.png'), bytes=Buffer.from([137,80,78,71,0,255]);
+  writeFileSync(filePath,bytes);
+  let inserted;
+  const Office={GoToType:{Index:'Index'},context:{document:{
+    goToByIdAsync(_slide,_type,cb){cb({});},
+    setSelectedDataAsync(data,placement,cb){inserted={data,placement};cb({});},
+  }}};
+  const PowerPoint={run:fn=>fn({presentation:{slides:{items:[{id:'slide'}],load(){}}},sync:async()=>{}})};
+  const wire=transport(t,expression=>Function('Office','PowerPoint','return '+expression)(Office,PowerPoint));
+  const f=register(t,config({autoHide:false}));
+  await f.call('powerpoint_insert_image',{slide:1,filePath,width:123});
+  assert.equal(inserted.data,bytes.toString('base64'));
+  assert.equal(inserted.placement.imageWidth,123);
+  await assert.rejects(f.call('powerpoint_insert_image',{slide:1,base64:bytes.toString('base64')}));
+  await assert.rejects(f.call('powerpoint_insert_image',{slide:1,filePath:join(dir,'missing.png')}),/ENOENT/);
+  assert.equal(wire.sent.length,1);
 });

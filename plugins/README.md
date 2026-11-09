@@ -8,6 +8,8 @@
 
 Office 插件可沿本仓库的 `localPlugins` 流程部署，也可用 `scripts/pack-word.mjs` 或 `scripts/pack-powerpoint.mjs` 生成独立 tarball。包内 README 说明独立安装步骤；两种方式选一种。
 
+Word 的 TypeScript 源码位于 [plugins-src/word](<../plugins-src/README.md>)；修改后运行 `pnpm build:word`，部署和打包仍读取已提交的 [word.mjs](<word.mjs>)。Word skill 由私有 helper 目录提供，公开模块不含正文；PowerPoint skill 继续本地内嵌。
+
 ## 运行时工具指引
 
 [runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`output`、`background`、`child`。工具 schema 和运行时权限仍决定实际可调用能力。
