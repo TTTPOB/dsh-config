@@ -6,6 +6,7 @@ import { officeCode } from './files.ts';
 import { objectSchema, jsonSchema, textRender } from './schemas.ts';
 import { registerZoteroTools } from './zotero.ts';
 import { registerImageTools } from './images.ts';
+import { registerFigureTools } from './figures.ts';
 import { name, type Config } from './config.ts';
 import type { Tool, AddTool, Args, Context, Execution, ObjectSchema, Render, Schema } from '../../shared/types.ts';
 import type { PaneList } from './transport.ts';
@@ -114,7 +115,7 @@ export function apply(ctx: Context, config: Config) {
     async (args, exec) => evaluateNow(clientCallExpression('execute_office_js',
       args.files === undefined ? args : { code: await officeCode(args as OfficeArgs, exec.signal) }), exec));
   const staticNames = new Set([
-    'execute_office_js', 'list_documents', 'select_document', 'pane_visibility', 'insert_image', 'render_page',
+    'execute_office_js', 'list_documents', 'select_document', 'pane_visibility', 'insert_image', 'render_page', 'insert_figure', 'insert_cross_reference', 'list_figures',
     'zotero_insert_citation', 'zotero_insert_bibliography', 'zotero_refresh', 'zotero_inspect', 'zotero_set_style',
   ]);
   const catalog = startCatalog(ctx, 'Word', config,
@@ -155,6 +156,7 @@ export function apply(ctx: Context, config: Config) {
     },
   );
   registerImageTools(add, ctx, config, hideOnce, targetBody, evaluateNow);
+  registerFigureTools(add, evaluateNow);
   const summary = {
     provider: name,
     source: 'bundled',

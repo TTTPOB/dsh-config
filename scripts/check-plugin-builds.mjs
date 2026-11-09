@@ -3,7 +3,14 @@ import { mkdtemp, readFile, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build } from 'vite';
+let build;
+try {
+  ({ build } = await import('vite'));
+} catch (error) {
+  if (error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
+  console.error('vite is not installed. Run `pnpm install --frozen-lockfile --ignore-workspace` in this repository first.');
+  process.exit(1);
+}
 
 for (const id of ['word', 'powerpoint']) {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-plugin-build-'));

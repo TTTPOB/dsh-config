@@ -43,7 +43,10 @@ helper 的部署与接口见 ops 仓库的 Office Helper 文档。页面在 Wind
 | word_verify_doc | 检查样式分布、编号和表格结构；视觉效果需看渲染 |
 | word_execute_office_js | 在 Word.run 内执行可信异步代码；直接使用 context，修改后显式同步 |
 | word_render_page | 把指定页面渲染成 PNG，并返回总页数 |
-| word_insert_image | 插入 DSH 机器上的图片或图片字节；选区插入会替换选区 |
+| word_insert_image | 插入 DSH 机器上的图片；选区插入会替换选区 |
+| word_insert_figure | 在锚点段落前后插入图片和 SEQ 编号图注，给“标签 + 编号”加书签，并刷新 SEQ/REF 域 |
+| word_insert_cross_reference | 在锚点处插入指向图注书签的 REF 域；可用唯一占位符 replace |
+| word_list_figures | 按文档顺序列出 SEQ 图注的标签、编号、图注文字和书签 |
 | word_pane_visibility | 显示或隐藏任务窗格，保留运行时 |
 
 ## Zotero 原生引文

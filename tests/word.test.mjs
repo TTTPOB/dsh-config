@@ -383,3 +383,39 @@ test('Zotero and existing Word tools share the selection queue',async t=>{
   const second=f.call('word_verify_doc');assert.equal(requests.length,2);
   release();await first;await second;assert.equal(requests.length,3);
 });
+
+function figureWord(matches,heads=[]) {
+  const hits={items:Array.from({length:matches}),load(){},getFirst(){throw new Error('unexpected access');}};
+  const getRange=()=>({getBookmarks:()=>({value:['Fig_A']})});
+  return {run:fn=>fn({document:{body:{getRange,search(head){heads.push(head);return hits;}}},sync:async()=>{}})};
+}
+
+test('figure tools send image bytes and defaults, and refuse an anchor that is missing or repeated',async t=>{
+  const fixture=await binaryFixture(t),heads=[];let matches=0;
+  const requests=transport(t,request=>Function('Word','return '+request.body.code)(figureWord(matches,heads)));
+  const f=register(t,config({autoHide:false}));
+  const args=Object.freeze({filePath:fixture.filePath,anchor_text:'x'.repeat(300),caption:'Overview'});
+  await assert.rejects(f.call('word_insert_figure',args),/exactly once; found 0 matches/);
+  assert.equal(heads[0].length,255);
+  const code=requests.at(-1).body.code;
+  for(const part of [fixture.bytes.toString('base64'),'"label":"Figure"','"separator":" "','insertFigure(ctx,doc,']) assert.ok(code.includes(part),part);
+  assert.ok(!code.includes(fixture.filePath));
+  matches=2;
+  await assert.rejects(f.call('word_insert_cross_reference',{bookmark:'fig_a',anchor_text:'[[a]]',position:'replace'}),/exactly once; found 2 matches/);
+  await assert.rejects(f.call('word_insert_cross_reference',{bookmark:'other',anchor_text:'[[a]]'}),/bookmark not found: other/);
+});
+
+test('figure tools validate paths, labels, bookmarks and sizes before any document access',async t=>{
+  const fixture=await binaryFixture(t);
+  const requests=transport(t,()=>null),f=register(t,config({autoHide:false}));
+  const base={filePath:fixture.filePath,anchor_text:'a',caption:'c'};
+  await assert.rejects(f.call('word_insert_figure',{...base,filePath:'rel.png'}),/absolute path/);
+  for(const label of ['Fig ure','1Fig','Fig"']) await assert.rejects(f.call('word_insert_figure',{...base,label}),/label must be one word/);
+  for(const bookmark of ['has space','9start','x'.repeat(41)]) await assert.rejects(f.call('word_insert_figure',{...base,bookmark}),/bookmark must start/);
+  await assert.rejects(f.call('word_insert_figure',{...base,width:0}),/width must be positive/);
+  await assert.rejects(f.call('word_insert_cross_reference',{bookmark:'a b',anchor_text:'a'}),/not a valid Word bookmark/);
+  assert.equal(requests.length,0);
+  await f.call('word_insert_figure',{...base,label:'图'}).catch(()=>{});
+  assert.equal(requests.length,1,'a CJK label is accepted');
+});
+
