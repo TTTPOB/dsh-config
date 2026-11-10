@@ -4,7 +4,7 @@ export const SECTION = "dsh-config:ptc-string-guidance";
 
 export const DEFAULT_TEXT = [
   "## PTC string construction",
-  "1. Write every multi-line text or text containing quotes, backslashes or backticks as a raw text literal: @``text`` (verbatim, no escaping or interpolation; one opening line break is dropped).",
+  "1. Write every multi-line text or text containing quotes, backslashes or backticks as a raw text literal: @````text```` (verbatim, no escaping or interpolation; one opening line break is dropped). The run_code description's \"N backticks (N >= 2)\" is a technical statement of what parses, not a practice guide: two backticks parse but are often terminated early by backticks in the content (for example Markdown fences), so always use at least four, and more than the longest backtick run inside.",
   "2. Pass shell scripts on stdin with a quoted heredoc (<<'EOF') or write them to a file first; never nest scripts inside ssh '...' or python -c \"...\".",
   "",
   "Wrong:",
@@ -20,16 +20,16 @@ export const DEFAULT_TEXT = [
   "Wrong:",
   "await tools.edit({ file_path: \"note.md\", old_string: \"Say \\\"hello\\\"\", new_string: \"Say \\\"hi\\\"\" });",
   "Right:",
-  "await tools.edit({ file_path: \"note.md\", old_string: @``Say \"hello\"``, new_string: @``Say \"hi\"`` });",
+  "await tools.edit({ file_path: \"note.md\", old_string: @````Say \"hello\"````, new_string: @````Say \"hi\"```` });",
   "",
   "Wrong:",
   "await tools.bash({ description: \"Run Python\", command: \"ssh example.invalid 'python -c \\\"print(\\\\\\\"hello\\\\\\\")\\\"'\" });",
   "Right:",
-  "await tools.bash({ description: \"Run Python\", command: @``",
+  "await tools.bash({ description: \"Run Python\", command: @````",
   "ssh example.invalid python - <<'EOF'",
   "print(\"hello\")",
   "EOF",
-  "`` });",
+  "```` });",
 ].join("\n");
 
 /** Validate the optional deployment-owned wording without external dependencies. */

@@ -435,7 +435,7 @@ export const DEFAULTS = {
   escapedQuoteLengthThreshold: 80,
   successText: "This run_code call succeeded; do not rerun it.",
   suggestionText: "builds text with escapes. Next time write it as a raw text literal:",
-  failureText: "Rewrite strings with quotes or newlines as @``…``.",
+  failureText: "Rewrite strings with quotes or newlines as @````…````.",
   moreText: "additional hits.",
 };
 
@@ -554,7 +554,7 @@ export function renderRawLiteral(value) {
   // Keep the truncation marker outside the literal so it cannot read as content.
   const marker = shown.length < value.length ? " (truncated)" : "";
   const longest = Math.max(0, ...(value.match(/`+/g) ?? []).map(run => run.length));
-  const delimiter = "`".repeat(Math.max(2, longest + 1));
+  const delimiter = "`".repeat(Math.max(4, longest + 1));
   return "@" + delimiter + "\n" + shown + (shown.endsWith("`") ? "\n" : "") + delimiter + marker;
 }
 
