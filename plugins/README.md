@@ -12,7 +12,31 @@ Word 的 TypeScript 源码位于 [plugins-src/word](<../plugins-src/README.md>)�
 
 ## 运行时工具指引
 
-[runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`output`、`background`、`child`。工具 schema 和运行时权限仍决定实际可调用能力。
+[runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`output`、`background`、`child`、`teammate`、`sdkMessage`。工具 schema 和运行时权限仍决定实际可调用能力。
+
+各段的出现条件：
+
+| 段 | 出现条件 | 内容 |
+| --- | --- | --- |
+| `background` | 可用后台 job，或可见 `subagent`／`spawn_teammate`，或可见 `send_message` | job、委派的 agent 和发给自己的消息都会开启下一轮；只剩等待时结束本轮，不轮询 |
+| `child` | 自己是 continuable 子代理，`send_message` 以 `agent_id` 寻址 | 用 `send_message` 把报告发给父 agent，再以极短确认结束 |
+| `teammate` | 自己是 Agent Teams 的 teammate，`send_message` 以 `target` 寻址 | 同上，收件人是 Lead |
+| `sdkMessage` | PTC SDK 模式且已选中 `child` 或 `teammate` | `send_message` 是 SDK 绑定，须在程序内调用 |
+
+`child` 与 `teammate` 要求显式发送报告，是因为轮次结束通知并不总能送达：子代理写最终输出时若有新消息到达，该轮不算结束，输出不会投递给父 agent。发送后只留极短确认，避免正文重复投递。
+
+## Team 唤醒指引
+
+[team-wake-guidance.mjs](<team-wake-guidance.mjs>) 只在组装结果含 `team:policy` 章节时生效，即 Agent Teams 预设。它不改上游插件，在 `system-prompt/assemble` 中改写两处文案：
+
+1. `team:policy` 中从 “Before wait_agent, use list_agents” 到 “The Lead must wait for required teammates before giving the final answer.” 的一段，替换为唤醒规则：teammate 轮次结束只通知 Lead，任务板变化不通知任何人，`wait_agent` 仅用于 `run_code` 程序内的“等待后检查”循环。其余内容保持原样。
+2. PTC 的 `tools:sdk` 章节中 `wait_agent` 绑定的描述。原生工具模式的 schema 描述无法由此改写。
+
+上游文案变化导致锚点失配时，组装会抛错而不是静默保留旧文案；按报错更新模块内的锚点即可。`config` 只接受 `{}`。
+
+`ptc-runtime` 的 `maxTimeoutMs` 设为 1 小时，与 `wait_agent` 的最大等待一致；`run_code` 默认仍是 2 分钟，程序内等待时由模型显式传入 `timeoutMs`。
+
+验证：`node --test tests/team-wake-guidance.test.mjs`。设置 `DSH_CLI_PACKAGE` 后，测试用已安装版上游文案核对锚点仍然匹配。
 
 ### 部署
 

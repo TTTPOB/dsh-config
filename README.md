@@ -56,6 +56,8 @@ node scripts/dsh-config.mjs update --machine workstation
 
 [runtime-tooling-guidance.mjs](<plugins/runtime-tooling-guidance.mjs>) 按当前工具模式、PTC 语言与子代理身份加入适用的简短指引，替代 agentsmd 中整段静态 tooling 说明。在[共用默认配置](<shared/defaults.yaml>)中声明一次，各机沿原 apply 流程部署到目标 home；配置和验证见[本地插件说明](<plugins/README.md#运行时工具指引>)；不改变工具权限或执行行为。
 
+[team-wake-guidance.mjs](<plugins/team-wake-guidance.mjs>) 同样在共用默认配置中声明，只对 Agent Teams 预设生效：把上游 Team 提示词里引导 Lead 用 `wait_agent` 等待的句子，换成“哪些事件会开启下一轮”的说明。见[本地插件说明](<plugins/README.md#team-唤醒指引>)。
+
 ### Provider 路由提示词
 
 [provider-prompt.mjs](<plugins/provider-prompt.mjs>) 通过各机已有 `localPlugins` 文件计划在 home 挂载一次，不安装 npm 包，也不依赖 Release。显式 `config.rules` 当前只面向 `klaude-cl` 的全部模型；其他路由不输出，空 `rules` 禁用。声明与验证见[本地插件说明](<plugins/README.md#provider-路由提示词>)和[公开示例](<examples/local-plugins-machine.yaml>)。

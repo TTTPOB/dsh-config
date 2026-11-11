@@ -8,10 +8,13 @@ import { createRequire } from "node:module";
 import * as Plugin from "../plugins/runtime-tooling-guidance.mjs";
 import { verifyPtcModelTools } from "../scripts/profile-smoke-checks.mjs";
 
-test("validates only six literal wording overrides", () => {
+test("validates only supported literal wording overrides", () => {
   const validate = Plugin.Config["~standard"].validate;
   assert.deepEqual(validate({}).value.text, Plugin.DEFAULT_TEXT);
-  assert.equal(validate({ text: { native: "{{literal}}" } }).value.text.native, "{{literal}}");
+  for (const key of Object.keys(Plugin.DEFAULT_TEXT)) {
+    const text = { [key]: "{{literal}}" };
+    assert.equal(validate({ text }).value.text[key], text[key]);
+  }
   for (const input of [null, [], { text: null }, { text: "x" }, { text: { typo: "x" } },
     { text: { native: " " } }, { text: { child: 1 } }, { rules: [] }]) assert.ok(validate(input).issues);
 });
@@ -123,7 +126,7 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   for (let i = 0; i < 3; i++) assert.deepEqual(await assemble(), native);
   await selectExecutor(PtcExecutor);
   const ts = await assemble(child);
-  selected(ts, ["typescript", "output", "background", "child"]);
+  selected(ts, ["typescript", "output", "background", "child", "sdkMessage"]);
   verifyPtcModelTools("fixture", ctx.tools.schemas(child.key), ts, []);
   assert.deepEqual(ts.tools.map(row => row.name), ["run_code"]);
   assert.deepEqual(ts.tools, beforeTs.tools);
@@ -131,7 +134,7 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   assert.ok(ts.sections.find(row => row.name === "tools:sdk").text.includes("send_message"));
   ctx.ptcRuntime.language = "python";
   const python = await assemble(child);
-  selected(python, ["python", "output", "background", "child"]);
+  selected(python, ["python", "output", "background", "child", "sdkMessage"]);
   assert.ok(!guidance(python).includes("Promise.all"));
   assert.deepEqual(python.tools, beforePython.tools);
   assert.deepEqual(python.sections.filter(row => row.name !== Plugin.SECTION), beforePython.sections);
@@ -156,22 +159,54 @@ test("installed Loader selects fresh runtime capabilities without changing tools
     execute() { throw new Error("No execution"); },
   }));
   const noBackgroundParameter = shadow("bash", {});
-  selected(await assemble(child), ["native", "child"]);
+  selected(await assemble(child), ["native", "background", "child"]);
   noBackgroundParameter();
   const noJobId = shadow("job_output", {});
-  selected(await assemble(child), ["native", "child"]);
+  selected(await assemble(child), ["native", "background", "child"]);
   noJobId();
+  const messageOnlyTools = child.ctx.tools.restrict({ deny: ["bash", "job_output", "job_kill"] });
+  selected(await assemble(child), ["native", "background", "child"]);
+  messageOnlyTools();
+  const teammateMessaging = shadow("send_message", { target: { type: "string", required: true }, message: { type: "string", required: true } });
+  selected(await assemble(child), ["native", "background", "teammate"]);
+  for (const nonChild of [root, oneShot, orphan, inherited]) {
+    const messaging = nonChild.ctx.tools.register(defineTool({
+      name: "send_message", description: "Team messaging", parameters: { target: { type: "string" }, message: { type: "string" } },
+      output: { schema: { type: "string" }, render: () => [] }, execute() { throw new Error("No execution"); },
+    }));
+    selected(await assemble(nonChild), ["native", "background"]);
+    messaging();
+  }
+  await selectExecutor(PtcExecutor);
+  const teammateSdk = await assemble(child);
+  selected(teammateSdk, ["typescript", "output", "background", "teammate", "sdkMessage"]);
+  assert.ok(guidance(teammateSdk).endsWith(wording.teammate + "\n\n" + wording.sdkMessage));
+  await selectExecutor(NativeExecutor);
+  teammateMessaging();
+  const bothRecipients = shadow("send_message", { agent_id: { type: "string" }, target: { type: "string" }, message: { type: "string" } });
+  selected(await assemble(child), ["native", "background", "child"]);
+  bothRecipients();
   const noMessagingParameters = shadow("send_message", {});
   selected(await assemble(child), ["native", "background"]);
   noMessagingParameters();
   const hideBackground = child.ctx.tools.restrict({ deny: ["bash"] });
-  selected(await assemble(child), ["native", "child"]);
+  selected(await assemble(child), ["native", "background", "child"]);
   hideBackground();
   const restrict = child.ctx.tools.restrict({ deny: ["job_kill", "send_message"] });
   selected(await assemble(child), ["native"]);
   await selectExecutor(PtcExecutor);
   selected(await assemble(child), ["typescript", "output"]);
-  await selectExecutor(NativeExecutor); restrict();
+  await selectExecutor(NativeExecutor);
+  for (const name of ["subagent", "spawn_teammate"]) {
+    register(name);
+    selected(await assemble(child), ["native", "background"]);
+    await selectExecutor(PtcExecutor);
+    selected(await assemble(child), ["typescript", "output", "background"]);
+    await selectExecutor(NativeExecutor);
+    disposers[name]();
+    delete disposers[name];
+  }
+  restrict();
   const complete = child.ctx.systemPrompt.section({ name: "complete", order: 0, complete: true, interpolate: false, text: "authoritative" });
   assert.equal(renderPrompt(await assemble(child)), "authoritative");
   complete();
