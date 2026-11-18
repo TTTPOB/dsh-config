@@ -24,8 +24,8 @@ providers:
         code: SERVER
     api: openai-responses
     models:
-      - id: gpt-6-astra
-        name: GPT-6 Astra
+      - id: gpt-6.2-astra
+        name: GPT-6.2 Astra
         contextWindow: 500000
         maxTokens: 32000
         input:
@@ -50,8 +50,8 @@ providers:
           high: high
           xhigh: xhigh
           max: max
-      - id: gpt-6.1-sol
-        name: GPT-6.1 Sol
+      - id: gpt-6.2-sol
+        name: GPT-6.2 Sol
         contextWindow: 500000
         maxTokens: 32000
         input:
