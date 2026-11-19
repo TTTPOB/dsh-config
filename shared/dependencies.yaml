@@ -199,8 +199,8 @@ packages:
   - package: "@nagi-ovo/dsh-visualize"
     scope: profile
     policy: release
-    version: 0.1.7-fork1
-    url: https://github.com/TTTPOB/dsh-visualize/releases/download/v0.1.7-fork1/nagi-ovo-dsh-visualize-0.1.7-fork1.tgz
+    version: 0.1.10-fork1
+    url: https://github.com/TTTPOB/dsh-visualize/releases/download/v0.1.10-fork1/nagi-ovo-dsh-visualize-0.1.10-fork1.tgz
     profiles: [web]
     required: true
     patchOnly: true
