@@ -18,9 +18,6 @@ mcp:
   siyuan:
     url: https://siyuan.example.invalid/mcp
     headersFile: /path/to/credentials/siyuan-headers.json
-  academicSource:
-    url: https://academic-source.example.invalid/mcp
-    apiKeyFile: /path/to/credentials/academic-source-key
 subagentModels:
   - provider: deepseek-official
     model: deepseek-flash

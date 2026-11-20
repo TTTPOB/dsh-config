@@ -3,15 +3,6 @@
       name: dsh-better-sidebar
     - id: dsh-visualize
       name: "@nagi-ovo/dsh-visualize"
-    - id: mcp-academic-source
-      name: '@deepseek-ai/dsh-mcp-client'
-      config:
-        serverName: academic-source
-        transport: streamable-http
-        url: [[ machine.mcp.academicSource.url | quote ]]
-        headers: !!js "({'Authorization': 'Bearer ' + process.getBuiltinModule('node:fs').readFileSync('[[ machine.mcp.academicSource.apiKeyFile ]]', 'utf8').trim()})"
-        toolCallTimeoutMs: 60000
-        failOnStartupError: false
 - id: web
   config:
     searchProvider: deepseek-official

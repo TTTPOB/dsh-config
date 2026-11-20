@@ -99,7 +99,7 @@ export function validateMachine(machine) {
       }
     }
   }
-  for (const [key, fields] of Object.entries({ siyuan: ['url', 'headersFile'], academicSource: ['url', 'apiKeyFile'] })) {
+  for (const [key, fields] of Object.entries({ siyuan: ['url', 'headersFile'] })) {
     for (const field of fields) {
       assert.ok(typeof machine.mcp?.[key]?.[field] === 'string' && machine.mcp[key][field].length, `Missing machine mcp input: ${key}.${field}`);
     }
