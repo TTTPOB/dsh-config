@@ -324,3 +324,7 @@ Practice:
 - `powerpoint_render_slide` renders a real slide image. The default backend uses Office.js image export. If the environment is configured for COM, it renders the active presentation, so confirm the intended deck is active.
 - `powerpoint_pane_visibility` hides or shows the task pane. Hiding keeps the runtime available; closing a borrowed pane may drop it.
 - `powerpoint_deck_info` reads the live document. If a tool fails because the runtime is unavailable, ask the user to open or restore the add-in rather than repeating write calls.
+- A clean verify result covers geometry and contrast only. It does not show whether a legend, label, or diagram is readable; render the slide and look.
+- `powerpoint_find_and_replace` and the OOXML tools can replace slides, which changes their IDs. Before the next call that takes a slide ID, use the returned `slide_id_update` or call `powerpoint_deck_info` again; a stale ID surfaces as `GeneralException` or a failed `getItem`.
+- A failed call is not rolled back. Writes earlier in the same program, or earlier pairs in a batch, may already be in the deck. Re-read the affected slides before retrying, and retry only what is missing.
+- If importing an edited slide package fails with `InvalidArgument` (`insertSlidesFromBase64`), bisect: retry one slide, then remove elements until it passes. Hand-written math (OMML) and table XML are the usual culprits; fix that element rather than abandoning the whole edit.
