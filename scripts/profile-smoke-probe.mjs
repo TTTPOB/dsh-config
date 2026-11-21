@@ -119,8 +119,8 @@ async function inspect(ctx, config) {
   await ctx.loader.await();
   const hostRequire = createRequire(process.env.DSH_SMOKE_HOST_MANIFEST);
   const load = name => import(pathToFileURL(hostRequire.resolve(name)).href);
-  const [{ auditStartupEntries }, { assembleContextFor }, { scopeOf }, { renderPrompt, renderContextSnapshot }] = await Promise.all([
-    load('@deepseek-ai/dsh-app-boot'), load('@deepseek-ai/dsh-agent'), load('@deepseek-ai/dsh-scope'),
+  const [{ auditStartupEntries }, { assembleContextFor }, { renderPrompt, renderContextSnapshot }] = await Promise.all([
+    load('@deepseek-ai/dsh-app-boot'), load('@deepseek-ai/dsh-agent'),
     load('@deepseek-ai/dsh-system-prompt'),
   ]);
   await auditStartupEntries(ctx.root, 'dsh-config profile smoke', () => {});
@@ -137,7 +137,7 @@ async function inspect(ctx, config) {
   const results = [];
   const handles = [];
   try {
-    // Keep all presets alive together to catch cross-preset Team-tool leakage.
+    // Keep the presets mounted together while checking both modes on every agent.
     for (const id of config.presets) {
       const declaration = roster.find(row => row.id === id);
       if (!declaration || declaration.broken) throw new Error(`${id}: ${declaration?.broken ?? 'missing preset'}`);
@@ -149,16 +149,29 @@ async function inspect(ctx, config) {
       if (runtime?.language !== 'typescript' || runtime.programFormat !== 'function-body') {
         throw new Error(`${id}: expected TypeScript function-body PTC runtime`);
       }
-      const assembly = await ctx.systemPrompt.assemble(assembleContextFor(agent));
-      const schemas = ctx.tools.schemas(scopeOf(agent.ctx));
-      for (const name of ['session_list', 'session_event_list', 'session_event_read', 'search_tools', 'describe_tools']) {
-        if (!schemas.some(tool => tool.name === name)) throw new Error(`${id}: missing profile plugin tool ${name}`);
+      const signal = AbortSignal.timeout(30000);
+      const modelSelection = agent.model.current();
+      for (const teamEnabled of [false, true]) {
+        await ctx.agentTeams.setEnabled(agent, teamEnabled, signal);
+        const toolSet = await ctx.tools.resolve({ agent, modelSelection, signal });
+        try {
+          const context = { ...assembleContextFor(agent, signal), modelSelection, toolSet };
+          const assembly = await ctx.systemPrompt.assemble(context);
+          const schemas = ctx.tools.schemas(context.scope, toolSet);
+          for (const name of ['session_list', 'session_event_list', 'session_event_read', 'search_tools', 'describe_tools']) {
+            if (!schemas.some(tool => tool.name === name)) throw new Error(`${id}: missing profile plugin tool ${name}`);
+          }
+          const note = assembly.sections.some(section => section.name === 'team:collaboration-notes' && section.text.trim());
+          assert.equal(note, teamEnabled, `${id}: Team collaboration notes must follow Team mode`);
+          const prompt = verifyPromptRendering(id, () => ({ prompt: renderPrompt(assembly),
+            context: renderContextSnapshot(ctx.systemPrompt.refreshContext(assembly, context)) }));
+          const nativeTools = config.nativeTools[id];
+          results.push({ ...verifyToolCatalog(id, schemas, assembly, { teamEnabled, acp: config.acp, nativeTools }), prompt });
+        } finally {
+          toolSet.dispose();
+        }
       }
-      // Mirror the Agent step: render the static prompt, then refresh and render runtime context.
-      const prompt = verifyPromptRendering(id, () => ({ prompt: renderPrompt(assembly),
-        context: renderContextSnapshot(ctx.systemPrompt.refreshContext(assembly, assembleContextFor(agent))) }));
-      const nativeTools = config.nativeTools[id];
-      results.push({ ...verifyToolCatalog(id, schemas, assembly, { acp: config.acp, nativeTools }), prompt });
+      await ctx.agentTeams.setEnabled(agent, false, signal);
       const code = 'return { agents: await tools.list_agents({}) };';
       const execution = await executeProbeTool(ctx, { callId: `smoke-${randomUUID()}`, name: 'run_code',
         arguments: { code, description: 'Verify scoped profile tool SDK' }, agent, signal: AbortSignal.timeout(30000) });

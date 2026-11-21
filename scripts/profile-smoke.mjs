@@ -128,7 +128,11 @@ export async function runProfileSmoke(testRoot, home, dependencies = {}) {
     const response = await request(new URL('/__dsh-config-smoke', host.url).href, { headers, signal: AbortSignal.timeout(120000) });
     const result = await response.json();
     assert.equal(response.status, 200, JSON.stringify(result));
-    assert.equal(result.presets.length, options.presets.length);
+    assert.equal(result.presets.length, options.presets.length * 2);
+    for (const id of options.presets) {
+      assert.deepEqual(result.presets.filter(row => row.id === id).map(row => row.teamEnabled), [false, true],
+        `${id}: expected both Team modes`);
+    }
     assert.equal(result.loaded, true);
     const browserArgv = process.env.DSH_CONFIG_BROWSER_SMOKE_ARGV ? JSON.parse(process.env.DSH_CONFIG_BROWSER_SMOKE_ARGV) : undefined;
     if (browserArgv) {

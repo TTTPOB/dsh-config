@@ -83,7 +83,7 @@ test('rejects wrong shapes, non-boolean disabled and unsupported fields', () => 
   assert.throws(() => validateMachine(machine), /disabled: boolean/);
 });
 
-test('NAS overrides render daily, Team and reverse presets through the common template', t => {
+test('NAS overrides render daily, legacy and reverse presets through the common template', t => {
   const directory = mkdtempSync(join(tmpdir(), 'preset-rows-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const machine = readYaml(join(root, 'examples/workstation-machine.yaml'));
@@ -92,7 +92,7 @@ test('NAS overrides render daily, Team and reverse presets through the common te
     promptFile: join(directory, 'unread-prompt.md'), identityFile: join(directory, 'unread-identity.md') };
   machine.overrides.presetRows = {
     all: { 'tool-web': { disabled: true }, 'delegation/tool-ralph': { disabled: true } },
-    presets: { 'standard-ptc-team': { 'tool-web': { disabled: false }, 'delegation/tool-agent-team': { disabled: true } } },
+    presets: { 'standard-ptc-team': { 'tool-web': { disabled: false }, 'delegation/tool-subagent-fork': { disabled: true } } },
   };
   machine.homePrivate += '- id: literal-canary\n  config:\n    token: !!js (() => { throw new Error("never execute") })()\n';
   const path = join(directory, 'machine.yaml');
@@ -105,7 +105,7 @@ test('NAS overrides render daily, Team and reverse presets through the common te
     assert.equal(config.plugins.find(row => row.id === 'tool-web').disabled, config.id !== 'standard-ptc-team');
     const delegation = config.plugins.find(row => row.id === 'delegation');
     assert.equal(delegation.config.find(row => row.id === 'tool-ralph').disabled, true);
-    if (config.id === 'standard-ptc-team') assert.equal(delegation.config.find(row => row.id === 'tool-agent-team').disabled, true);
+    if (config.id === 'standard-ptc-team') assert.equal(delegation.config.find(row => row.id === 'tool-subagent-fork').disabled, true);
   }
   assert.match(rendered.home, /!!js/);
   assert.match(rows.find(row => row.id === 'literal-canary').config.token.__jsExpr, /never execute/);

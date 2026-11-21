@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { root, parseYaml, readYaml, validateMachine, validatePatch, renderMachine, resolveDependencyTargets, parseCommandArguments, resolveMachineArgument, resolvesFromProfile, preserveLiveRows } from '../scripts/lib.mjs';
+import { root, parseYaml, readYaml, validateMachine, validatePatch, renderMachine, resolveDependencyTargets, parseCommandArguments, resolveMachineArgument, resolvesFromProfile, preserveLiveRows, homeRetiredRows } from '../scripts/lib.mjs';
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'dsh-config-test-'));
@@ -14,22 +14,28 @@ function fixture(t) {
 
 const example = join(root, 'examples/workstation-machine.yaml');
 
-test('the Team branch replaces ordinary delegation, and only fresh subagents take the machine default route', () => {
+test('legacy Team sessions use ordinary delegation and only fresh subagents get the machine route', () => {
   const machine = readYaml(example);
   const { rendered } = renderMachine(example, 'delegation-branches', undefined, { stage: false });
-  const presets = validatePatch(rendered.home).map(row => row.entry).filter(row => row.name === '@deepseek-ai/dsh-agent-preset');
-  const delegation = id => presets.find(row => row.config.id === id).config.plugins.find(row => row.id === 'delegation').config;
-  const ordinary = delegation('standard-ptc'), team = delegation('standard-ptc-team');
-  assert.ok(!ordinary.some(row => row.id === 'tool-agent-team'));
-  assert.ok(team.some(row => row.id === 'tool-agent-team'));
-  for (const id of ['tool-subagent', 'tool-subagent-fork', 'tool-subagent-control']) {
-    assert.ok(ordinary.some(row => row.id === id));
-    assert.ok(!team.some(row => row.id === id));
-  }
-  // A fork child reuses the parent prefix, so only the fresh tool receives the machine route.
-  assert.deepEqual(ordinary.find(row => row.id === 'tool-subagent').config.agentOptions, machine.subagentDefault);
-  assert.equal(ordinary.find(row => row.id === 'tool-subagent-fork').config.agentOptions, undefined);
-  assert.deepEqual(team.find(row => row.id === 'tool-agent-team').config.freshAgentOptions, machine.subagentDefault);
+  const rows = validatePatch(rendered.home).map(row => row.entry);
+  const preset = id => rows.find(row => row.name === '@deepseek-ai/dsh-agent-preset' && row.config.id === id).config;
+  const ordinary = preset('standard-ptc').plugins;
+  assert.deepEqual(preset('standard-ptc-team').plugins, ordinary);
+  const delegation = ordinary.find(row => row.id === 'delegation').config;
+  assert.deepEqual(delegation.find(row => row.id === 'tool-subagent').config.agentOptions, machine.subagentDefault);
+  assert.equal(delegation.find(row => row.id === 'tool-subagent-fork').config.agentOptions, undefined);
+  assert.deepEqual(rows.find(row => row.id === 'subagent-model-selection-settings').config.allowedModels, machine.subagentModels);
+});
+
+test('the rc.5 home patch retires old Team inserts but keeps unrelated live rows', () => {
+  const machine = readYaml(example);
+  machine.rowOps = { home: { retire: ['private-obsolete'] } };
+  const { rendered } = renderMachine(example, 'team-rows-migration', undefined, { stage: false });
+  const old = ['agent-team', 'ui-agent-team', 'team-wake-guidance'];
+  const live = JSON.stringify([{ insert: [...old, 'private-obsolete', 'private-kept'].map(id => ({ id, name: 'fixture' })) }]);
+  const result = preserveLiveRows(rendered.home, live, homeRetiredRows(machine));
+  assert.deepEqual(result.retired, [...old, 'private-obsolete']);
+  assert.deepEqual(result.preserved, ['private-kept']);
 });
 
 test('upgrading a managed tools row replaces obsolete configuration instead of preserving it', () => {
@@ -77,27 +83,26 @@ test('rc.1 catalog normalizes old core and native selectors to effective package
   assert.equal(targets.globalWorkspace.overrides[selected.package], selected.url ?? selected.version);
 });
 
-test('required Team packages are installed without activating the official global-tool bundle', () => {
+test('rc.5 removes only experimental Team dependencies and bundles from each profile', () => {
   const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
-  // Exercise published targets even while the selected release is awaiting publication.
-  for (const item of catalog.packages.filter(item => item.policy === 'release')) {
-    item.url = `https://github.com/example/fixtures/releases/download/v${item.version}/${item.package.replaceAll('/', '-')}.tgz`;
+  const old = ['experimental-agent-team', 'experimental-tool-agent-team', 'experimental-client-ui-agent-team',
+    'experimental-agent-team-profile'].map(suffix => '@deepseek-ai/dsh-' + suffix);
+  const kept = ['@deepseek-ai/dsh-agent-team', '@example/custom-bundle'];
+  const manifest = { dependencies: Object.fromEntries([...old, ...kept].map(name => [name, '1.0.0'])),
+    dsh: { profile: { bundles: [...old, ...kept] } } };
+  const overrides = Object.fromEntries(old.slice(0, 3).map(name => [name + '@1.0.0', 'file:legacy.tgz']));
+  const { profiles, globalWorkspace, entries } = resolveDependencyTargets('unused', {
+    webPackage: manifest, profiles: { disposable: manifest, clean: {} }, globalWorkspace: { overrides },
+  }, catalog);
+  for (const profile of [profiles.web, profiles.disposable]) {
+    for (const name of old) assert.ok(!Object.hasOwn(profile.dependencies, name));
+    for (const name of kept) assert.equal(profile.dependencies[name], manifest.dependencies[name]);
+    assert.deepEqual(profile.dsh.profile.bundles, kept);
   }
-  const target = resolveDependencyTargets('unused', { webPackage: { dsh: { profile: { bundles: [
-    '@deepseek-ai/dsh-base', '@deepseek-ai/dsh-experimental-agent-team-profile',
-  ] } } } }, catalog);
-  const team = catalog.packages.find(row => row.package === '@deepseek-ai/dsh-experimental-agent-team' && row.scope === 'profile');
-  assert.ok(team.url);
-  assert.equal(target.profiles.web.dependencies[team.package], team.url);
-  assert.equal(target.globalWorkspace.overrides[team.package], team.url);
-  const tool = catalog.packages.find(row => row.package === '@deepseek-ai/dsh-experimental-tool-agent-team');
-  assert.ok(target.entries.some(row => row.name === tool.package
-    && row.scope === 'profile' && row.status === 'verified-release' && row.target === tool.url));
-  assert.equal(target.profiles.web.dependencies[tool.package], tool.url);
-  assert.equal(target.globalWorkspace.overrides[tool.package], tool.url);
-  assert.deepEqual(target.profiles.web.dsh.profile.bundles, ['@deepseek-ai/dsh-base']);
+  for (const name of Object.keys(overrides)) assert.ok(!Object.hasOwn(globalWorkspace.overrides, name));
+  assert.ok(!entries.some(entry => entry.profile === 'clean' && entry.status === 'retired-dependency'));
+  assert.ok(old.every(name => Object.hasOwn(manifest.dependencies, name)));
 });
-
 
 test('profile-owned official forks resolve from the actual consumer even when a global override is also declared', () => {
   const entries = [{ name: 'team-tool', scope: 'global-override' }, { name: 'team-tool', scope: 'profile', profile: 'web' }];

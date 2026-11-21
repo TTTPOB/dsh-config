@@ -239,6 +239,11 @@ export function preserveLiveRows(renderedText, liveText, retire = []) {
   return { text, preserved, retired };
 }
 
+// Retire stale home patch inserts without disabling the base and web bundle rows.
+export function homeRetiredRows(machine) {
+  return [...(machine.rowOps?.home?.retire ?? []), 'agent-team', 'ui-agent-team', 'team-wake-guidance'];
+}
+
 export function renderMachine(machinePath, label, catalog, { stage = true, generatedDir, deploymentHome } = {}) {
   assert.match(label, /^[a-zA-Z0-9_-]+$/, 'Invalid output label');
   const machine = validateMachine(readYaml(machinePath));
@@ -251,10 +256,10 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
   }
   const providers = resolveProviders(readYaml(join(root, 'shared/providers.yaml')).providers, machine.providers);
   const templateData = { shared, machine, providersYaml: indentYaml(providers, 6) };
-  const rowOps = machine.rowOps ?? {};
+  const homeRetire = homeRetiredRows(machine);
   const rendered = {
-    home: dropRows(applyPresetRowOverrides(templates.render('home.patch.yml.njk', templateData), machine.overrides.presetRows), rowOps.home?.retire),
-    web: dropRows(templates.render('web.patch.yml.njk', templateData), rowOps.web?.retire),
+    home: dropRows(applyPresetRowOverrides(templates.render('home.patch.yml.njk', templateData), machine.overrides.presetRows), homeRetire),
+    web: dropRows(templates.render('web.patch.yml.njk', templateData), machine.rowOps?.web?.retire),
     globalWorkspace: JSON.stringify(machine.installation.globalWorkspace, null, 2) + '\n',
     webPackage: JSON.stringify(machine.installation.webPackage, null, 2) + '\n',
   };
@@ -276,6 +281,13 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
   }
   return { output, rendered, localPlugins };
 }
+
+const retiredTeamPackages = new Set([
+  '@deepseek-ai/dsh-experimental-agent-team',
+  '@deepseek-ai/dsh-experimental-tool-agent-team',
+  '@deepseek-ai/dsh-experimental-client-ui-agent-team',
+  '@deepseek-ai/dsh-experimental-agent-team-profile',
+]);
 
 const releaseUrl = /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+\.tgz$/;
 const exactVersion = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -368,11 +380,16 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
   // pnpm 11 otherwise rejects trusted Release overrides of transitive dependencies.
   if (entries.some(row => row.scope === 'global-override' && row.status === 'verified-release')) globalWorkspace.blockExoticSubdeps = false;
   for (const [profile, manifest] of Object.entries(profiles)) {
+    for (const name of retiredTeamPackages) {
+      if (!Object.hasOwn(manifest.dependencies ?? {}, name)) continue;
+      delete manifest.dependencies[name];
+      entries.push({ scope: 'profile', profile, name, status: 'retired-dependency', changed: true, target: '(removed)' });
+    }
     merge(manifest, 'dependencies', 'profile', profile);
     const patchOnly = new Set(catalog.packages.filter(item => item.scope === 'profile' && item.patchOnly
       && (!item.profiles || item.profiles.includes(profile))).map(item => item.package));
     const bundles = manifest.dsh?.profile?.bundles;
-    if (bundles) manifest.dsh.profile.bundles = bundles.filter(name => !patchOnly.has(name));
+    if (bundles) manifest.dsh.profile.bundles = bundles.filter(name => !patchOnly.has(name) && !retiredTeamPackages.has(name));
   }
   return { globalWorkspace, profiles, entries };
 }

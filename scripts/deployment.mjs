@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import YAML from 'yaml';
 import { summarizeFiles, formatDoctor } from './report.mjs';
-import { root, readYaml, readDependencyCatalog, resolveDependencyTargets, renderMachine, validatePatch, resolvesFromProfile, preserveLiveRows } from './lib.mjs';
+import { root, readYaml, readDependencyCatalog, resolveDependencyTargets, renderMachine, validatePatch, resolvesFromProfile, preserveLiveRows, homeRetiredRows } from './lib.mjs';
 
 import { normalizeDeployment } from './deployment-paths.mjs';
 export { normalizeDeployment } from './deployment-paths.mjs';
@@ -255,7 +255,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   // A rendered patch owns its rows; anything else already in the live file is kept,
   // so hand-edited and UI-owned rows survive an apply. retire ids are removed instead.
   const patches = [
-    [deployment.homePatchPath ?? join(deployment.home, 'cordis.patch.yml'), rendered.home, machine.rowOps?.home?.retire ?? []],
+    [deployment.homePatchPath ?? join(deployment.home, 'cordis.patch.yml'), rendered.home, homeRetiredRows(machine)],
     [deployment.profiles.web.patchPath ?? join(dirname(deployment.profiles.web.packagePath), 'cordis.patch.yml'), rendered.web, machine.rowOps?.web?.retire ?? []],
   ].map(([path, contents, retire]) => {
     const live = existsSync(path) ? readFileSync(path, 'utf8') : undefined;

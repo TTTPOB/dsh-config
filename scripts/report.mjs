@@ -60,7 +60,8 @@ export function formatUpdate(report, verbose = false) {
   if (report.runtime) lines.push(`CLI runtime: ${report.runtime.installedVersion ?? '(离线未检查)'} → ${report.runtime.targetVersion}${report.runtime.changed === false ? '（不变）' : ''}`);
   for (const row of blocked) lines.push(`! [${scopeOf(row)}] ${row.name}: ${row.status} — ${row.reason ?? '缺少精确发布资产'}`);
   for (const row of changed) {
-    lines.push(`~ [${scopeOf(row)}] ${row.name} → ${row.status === 'retired-override' ? '(移除旧 override)' : row.version}`);
+    const removal = row.status === 'retired-override' ? '(移除旧 override)' : row.status === 'retired-dependency' ? '(移除旧 profile 依赖)' : undefined;
+    lines.push(`~ [${scopeOf(row)}] ${row.name} → ${removal ?? row.version}`);
     for (const old of row.currentSources ?? []) lines.push(`  原 ${old.selector}: ${sourceOf(old.source)}`);
     lines.push(`  新: ${row.target}`);
   }

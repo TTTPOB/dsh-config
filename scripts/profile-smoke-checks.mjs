@@ -1,25 +1,24 @@
 import assert from 'node:assert/strict';
 
-export function verifyToolCatalog(id, schemas, assembly, { acp = true, nativeTools = [] } = {}) {
+export function verifyToolCatalog(id, schemas, assembly, { teamEnabled, acp = true, nativeTools = [] } = {}) {
   const names = schemas.map(tool => tool.name);
   assert.equal(new Set(names).size, names.length, `${id}: duplicate tool names`);
-  const team = id === 'standard-ptc-team';
-  const required = team
-    ? ['spawn_teammate', 'list_agent_models', 'send_message', 'list_agents', 'interrupt_agent', 'wait_agent', 'team_task_create', 'team_task_list', 'team_task_get', 'team_task_update']
-    : ['subagent', 'subagent_fork', 'send_message', 'list_agents', 'interrupt_agent'];
-  for (const name of [...required, 'workflow', 'ralph']) assert.ok(names.includes(name), `${id}: missing ${name}`);
-  for (const name of team ? ['subagent', 'subagent_fork'] : ['spawn_teammate', 'wait_agent', 'team_task_create']) {
-    assert.ok(!names.includes(name), `${id}: unexpected ${name}`);
+  assert.equal(typeof teamEnabled, 'boolean', `${id}: Team mode must be specified`);
+  const required = ['subagent', 'subagent_fork', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent', 'wait_agent', 'workflow', 'ralph'];
+  for (const name of required) assert.ok(names.includes(name), `${id}: missing ${name}`);
+  const taskTools = ['team_task_create', 'team_task_list', 'team_task_get', 'team_task_update'];
+  if (teamEnabled) {
+    for (const name of taskTools) assert.ok(names.includes(name), `${id}: missing ${name}`);
+  } else {
+    for (const name of names.filter(name => name.startsWith('team_task_'))) assert.fail(`${id}: unexpected ${name}`);
   }
-  if (team) {
-    const spawn = schemas.find(tool => tool.name === 'spawn_teammate');
-    for (const field of ['provider', 'model', 'reasoning_effort']) {
-      assert.ok(spawn.parameters.properties[field], `${id}: missing spawn model field ${field}`);
-    }
+  for (const name of ['spawn_teammate', 'list_agent_models']) assert.ok(!names.includes(name), `${id}: unexpected ${name}`);
+  const spawn = schemas.find(tool => tool.name === 'subagent');
+  for (const field of ['provider', 'model', 'reasoning_effort']) {
+    assert.ok(spawn.parameters.properties[field], `${id}: missing spawn model field ${field}`);
   }
   const send = schemas.find(tool => tool.name === 'send_message');
-  assert.ok(send.parameters.properties[team ? 'target' : 'agent_id'], `${id}: wrong send_message implementation`);
-  assert.ok(!send.parameters.properties[team ? 'agent_id' : 'target'], `${id}: mixed send_message implementations`);
+  assert.ok(send.parameters.properties.agent, `${id}: wrong send_message implementation`);
   const modelTools = verifyPtcModelTools(id, schemas, assembly, nativeTools);
   if (acp) {
     assert.ok(names.includes('context_compress'), `${id}: ACP is not registered`);
@@ -27,7 +26,7 @@ export function verifyToolCatalog(id, schemas, assembly, { acp = true, nativeToo
     assert.match(sdk, /context_compress/, `${id}: ACP is missing from the PTC SDK`);
   }
   assert.ok(!names.includes('present'), `${id}: present is disabled for every preset`);
-  return { id, tools: names.sort(), modelTools, ptc: true, acp };
+  return { id, teamEnabled, tools: names.sort(), modelTools, ptc: true, acp };
 }
 
 export function verifyPtcModelTools(id, schemas, assembly, nativeTools) {
@@ -73,5 +72,4 @@ export function verifyDumpConfiguration(rows, expectedPresets, pressureDefault, 
   const webserver = entries.find(row => row.id === 'webserver');
   assert.equal(webserver?.config.host, '127.0.0.1');
   assert.equal(webserver?.config.port, 0);
-  assert.ok(!entries.some(row => row.id === 'tool-agent-team' && !row.disabled), 'dump-config: global Team tools enabled');
 }

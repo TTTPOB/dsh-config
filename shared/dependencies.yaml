@@ -1,21 +1,6 @@
 # Release URLs and compatibility records are added only after artifact validation.
 schemaVersion: 2
-verifiedCompatibility:
-  "@deepseek-ai/dsh-agent-loop@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-agent-preset-registry@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-agent@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-experimental-agent-team@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-experimental-tool-agent-team@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-host-frontend-static@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-mcp-client@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-ptc-runtime-node@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-session-persistence-jsonl@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-session-query-sqlite@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-session-query@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-subagent@0.2.2-rc.1-fork2": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-tool-executor-ptc@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-tool-subagent@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
-  "@deepseek-ai/dsh-tools@0.2.2-rc.1-fork1": ["0.2.2-rc.1"]
+verifiedCompatibility: {}
 allowBuilds:
   esbuild: true
   koffi: true
@@ -27,23 +12,12 @@ allowBuilds:
   electron-winstaller: false
   msgpackr-extract: false
 packages:
-  - package: "@deepseek-ai/dsh-tools"
-    scope: global-override
-    policy: release
-    version: 0.2.2-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.1-fork2/deepseek-ai-dsh-tools-0.2.2-rc.1-fork1.tgz
-    resetSelectors: true
+  # TODO: Update fork and plugin URLs after rc.5 Release artifacts are verified.
   - package: "@deepseek-ai/dsh-tool-subagent"
     scope: global-override
     policy: release
     version: 0.2.2-rc.1-fork1
     url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.1-fork3/deepseek-ai-dsh-tool-subagent-0.2.2-rc.1-fork1.tgz
-    resetSelectors: true
-  - package: "@deepseek-ai/dsh-experimental-agent-team"
-    scope: global-override
-    policy: release
-    version: 0.2.2-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.1-fork3/deepseek-ai-dsh-experimental-agent-team-0.2.2-rc.1-fork1.tgz
     resetSelectors: true
   - package: "@deepseek-ai/dsh-session"
     scope: global-override
@@ -178,12 +152,6 @@ packages:
     version: 0.2.2-rc.1-fork1
     url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.1-fork2/deepseek-ai-dsh-agent-0.2.2-rc.1-fork1.tgz
     resetSelectors: true
-  - package: "@deepseek-ai/dsh-agent-loop"
-    scope: global-override
-    policy: release
-    version: 0.2.2-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.1-fork2/deepseek-ai-dsh-agent-loop-0.2.2-rc.1-fork1.tgz
-    resetSelectors: true
   - package: "@deepseek-ai/dsh-ptc-runtime-node"
     scope: global-override
     policy: release
@@ -220,7 +188,7 @@ packages:
   - package: "@deepseek-ai/libreoffice-kit"
     scope: global-override
     policy: registry
-    version: 0.1.5
+    version: 0.2.3
     resetSelectors: true
   - package: node-addon-require-builtin
     scope: global-override
@@ -242,50 +210,17 @@ packages:
     policy: registry
     version: 3.35.0
     resetSelectors: true
-  - package: "@deepseek-ai/dsh-experimental-tool-agent-team"
-    scope: global-override
-    policy: release
-    version: 0.2.2-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.1-fork2/deepseek-ai-dsh-experimental-tool-agent-team-0.2.2-rc.1-fork1.tgz
-    resetSelectors: true
-  - package: "@deepseek-ai/dsh-experimental-agent-team"
-    scope: profile
-    policy: release
-    version: 0.2.2-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.1-fork3/deepseek-ai-dsh-experimental-agent-team-0.2.2-rc.1-fork1.tgz
-    patchOnly: true
-    required: true
-  - package: "@deepseek-ai/dsh-experimental-tool-agent-team"
-    scope: profile
-    policy: release
-    version: 0.2.2-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.1-fork2/deepseek-ai-dsh-experimental-tool-agent-team-0.2.2-rc.1-fork1.tgz
-    patchOnly: true
-    required: true
-  - package: "@deepseek-ai/dsh-experimental-client-ui-agent-team"
-    scope: profile
-    policy: release
-    version: 0.2.2-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.1-fork3/deepseek-ai-dsh-experimental-client-ui-agent-team-0.2.2-rc.1-fork1.tgz
-    patchOnly: true
-    required: true
-  - package: "@deepseek-ai/dsh-experimental-agent-team-profile"
-    scope: profile
-    policy: registry
-    version: 0.2.2-rc.1
-    patchOnly: true
   - package: "@deepseek-ai/dsh-tool-executor-ptc"
     scope: global-override
     policy: release
     version: 0.2.2-rc.1-fork1
     url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.1-fork2/deepseek-ai-dsh-tool-executor-ptc-0.2.2-rc.1-fork1.tgz
     resetSelectors: true
-  - package: "@deepseek-ai/dsh-experimental-client-ui-agent-team"
-    scope: global-override
-    policy: release
-    version: 0.2.2-rc.1-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.1-fork3/deepseek-ai-dsh-experimental-client-ui-agent-team-0.2.2-rc.1-fork1.tgz
-    resetSelectors: true
-runtimeVersion: 0.2.2-rc.1
+runtimeVersion: 0.2.2-rc.5
 retiredGlobalOverrides:
   - "@deepseek-ai/dsh-client-ui-settings"
+  - "@deepseek-ai/dsh-experimental-agent-team"
+  - "@deepseek-ai/dsh-experimental-tool-agent-team"
+  - "@deepseek-ai/dsh-experimental-client-ui-agent-team"
+  - "@deepseek-ai/dsh-agent-loop"
+  - "@deepseek-ai/dsh-tools"

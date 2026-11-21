@@ -23,8 +23,6 @@ const sources = {
   '@deepseek-ai/dsh-tool-todo': 'packages/todo/tool-todo/src/index.ts',
   '@deepseek-ai/dsh-tool-web': 'packages/web/tool-web/src/index.ts',
   '@deepseek-ai/dsh-agent-tool-presentation': 'packages/core/agent-tool-presentation/src/index.ts',
-  '@deepseek-ai/dsh-experimental-agent-team': 'packages/experimental/agent-team/src/index.ts',
-  '@deepseek-ai/dsh-experimental-tool-agent-team': 'packages/experimental/tool-agent-team/src/index.ts',
   web: 'packages/web/web/src/index.ts',
   'ui-settings-general': 'packages/client/ui-settings-general/src/index.ts',
   'ui-conversation': 'packages/client/ui-conversation/src/index.ts',

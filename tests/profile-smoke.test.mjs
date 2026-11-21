@@ -35,9 +35,10 @@ test('probe Agent creation explicitly mounts its selected preset before publicat
 });
 
 function catalog(team) {
-  return [...(team ? ['spawn_teammate', 'list_agent_models', 'wait_agent', 'team_task_create', 'team_task_list', 'team_task_get', 'team_task_update'] : ['subagent', 'subagent_fork']),
-    'send_message', 'list_agents', 'interrupt_agent', 'workflow', 'ralph', 'context_compress']
-    .map(name => ({ name, parameters: { type: 'object', properties: name === 'send_message' ? { [team ? 'target' : 'agent_id']: {} } : name === 'spawn_teammate' ? { provider: {}, model: {}, reasoning_effort: {} } : {} } }));
+  return ['subagent', 'subagent_fork', 'list_subagent_models', 'wait_agent', 'send_message', 'list_agents', 'interrupt_agent', 'workflow', 'ralph', 'context_compress',
+    ...(team ? ['team_task_create', 'team_task_list', 'team_task_get', 'team_task_update'] : [])]
+    .map(name => ({ name, parameters: { type: 'object', properties: name === 'send_message' ? { agent: {} }
+      : name === 'subagent' ? { provider: {}, model: {}, reasoning_effort: {} } : {} } }));
 }
 const runtimeRows = [{ id: 'ptc-runtime',
   name: '@deepseek-ai/dsh-ptc-runtime-node', config: { executionMode: 'per-call' } }];
@@ -55,33 +56,42 @@ test('Web smoke exchanges the launch token and sends its cookie to the clean ind
   assert.equal(headers.cookie, 'fixture=value');
 });
 
-test('profile assertions reject Team leakage, wrong message implementation and absent ACP SDK', () => {
-  assert.equal(verifyToolCatalog('standard-ptc', catalog(false), assembly).ptc, true);
-  assert.equal(verifyToolCatalog('standard-ptc-team', catalog(true), assembly).acp, true);
-  assert.throws(() => verifyToolCatalog('standard-ptc', [...catalog(false), { name: 'spawn_teammate' }], assembly), /unexpected spawn_teammate/);
-  assert.throws(() => verifyToolCatalog('standard-ptc-team', catalog(true).filter(row => row.name !== 'list_agent_models'), assembly), /missing list_agent_models/);
-  const noModel = catalog(true);
-  delete noModel.find(row => row.name === 'spawn_teammate').parameters.properties.model;
-  assert.throws(() => verifyToolCatalog('standard-ptc-team', noModel, assembly), /missing spawn model field model/);
-  const wrong = catalog(true);
-  wrong.find(row => row.name === 'send_message').parameters = { type: 'object', properties: { agent_id: {} } };
-  assert.throws(() => verifyToolCatalog('standard-ptc-team', wrong, assembly), /wrong send_message/);
-  assert.throws(() => verifyToolCatalog('standard-ptc', catalog(false), { ...assembly, sections: [] }), /PTC SDK/);
-  assert.throws(() => verifyToolCatalog('standard-ptc', catalog(false), { ...assembly, sections: [
+test('profile assertions check the explicit Team mode independently of the preset', () => {
+  const id = 'standard-ptc-team';
+  const off = { teamEnabled: false }, on = { teamEnabled: true };
+  assert.equal(verifyToolCatalog(id, catalog(false), assembly, off).teamEnabled, false);
+  assert.equal(verifyToolCatalog(id, catalog(true), assembly, on).teamEnabled, true);
+  assert.throws(() => verifyToolCatalog(id, catalog(true), assembly, off), /unexpected team_task_/);
+  assert.throws(() => verifyToolCatalog(id, catalog(false), assembly, on), /missing team_task_/);
+  assert.throws(() => verifyToolCatalog(id, catalog(false), assembly), /Team mode must be specified/);
+  for (const options of [off, on]) {
+    const schemas = () => catalog(options.teamEnabled);
+    for (const name of ['subagent', 'subagent_fork', 'list_subagent_models', 'wait_agent']) {
+      assert.throws(() => verifyToolCatalog(id, schemas().filter(row => row.name !== name), assembly, options), new RegExp('missing ' + name));
+    }
+    const noModel = schemas();
+    delete noModel.find(row => row.name === 'subagent').parameters.properties.model;
+    assert.throws(() => verifyToolCatalog(id, noModel, assembly, options), /missing spawn model field model/);
+    const wrong = schemas();
+    wrong.find(row => row.name === 'send_message').parameters = { type: 'object', properties: { target: {} } };
+    assert.throws(() => verifyToolCatalog(id, wrong, assembly, options), /wrong send_message/);
+  }
+  assert.throws(() => verifyToolCatalog(id, catalog(false), { ...assembly, sections: [] }, off), /PTC SDK/);
+  assert.throws(() => verifyToolCatalog(id, catalog(false), { ...assembly, sections: [
     { name: 'active-context', text: 'Use context_compress for completed work.' },
     { name: 'tools:sdk', text: 'tools.list_agents' },
-  ] }), /PTC SDK/);
-  assert.throws(() => verifyToolCatalog('standard-ptc', [...catalog(false), catalog(false)[0]], assembly), /duplicate/);
+  ] }, off), /PTC SDK/);
+  assert.throws(() => verifyToolCatalog(id, [...catalog(false), catalog(false)[0]], assembly, off), /duplicate/);
 });
 
 test('PTC wire tools include only the transport and configured native exceptions, independently of registry schemas', () => {
   const schemas = [...catalog(false), { name: 'fixture_probe' }];
   const nativeTools = ['fixture_probe', 'context_compress'];
   const wire = { ...assembly, tools: ['run_code', ...nativeTools].map(name => ({ name })) };
-  verifyToolCatalog('standard-ptc', schemas, wire, { nativeTools });
-  assert.throws(() => verifyToolCatalog('standard-ptc', schemas, { ...wire, tools: schemas }, { nativeTools }), /PTC transport/);
-  assert.throws(() => verifyToolCatalog('standard-ptc', schemas, { ...wire, tools: assembly.tools }, { nativeTools }), /model-visible PTC tools/);
-  assert.throws(() => verifyToolCatalog('standard-ptc', schemas, { ...wire, tools: [...wire.tools, { name: 'subagent' }] }, { nativeTools }), /model-visible PTC tools/);
+  verifyToolCatalog('standard-ptc', schemas, wire, { teamEnabled: false, nativeTools });
+  assert.throws(() => verifyToolCatalog('standard-ptc', schemas, { ...wire, tools: schemas }, { teamEnabled: false, nativeTools }), /PTC transport/);
+  assert.throws(() => verifyToolCatalog('standard-ptc', schemas, { ...wire, tools: assembly.tools }, { teamEnabled: false, nativeTools }), /model-visible PTC tools/);
+  assert.throws(() => verifyToolCatalog('standard-ptc', schemas, { ...wire, tools: [...wire.tools, { name: 'subagent' }] }, { teamEnabled: false, nativeTools }), /model-visible PTC tools/);
 });
 
 test('prompt rendering failures name the preset that would fail its first model request', () => {
@@ -128,7 +138,6 @@ test('dump assertions require the isolated bind and reject global Team tools', (
   duplicate[2].config.plugins.pop();
   duplicate[2].config.plugins[0].name = '@deepseek-ai/dsh-tool-executor-ptc';
   assert.throws(() => verifyDumpConfiguration(duplicate, ['standard-ptc']), /one progressive PTC executor/);
-  assert.throws(() => verifyDumpConfiguration([...rows, { id: 'tool-agent-team' }], ['standard-ptc']), /global Team/);
   assert.throws(() => verifyDumpConfiguration([...runtimeRows, { ...rows[1], config: { host: '127.0.0.1', port: 53083 } }, rows[2]], ['standard-ptc']));
 });
 

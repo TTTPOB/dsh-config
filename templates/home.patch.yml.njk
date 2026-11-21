@@ -70,16 +70,6 @@
 - insert:
     - id: mcp-panel
       name: dsh-mcp-panel
-- insert:
-    - id: agent-team
-      name: "@deepseek-ai/dsh-experimental-agent-team"
-      config:
-        maxMembers: 8
-        maxTasks: 256
-        maxMessageBytes: 65536
-        disposalTimeoutMs: 5000
-    - id: ui-agent-team
-      name: "@deepseek-ai/dsh-experimental-client-ui-agent-team"
 - id: llm-pi-ai
   config:
     providers:
@@ -112,7 +102,7 @@
         headers: !!js JSON.parse(process.getBuiltinModule('fs').readFileSync([[ machine.mcp.siyuan.headersFile | quote ]], 'utf8'))
         toolCallTimeoutMs: 60000
         failOnStartupError: false
-[% macro preset(entryId, presetId, name, description, order, overlay, promptSections, team=false) %]
+[% macro preset(entryId, presetId, name, description, order, overlay, promptSections) %]
 - insert:
     - id: [[ entryId | quote ]]
       name: "@deepseek-ai/dsh-agent-preset"
@@ -222,15 +212,6 @@
             isolate:
               workflowEngine: true
             config:
-[% if team %]
-              - id: tool-agent-team
-                name: "@deepseek-ai/dsh-experimental-tool-agent-team"
-                config:
-                  freshProvider: spawn
-                  freshAgentOptions: [[ machine.subagentDefault | dump ]]
-                  forkProvider: fork
-                  modelSelectionSettings: true
-[% else %]
               - id: tool-subagent-control
                 name: '@deepseek-ai/dsh-tool-subagent-control'
               - id: tool-subagent
@@ -263,7 +244,6 @@
                   toolName: subagent_claude_code
                   backgroundMode: one-shot
                   maxDepth: provider-managed
-[% endif %]
               - id: workflow-ptc
                 name: '@deepseek-ai/dsh-workflow-ptc'
                 config:
@@ -311,7 +291,7 @@
 [% endif %]
 [% endmacro %]
 [[ preset("preset-standard-ptc", "standard-ptc", "日用", "功能完整的编码 Agent，支持文件编辑、Shell、网页检索、Skills、计划、子代理和工作流。", 5, false, none) ]]
-[[ preset("preset-standard-ptc-team", "standard-ptc-team", "日用+Team", "使用 Agent Teams 协作，保留工作流与 Ralph，不挂载普通子代理控制工具。", 7, false, none, true) ]]
+[[ preset("preset-standard-ptc-team", "standard-ptc-team", "兼容旧Team模式会话用 日常不要选择", "仅供已有旧 Team 模式会话继续使用。日常请选择「日用」，需要任务看板时在会话中开启 Team 模式。", 7, false, none) ]]
 [% if machine.features.sessionTools %]
 - id: tool-session-query
   disabled: true
