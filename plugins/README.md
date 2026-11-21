@@ -12,18 +12,17 @@ Word 的 TypeScript 源码位于 [plugins-src/word](<../plugins-src/README.md>)�
 
 ## 运行时工具指引
 
-[runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`output`、`background`、`child`、`teammate`、`sdkMessage`。工具 schema 和运行时权限仍决定实际可调用能力。
+[runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`output`、`background`、`child`、`sdkMessage`。工具 schema 和运行时权限仍决定实际可调用能力。
 
 各段的出现条件：
 
 | 段 | 出现条件 | 内容 |
 | --- | --- | --- |
-| `background` | 可用后台 job，或可见 `subagent`／`spawn_teammate`，或可见 `send_message` | job、委派的 agent 和发给自己的消息都会开启下一轮；只剩等待时结束本轮，不轮询 |
-| `child` | 自己是 continuable 子代理，`send_message` 以 `agent_id` 寻址 | 用 `send_message` 把报告发给父 agent，再以极短确认结束 |
-| `teammate` | 自己是 Agent Teams 的 teammate，`send_message` 以 `target` 寻址 | 同上，收件人是 Lead |
-| `sdkMessage` | PTC SDK 模式且已选中 `child` 或 `teammate` | `send_message` 是 SDK 绑定，须在程序内调用 |
+| `background` | 可用后台 job，或可见 `subagent`，或可见 `send_message` | job、委派的 agent 和发给自己的消息都会开启下一轮；只剩等待时结束本轮，不轮询 |
+| `child` | 自己是 continuable 子代理，`send_message` 按 `agent` 名称寻址 | 用 `send_message` 按身份段中的名字把报告发给父 agent，再以极短确认结束 |
+| `sdkMessage` | PTC SDK 模式且已选中 `child` | `send_message` 是 SDK 绑定，须在程序内调用 |
 
-`child` 与 `teammate` 要求显式发送报告，是因为轮次结束通知并不总能送达：子代理写最终输出时若有新消息到达，该轮不算结束，输出不会投递给父 agent。发送后只留极短确认，避免正文重复投递。
+`child` 要求显式发送报告，是因为写报告时收到新消息可能再开一轮，父 agent 最终收到的是最后一轮的回复。发送后只留极短确认，避免正文重复投递。
 
 ## Team 协作提示
 

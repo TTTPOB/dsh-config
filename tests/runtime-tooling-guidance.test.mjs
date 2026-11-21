@@ -19,6 +19,39 @@ test("validates only supported literal wording overrides", () => {
     { text: { native: " " } }, { text: { child: 1 } }, { rules: [] }]) assert.ok(validate(input).issues);
 });
 
+test("parent reporting requires name-based messaging and follows the PTC SDK", async () => {
+  let hook;
+  let section;
+  const child = { session: { header: { parentSession: "parent" }, isOwnSeq: seq => seq === 4 } };
+  let properties;
+  const services = {
+    agents: { get: id => id === "parent" ? {} : undefined },
+    sessionProjections: { snapshot: () => ({ values: { subagent: { mode: "continuable", seq: 4 } } }) },
+    ptcRuntime: { language: "typescript" },
+  };
+  const text = { child: "fixture parent report", sdkMessage: "fixture SDK note" };
+  Plugin.apply({
+    effect: callback => callback(),
+    on: (_event, handler) => { hook = handler; },
+    systemPrompt: { getSectionOrder: () => 0, section: value => { section = value; } },
+    tools: { schemas: () => [{ name: "send_message", parameters: { properties } }] },
+    get: name => services[name],
+  }, Plugin.Config["~standard"].validate({ text }).value);
+  async function assemble(agent, ptc) {
+    const sections = [section, ...(ptc ? [{ name: "tools:ptc-only", text: "PTC" }, { name: "tools:sdk", text: "SDK" }] : [])];
+    const result = await hook({}, { agent }, async () => ({ sections }));
+    return result.sections.find(row => row.name === Plugin.SECTION)?.text ?? "";
+  }
+  properties = { agent: { type: "string" }, message: { type: "string" } };
+  const native = await assemble(child, false);
+  assert.ok(native.includes(text.child));
+  assert.ok(!native.includes(text.sdkMessage));
+  assert.ok((await assemble(child, true)).endsWith(text.child + "\n\n" + text.sdkMessage));
+  assert.ok(!(await assemble(undefined, true)).includes(text.child));
+  properties = { agent_id: properties.agent, message: properties.message };
+  assert.ok(!(await assemble(child, true)).includes(text.child));
+});
+
 test("installed Loader selects fresh runtime capabilities without changing tools or SDK", {
   skip: !process.env.DSH_CLI_PACKAGE,
 }, async t => {
@@ -78,7 +111,7 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   register("edit");
   register("bash", { run_in_background: { type: "boolean" } });
   for (const name of ["job_output", "job_kill"]) register(name, { job_id: { type: "string", required: true } });
-  register("send_message", { agent_id: { type: "string", required: true }, message: { type: "string", required: true } });
+  register("send_message", { agent: { type: "string", required: true }, message: { type: "string", required: true } });
   // Agent handles and model options are fixtures; no Host or model request is started.
   async function agent(id, header = {}, options = {}) {
     const key = {};
@@ -167,25 +200,6 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   const messageOnlyTools = child.ctx.tools.restrict({ deny: ["bash", "job_output", "job_kill"] });
   selected(await assemble(child), ["native", "background", "child"]);
   messageOnlyTools();
-  const teammateMessaging = shadow("send_message", { target: { type: "string", required: true }, message: { type: "string", required: true } });
-  selected(await assemble(child), ["native", "background", "teammate"]);
-  for (const nonChild of [root, oneShot, orphan, inherited]) {
-    const messaging = nonChild.ctx.tools.register(defineTool({
-      name: "send_message", description: "Team messaging", parameters: { target: { type: "string" }, message: { type: "string" } },
-      output: { schema: { type: "string" }, render: () => [] }, execute() { throw new Error("No execution"); },
-    }));
-    selected(await assemble(nonChild), ["native", "background"]);
-    messaging();
-  }
-  await selectExecutor(PtcExecutor);
-  const teammateSdk = await assemble(child);
-  selected(teammateSdk, ["typescript", "output", "background", "teammate", "sdkMessage"]);
-  assert.ok(guidance(teammateSdk).endsWith(wording.teammate + "\n\n" + wording.sdkMessage));
-  await selectExecutor(NativeExecutor);
-  teammateMessaging();
-  const bothRecipients = shadow("send_message", { agent_id: { type: "string" }, target: { type: "string" }, message: { type: "string" } });
-  selected(await assemble(child), ["native", "background", "child"]);
-  bothRecipients();
   const noMessagingParameters = shadow("send_message", {});
   selected(await assemble(child), ["native", "background"]);
   noMessagingParameters();
@@ -197,15 +211,13 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   await selectExecutor(PtcExecutor);
   selected(await assemble(child), ["typescript", "output"]);
   await selectExecutor(NativeExecutor);
-  for (const name of ["subagent", "spawn_teammate"]) {
-    register(name);
-    selected(await assemble(child), ["native", "background"]);
-    await selectExecutor(PtcExecutor);
-    selected(await assemble(child), ["typescript", "output", "background"]);
-    await selectExecutor(NativeExecutor);
-    disposers[name]();
-    delete disposers[name];
-  }
+  register("subagent");
+  selected(await assemble(child), ["native", "background"]);
+  await selectExecutor(PtcExecutor);
+  selected(await assemble(child), ["typescript", "output", "background"]);
+  await selectExecutor(NativeExecutor);
+  disposers.subagent();
+  delete disposers.subagent;
   restrict();
   const complete = child.ctx.systemPrompt.section({ name: "complete", order: 0, complete: true, interpolate: false, text: "authoritative" });
   assert.equal(renderPrompt(await assemble(child)), "authoritative");
