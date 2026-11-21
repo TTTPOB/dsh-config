@@ -39,11 +39,11 @@ node dsh-config/scripts/dsh-config.mjs doctor --machine workstation
 node dsh-config/scripts/dsh-config.mjs update --machine workstation --verbose
 ```
 
-测试范围按当前组合确定。[0.2.2-rc.1 组合验收](<upgrade-0.2.2-rc.1.md>)记录上一次升级的组合、命令与覆盖范围，可作参考；更早的记录从 Git 历史查阅。
+测试范围按当前组合确定。[当前组合验收](<upgrade-0.2.2-rc.5.md>)记录本次升级范围与验收进度；较早记录从 Git 历史查阅。
 
 ## 3. 每次重建分支都核对的 fork 文件
 
-下列路径相对**各自源码仓库根**。从旧 fork 到新基线逐项核对、移植或适配；不能只 cherry-pick 产品代码。确已被上游覆盖的项记录撤除依据，不机械复制旧实现。
+下列路径相对**各自源码仓库根**。合并新基线后按能力组核对、移植或适配；不要漏掉交付脚本和测试。确已被上游覆盖的项记录撤除依据，不机械复制旧实现。
 
 **DeepSeek Harness：**
 
@@ -55,7 +55,6 @@ scripts/daily-driver.mjs                 scripts/daily-driver.test.mjs
 scripts/daily-driver-plan.mjs
 scripts/daily-driver-source.mjs          scripts/daily-driver-source.test.mjs
 scripts/daily-driver-pi.mjs              scripts/daily-driver-pi.test.mjs
-scripts/upgrade-daily-driver.mjs         scripts/upgrade-daily-driver.test.mjs
 pnpm-workspace.yaml                     pnpm-lock.yaml
 ```
 

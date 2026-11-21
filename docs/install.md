@@ -14,7 +14,7 @@ pnpm check --machine workstation
 
 服务器使用 `--machine server`，NAS 使用 `--machine nas`。通过私有通道保存各机 `private/machines/<name>/machine.yaml`；保留各机 MCP、relay、模型、认证引用、浏览器路径和专属插件。服务器不因共用配置更新而增加工作机的逆向 preset、session-tools 或 mobile。不要同步 credentials、sessions、storages、数据库或附件。
 
-当前配置目标为 DSH `0.2.2-rc.1`，组合和验收结果见[当前组合验收](<upgrade-0.2.2-rc.1.md>)。目标版本和来源由[依赖清单](<../shared/dependencies.yaml>)选定，按包名、包版本和实际资产 URL 核对。Release tag 里的 fork 号是发布批次编号，与包版本里的 fork 号无关：
+当前配置目标为 DSH `0.2.2-rc.5`，组合和验收结果见[当前组合验收](<upgrade-0.2.2-rc.5.md>)。目标版本和来源由[依赖清单](<../shared/dependencies.yaml>)选定，按包名、包版本和实际资产 URL 核对。Release tag 里的 fork 号是发布批次编号，与包版本里的 fork 号无关：
 
 | 包类型 | 安装方式 | 正式来源 |
 |---|---|---|
@@ -26,7 +26,7 @@ pnpm check --machine workstation
 
 清单中 `patchOnly: true` 的包保留 profile dependency，但移除重复的 profile bundle 激活；MCP Panel、mobile 等仍通过 bundle 贡献客户端行的包不受影响。共用插件与 preset 声明在 `$DSH_HOME/cordis.patch.yml`；真正 profile 特化的配置留在对应 profile patch。依赖安装在 profile 不表示配置属于该 profile。覆盖既有行的 `config` 是整个对象替换；保留该行需要的全部配置键和 `!!js` 表达式。
 
-模板不渲染界面拥有的字段（`.volatile()`）：设置页只能写这些字段，并写进 profile patch，模板再钉住它们就只会在下一次 apply 被覆盖。归属划分与列表见 [README 的配置归属](<../README.md#配置归属模板界面与机器>)。apply 写 patch 时保留 live 中模板不产生的行，删除只由机器参数 `rowOps.<layer>.retire` 生效；锚点的作用范围、分层与限制见 [README 的 rowOps.retire](<../README.md#按-id-保留与删除顶层行rowopsretire>)。预览会列出保留行与生效的移除锚点。
+模板不渲染界面拥有的字段（`.volatile()`）：设置页只能写这些字段，并写进 profile patch，模板再钉住它们就只会在下一次 apply 被覆盖。归属划分与列表见 [README 的配置归属](<../README.md#配置归属模板界面与机器>)。apply 写 patch 时保留 live 中模板不产生的行，删除由共用迁移和机器参数 `rowOps.<layer>.retire` 指定；锚点的作用范围、分层与限制见 [README 的 rowOps.retire](<../README.md#按-id-保留与删除顶层行rowopsretire>)。预览会列出保留行与生效的移除锚点。
 
 ### 本地 ESM 插件
 

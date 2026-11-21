@@ -25,7 +25,7 @@ node scripts/dsh-config.mjs update --machine workstation
 - [正式安装与更新](docs/install.md)：机器参数、目标来源、doctor、显式 apply、精确豁免和维护切换。Doctor/update 默认突出变化与问题，`--verbose` 展开完整明细，`--json` 独立切换输出格式。
 - [隔离成品测试](docs/testing.md)：源码聚焦验证、本地 tarball 测试副本及已有 smoke。
 - [上游升级手册](<docs/upstream-upgrade.md>)：基线盘点、fork 文件、验证与 Actions 发布顺序、授权边界和已知阻塞。
-- [0.2.2-rc.1 组合验收](<docs/upgrade-0.2.2-rc.1.md>)：该次验收的成品组合、已执行验证与未覆盖项；旧记录从 Git 历史查阅。
+- [0.2.2-rc.5 组合验收](<docs/upgrade-0.2.2-rc.5.md>)：升级步骤与组合验收状态；旧记录从 Git 历史查阅。
 
 ## 配置与依赖归属
 
@@ -42,7 +42,7 @@ node scripts/dsh-config.mjs update --machine workstation
 
 `private/`、`generated/` 和真实参数均被 Git 忽略。公开示例没有真实端点或凭据；新机器从示例开始，私有参数通过私有通道传递。会话、数据库、索引、缓存和 storages 不同步。
 
-机器参数提供 `features`、`mcp`、`subagentModels`、`subagentDefault`、`providers`、`rowOps`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。对话默认模型不在机器参数里：它属于会话与界面的状态。`subagentDefault` 是 fresh `subagent` 与 Team fresh teammate 未指定模型时的路由，避免新子代理静默沿用较贵的父模型；`subagent_fork` 不配置它，继续沿用父路由以复用对话前缀。日用（id `standard-ptc`）、日用+Team 和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。provider 目录由 [shared/providers.yaml](shared/providers.yaml) 共用，机器只写 add／set／remove 差异：set 只覆盖该 provider 的顶层键，嵌套值（如 models）整体替换；专属 MCP 行仍保留为私有输入，不进行通用深合并。
+机器参数提供 `features`、`mcp`、`subagentModels`、`subagentDefault`、`providers`、`rowOps`、`homePrivate`／`webPrivate`；启用额外提示词 preset 时提供 `promptSections`，见[提示词模块](plugins/README.md)。对话默认模型不在机器参数里：它属于会话与界面的状态。`subagentDefault` 是 fresh `subagent` 未指定模型时的路由，避免新子代理静默沿用较贵的父模型；`subagent_fork` 不配置它，继续沿用父路由以复用对话前缀。日用（id `standard-ptc`）、旧 Team 会话兼容项和日用+逆向 preset 共用模板，逆向模式追加提示词插件。preset 显示名可以随意改；id 写在已有会话里，改 id 会让旧会话找不到原 preset。provider 目录由 [shared/providers.yaml](shared/providers.yaml) 共用，机器只写 add／set／remove 差异：set 只覆盖该 provider 的顶层键，嵌套值（如 models）整体替换；专属 MCP 行仍保留为私有输入，不进行通用深合并。
 
 共用 `klaude-openai.compat` 将 `maxConsecutiveWhitespaceChars` 和 `maxRepeatedPatternChars` 均设为 2000，限制每个 Responses 输出项的连续空白与短周期重复；其他 provider 保持 pi-ai 默认阈值。对应 pi-ai 与 DSH 适配器的精确成品由依赖清单统一选择。
 
@@ -50,13 +50,13 @@ node scripts/dsh-config.mjs update --machine workstation
 
 [共用默认配置](<shared/defaults.yaml>)和机器参数的 `localPlugins` 将仓库内小型 ESM 模块纳入 render/check 和 update 文件计划；显式 apply 与配置 patch 一同备份、写入和回滚，不增加 npm 依赖。见[安装声明](<docs/install.md#本地-esm-插件>)、[中性示例](<examples/local-plugins-machine.yaml>)和[本机插件目录](<plugins/README.md>)。源码不包含机器端点或凭据，认证继续引用目标机器已有 headers JSON。Word 与 PowerPoint 的 TypeScript 与 Markdown 源码、构建和产物检查见[本地插件源码](<plugins-src/README.md>)。
 
-0.2.2-rc.1 使用 scoped progressive executor：Host 挂载一次 discovery 与 Native executor，每个自定义 PTC preset 挂载 `dsh-progressive-tools/ptc` 并禁用上游 executor；PTC 配置保留并行限制及 `context_compress`／`mcp_probe` 原生例外。共用有序 toolDisclosureRules 让普通工具 eager、mcp__* 和 siyuan_* deferred。版本和缺来源原因由[依赖清单](<shared/dependencies.yaml>)选定。
+0.2.2-rc.5 使用 scoped progressive executor：Host 挂载一次 discovery 与 Native executor，每个自定义 PTC preset 挂载 `dsh-progressive-tools/ptc` 并禁用上游 executor；PTC 配置保留并行限制及 `context_compress`／`mcp_probe` 原生例外。共用有序 toolDisclosureRules 让普通工具 eager、mcp__* 和 siyuan_* deferred。版本和缺来源原因由[依赖清单](<shared/dependencies.yaml>)选定。
 
 ### 运行时工具指引
 
 [runtime-tooling-guidance.mjs](<plugins/runtime-tooling-guidance.mjs>) 按当前工具模式、PTC 语言与子代理身份加入适用的简短指引，替代 agentsmd 中整段静态 tooling 说明。在[共用默认配置](<shared/defaults.yaml>)中声明一次，各机沿原 apply 流程部署到目标 home；配置和验证见[本地插件说明](<plugins/README.md#运行时工具指引>)；不改变工具权限或执行行为。
 
-[team-wake-guidance.mjs](<plugins/team-wake-guidance.mjs>) 同样在共用默认配置中声明，只对 Agent Teams 预设生效：把上游 Team 提示词里引导 Lead 用 `wait_agent` 等待的句子，换成“哪些事件会开启下一轮”的说明。见[本地插件说明](<plugins/README.md#team-唤醒指引>)。
+[Team 协作提示](<plugins/README.md#team-协作提示>)仅在当前 Agent 的根会话开启 Team 模式时注入。
 
 ### Provider 路由提示词
 
@@ -124,18 +124,18 @@ overrides:
     presets:
       standard-ptc-team:
         tool-web: { disabled: false }
-        delegation/tool-agent-team: { disabled: true }
+        delegation/tool-subagent-fork: { disabled: true }
 ```
 
-`all` 应用于每个已生成 preset；`presets` 以 preset 的 `config.id` 为键，特化值优先于 `all`，即使两个 selector 用不同写法指向同一行。上例在日用和逆向禁用内置网页工具，在 Team 中重新启用；三个 preset 都禁用 Ralph，只有 Team 禁用 Team 工具。日用、Team、可选逆向继续使用同一模板宏。
+`all` 应用于每个已生成 preset；`presets` 以 preset 的 `config.id` 为键，特化值优先于 `all`，即使两个 selector 用不同写法指向同一行。上例在日用和逆向禁用内置网页工具，在旧 Team 会话兼容项中重新启用；三个 preset 都禁用 Ralph，只有兼容项禁用 fork 子代理。日用、兼容项、可选逆向继续使用同一模板宏。
 
-selector 可以是 preset 内递归唯一的 entry `id`，或从根开始、以 `/` 分隔的完整 group 路径，例如 `delegation/tool-ralph`；group 行本身也可禁用。路径只写 group/entry id，不写 `config` 或 `plugins`。每个 selector 在每个适用 preset 内必须恰好匹配一行；Team 专属项放在 Team 的特化配置里。未知 preset、未匹配或歧义 selector、同一层多个 selector 指向同一行、非布尔 `disabled` 和额外字段均报错。
+selector 可以是 preset 内递归唯一的 entry `id`，或从根开始、以 `/` 分隔的完整 group 路径，例如 `delegation/tool-ralph`；group 行本身也可禁用。路径只写 group/entry id，不写 `config` 或 `plugins`。每个 selector 在每个适用 preset 内必须恰好匹配一行。未知 preset、未匹配或歧义 selector、同一层多个 selector 指向同一行、非布尔 `disabled` 和额外字段均报错。
 
 每项仅允许 `{ disabled: true | false }`，不合并或替换 `config`。未指定行保持原值，包括原有 `!!js` 表达式；显式布尔值可覆盖该行的表达式。未配置本功能时输出保持不变。NAS 参数就绪后，用 `node scripts/dsh-config.mjs check --machine nas` 做只读结构检查；`render --machine nas` 写入私有暂存，不部署或连接 NAS。
 
 两机会话标题在 Home patch 中统一使用共用 `defaults.sessionTitle` 配置，Web profile 不重复声明，私有输入不再保留旧标题覆盖。标题固定为 `deepseek-official/deepseek-flash`，输入上限 65536 字节、输出上限 64 tokens、超时 60000 毫秒；沿用官方标题插件自动选择最低推理档位的行为（该模型为 `off`），不随聊天模型选择器变化。
 
-`standard-ptc-team` 的 `spawn_teammate` 支持逐次指定 `provider`、`model` 和 `reasoning_effort`，通过 `list_agent_models` 查询可用路由。Team 与普通 Subagent 共用 Host 的 `subagent-model-selection-settings`，授权策略在新 Session 中确定并持久保存；更新后新建 Team Session 使用此能力。未指定模型时继承 Lead 当前设置，切换路由而未指定 effort 时使用目标模型默认值。
+Team 模式在根会话中开启，同一树的普通子代理共享任务看板。日常请选择「日用」；`standard-ptc-team` 仅用于继续旧会话。使用 `list_subagent_models` 查询当前可用路由，再用 `subagent` 的 `provider`、`model` 和 `reasoning_effort` 参数逐次选模。
 
 可选 `acp.pressureDefault: { nudgeAtRatio: 0.70, resetBelowRatio: 0.65 }` 为未列出模型设置最大上下文比例阈值；`pressureRoutes` 保持精确路由绝对 token 覆盖。`features.activeContext: true` 选择 ACP，与 `features.sessionTools` 独立；未填写或为 false 时保留 Basic。见[公开 ACP 示例](<examples/active-context-machine.yaml>)和[ACP 配置与验收](<docs/install.md#active-context-pruningacp>)。
 
