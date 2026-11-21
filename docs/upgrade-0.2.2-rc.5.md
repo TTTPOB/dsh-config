@@ -13,7 +13,7 @@
 
 不登记任何豁免时，隔离 Web 安装可以完成，但 rc.5 启动预检会禁用 8 个以精确版本依赖 fork 包的插件行，Host 因缺少必需服务无法启动。只放行这 8 项后 Host 能启动，加载 preset 时又会禁用 `dsh-tool-subagent-control`，`send_message` 随之缺失。官方诊断形如 `dsh: disabling profile plugin row "…": Plugin … is incompatible with dsh 0.2.2-rc.5: requirements …`，末尾为 `Exact-version exemption: not active.`。
 
-[依赖清单的 `verifiedCompatibility`](<../shared/dependencies.yaml>) 只记录实际被拒的这 9 个精确包版本，限定运行时 `0.2.2-rc.5`。组合 smoke 按清单在隔离 profile 内调用官方 `dsh plugin --profile web allow-version <包名@版本> --dsh-version 0.2.2-rc.5 --accept-risk`；未登记的包和本地构建版本不会获得豁免。
+NAS 首次 apply 时，安装后的 doctor 按每个已安装 fork 包声明的 DSH peer 检查兼容性，除上述 9 项外还拦截了 `dsh-host-frontend-static`、`dsh-session-query` 和 `dsh-tool-executor-ptc`，apply 随即自动回滚。[依赖清单的 `verifiedCompatibility`](<../shared/dependencies.yaml>) 记录 doctor 实际拦截的这 12 个精确包版本，限定运行时 `0.2.2-rc.5`；这 3 个包在组合 smoke 中已安装并参与运行。组合 smoke 按清单在隔离 profile 内调用官方 `dsh plugin --profile web allow-version <包名@版本> --dsh-version 0.2.2-rc.5 --accept-risk`；未登记的包和本地构建版本不会获得豁免。
 
 ## 组合验收结果
 

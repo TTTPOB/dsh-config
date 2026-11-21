@@ -104,7 +104,7 @@ rowOps:
 | 作用范围 | 仅顶层 patch 行：插件 insert 条目、`- id: x` 覆盖行、`{id, insert:[...]}` 分组行都可按 id 命中；**不进入 preset 的嵌套插件行** |
 | 分层 | `rowOps.home` 与 `rowOps.web` 独立；同一 id 在两层各有一份时必须 retire 源层 |
 | 匹配 | 精确 id，不支持路径、前缀或 glob |
-| 幂等 | id 不存在时是 no-op，墓碑可以保留 |
+| 幂等 | id 不存在时是 no-op；所有机器 apply 后确认该行已消失，即可删除墓碑 |
 | 不能表达 | `disabled`（用模板或 `presetRows` 表达）；嵌套行删除（用 `presetRows` 的 selector） |
 
 两条使用规则：**从模板删行**只让它变成"保留行"，必须再加 retire 才会消失；**把行从 profile 搬到 home**（或反向）必须在源层 retire，否则旧副本会作为保留行长期存在。

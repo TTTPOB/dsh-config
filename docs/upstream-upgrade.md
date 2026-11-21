@@ -110,5 +110,6 @@ pnpm-workspace.yaml / pnpm-lock.yaml（仓库实际采用的文件）
 | 插件发布消费者向 registry 请求未发布 fork 版本 | pack 可能把 `workspace:*` 固化为精确 fork peer；临时消费者 workspace 补齐 Session／Query／SQLite 等间接依赖的精确 overrides。正式安装已有用户级全局 overrides，不因测试布局失败就改正式依赖归属 |
 | 新分支缺 workflow 或仍走手工上传 | 按上一节清单恢复 fork 自有文件；每个实际发布的源码仓库都必须具备 Actions Release，发布前先补齐 |
 | compatibility 拒绝已验证 fork | 读取官方原始拒绝原因；只记录通过成品行为验证的精确组合，授权方法见[精确兼容豁免](<install.md#精确兼容豁免>)，不批量放行所有 fork |
+| 豁免清单漏项，真实 apply 被 doctor 拦截并回滚 | 豁免清单必须覆盖 doctor 的拦截范围：doctor 检查每个已安装 fork 包声明的 DSH peer，范围大于 Host 启动时实际禁用的插件行；update 预览不报告这类拦截。登记前在隔离 profile 安装完整组合后运行 doctor，以它列出的 `compatibility-blocked` 全集为准。0.2.2-rc.5 只按启动拒绝登记了 9 项，NAS apply 时 doctor 又拦下 3 项并自动回滚 |
 
 最终报告至少给出：各仓库分支／commit／push 状态、Actions 与资产清单、实际测试及未覆盖项、配置提交、真实只读预览、是否 apply／激活、待用户执行的步骤和可清理范围。
