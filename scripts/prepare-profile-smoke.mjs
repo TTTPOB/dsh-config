@@ -95,6 +95,12 @@ function controlledPatch(text) {
     for (const entry of entries) {
       // Disable external clients before Loader evaluates credential-file expressions.
       if (entry.get('name') === '@deepseek-ai/dsh-mcp-client') entry.set('disabled', true);
+      // Keep the index under the disposable DSH home, even with a private path override.
+      if (entry.get('id') === 'session-query-sqlite' && entry.has('config')) {
+        const path = new YAML.Scalar('process.env.DSH_HOME + "/smoke-search.db"');
+        path.tag = 'tag:yaml.org,2002:js';
+        entry.get('config').set('path', path);
+      }
       // Load repository sources, not files deployed to the preview home.
       const local = localPlugins.find(file => file.id === entry.get('id'));
       if (local) entry.set('name', local.source);

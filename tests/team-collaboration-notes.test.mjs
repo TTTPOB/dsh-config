@@ -6,8 +6,13 @@ import { apply } from '../plugins/team-collaboration-notes.mjs';
 
 function mount(getService) {
   let section;
-  apply({ get: getService, systemPrompt: { getSectionOrder: () => 10, section: value => { section = value; } } });
-  return agent => section.text({ agent });
+  apply({ inject: (names, activate) => {
+    assert.deepEqual(names, ['agentTeams']);
+    const agentTeams = getService();
+    if (agentTeams) activate({ agentTeams, effect: run => run(),
+      systemPrompt: { getSectionOrder: () => 10, section: value => { section = value; } } });
+  } });
+  return agent => section?.text({ agent }) ?? '';
 }
 
 test('Team collaboration notes follow the caller tree’s live mode', () => {

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { verifyPromptRendering, verifyToolCatalog } from './profile-smoke-checks.mjs';
 
 export const name = 'dsh-config-profile-smoke';
-export const inject = ['loader', 'webServer', 'agents', 'agentPresets', 'agentDefaultModel', 'tools', 'systemPrompt', 'ptcRuntime', 'pluginPackages'];
+export const inject = ['loader', 'webServer', 'agents', 'agentPresets', 'agentDefaultModel', 'tools', 'systemPrompt', 'ptcRuntime', 'pluginPackages', 'workspaceCordis', 'workspaceEnvrc', 'agentTeams'];
 
 export function apply(ctx, config) {
   let result;

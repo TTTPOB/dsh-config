@@ -15,15 +15,15 @@ export const Config = {
 };
 
 export function apply(ctx) {
-  ctx.systemPrompt.section({
+  ctx.inject(['agentTeams'], scope => scope.effect(() => scope.systemPrompt.section({
     name: 'team:collaboration-notes',
     interpolate: false,
-    order: ctx.systemPrompt.getSectionOrder('TEAM_POLICY') + 1,
+    order: scope.systemPrompt.getSectionOrder('TEAM_POLICY') + 1,
     text({ agent }) {
       if (!agent) return '';
       try {
         // agentTeams is optional; isEnabled resolves the caller's root session.
-        if (!ctx.get('agentTeams')?.isEnabled(agent)) return '';
+        if (!scope.agentTeams.isEnabled(agent)) return '';
       } catch (error) {
         // An independently resumed child may have no live root.
         if (error?.name === 'SubagentError' && error.code === 'UNAUTHORIZED') return '';
@@ -32,5 +32,5 @@ export function apply(ctx) {
       return 'You are notified only when your own direct subagents finish, not when siblings or other agents do. '
         + 'When you need another agent\'s result, ask it to send the result to you with `send_message` when it is done.';
     },
-  });
+  })));
 }
