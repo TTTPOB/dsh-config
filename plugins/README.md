@@ -19,10 +19,12 @@ Word 的 TypeScript 源码位于 [plugins-src/word](<../plugins-src/README.md>)�
 | 段 | 出现条件 | 内容 |
 | --- | --- | --- |
 | `background` | 可用后台 job，或可见 `subagent`，或可见 `send_message` | job、委派的 agent 和发给自己的消息都会开启下一轮；只剩等待时结束本轮，不轮询 |
-| `child` | 自己是 continuable 子代理，`send_message` 按 `agent` 名称寻址 | 用 `send_message` 按身份段中的名字把报告发给父 agent，再以极短确认结束 |
+| `child` | 当前 Agent 是 continuable 子代理、父代理在线，且可见的 `send_message` 有 `agent` 和 `message` 参数 | 用 `send_message` 按身份段中的名字把报告发给父代理，再以极短确认结束 |
 | `sdkMessage` | PTC SDK 模式且已选中 `child` | `send_message` 是 SDK 绑定，须在程序内调用 |
 
-`child` 要求显式发送报告，是因为写报告时收到新消息可能再开一轮，父 agent 最终收到的是最后一轮的回复。发送后只留极短确认，避免正文重复投递。
+**为什么先发消息再简短确认：** rc.5 本地子代理等 Agent 活动和待处理输入都结束后才关闭接纳，自动送达的是最后一轮普通轮次的输出。写报告时若收到消息并再开一轮，父代理收到的就是新一轮的输出，原报告可能没有送达。用 `send_message` 显式发送的报告不依赖最后一轮输出；当最后一个动作是给父代理发消息时，rc.5 会通过 `omitClosingText` 在完成通知中省略最终答复，因此发完只需简短确认，不必重述报告正文。
+
+依据：rc.5 的 [Activation settlement](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/subagent/subagent/README.md#activation-settlement) 与 [`withResultDeliveryGuidance`](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/subagent/subagent/src/continuation-messages.ts#L83-L95)。上述时序按代码和文档推断，未用真实模型复现。
 
 ## Team 协作提示
 
