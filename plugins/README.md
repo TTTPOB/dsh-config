@@ -46,6 +46,25 @@ node scripts/dsh-config.mjs update --machine workstation --offline
 
 server、nas 使用各自机器名；check 和离线预览只消费本地输入，不连接这些机器。配置测试的 apply／回滚只操作自动清理的隔离 fixture。
 
+## 流式循环拦截
+
+[stream-loop-guard.mjs](<stream-loop-guard.mjs>) 在 Host 层挂载一次，覆盖所有 preset。它只检查带会话 ID 的模型流，分别累计每个文本块、推理块及工具调用的参数增量。默认使用 `cross2`：每个分支连续达到阈值才触发，任一分支命中即停止读取上游，并以 `STREAM_LOOP_DETECTED` 结束这次响应。已经收到但尚未转发的触发增量不会进入下游。失败响应只留在尝试日志中，不进入对话历史，不执行其中的工具。
+
+同一会话的同一步最多因此重试五次。每次重试前写入一条来源为 `stream-loop-guard` 的用户消息，指出被拦截的位置并附两个短片段；消息留在会话历史里，不为后续请求再次写入，也不重发运行时上下文快照。第六次命中不追加提示、不再重试，这一步以 `STREAM_LOOP_DETECTED` 错误结束。
+
+`config: {}` 使用下表的默认参数。`disabledProviders` 接受按精确 ID 匹配的提供方列表，默认为空。`excerptLimit` 限制两个 JSON 字符串片段的总长度（含引号和转义，以 UTF-16 码元计，默认 600，最小 4），不含说明文字。`rules` 可按表中名称逐项覆盖参数；窗长和采样间隔以 UTF-16 码元计，压缩比用 UTF-8 字节计算，并包含压缩格式开销。
+
+| `rules` | 压缩器 | `window` | `step` | `consecutive` | `threshold` | `shortWindow` / `gain` |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| `B2` | Brotli，质量 2 | 250 | 250 | 2 | 2.80 | — |
+| `RLE` | deflate，级别 1 + `Z_RLE` | 250 | 250 | 6 | 2.00 | — |
+| `Z1` | zstd，级别 1 | 250 | 250 | 2 | 3.30 | — |
+| `D6` | deflate，级别 6 | 1000 | 250 | 3 | 4.75 | 500 / 2.5 |
+
+前三个分支以尾窗压缩比为得分；`D6` 取长窗压缩比与 `gain × 长窗压缩比 ÷ 短窗压缩比` 中较小者。三机 30 天校准回放中，`cross2` 在 185,653 个非空完成块上没有观测到误报，在 150 个已知循环中均早于最后一个记录增量命中；另一个真实递增循环在起点后 500 码元命中。它在 1,900 码元内命中 1,216 / 1,302 个合成阳性；实测中位 CPU 成本为 433 ms/MB。阈值在同一批数据上校准，没有用另外的数据检验；长整数列表也可能触发，时间戳、UUID 片段及带随机扰动的循环可能漏检。
+
+运行 `node --test tests/stream-loop-guard.test.mjs` 验证检测和重试。设置 `DSH_CLI_PACKAGE` 为已安装 CLI 的 package.json 路径后，同一测试还会用真实 Loader 跑进程内 AgentLoop；不启动 Host、不调用真实模型。
+
 ## Provider 路由提示词
 
 [provider-prompt.mjs](<provider-prompt.mjs>) 的 `config.rules` 写在对应插件项内。部署规则见[安装指南](<../docs/install.md#本地-esm-插件>)，声明见[本地插件示例](<../examples/local-plugins-machine.yaml>)。
