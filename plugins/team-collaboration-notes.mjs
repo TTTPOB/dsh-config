@@ -29,8 +29,8 @@ export function apply(ctx) {
         if (error?.name === 'SubagentError' && error.code === 'UNAUTHORIZED') return '';
         throw error;
       }
-      return 'You are not notified when a sibling or any agent other than a direct subagent finishes. '
-        + 'If you need another agent\'s result, ask it to send you the result with send_message when it finishes.';
+      return 'You are notified only when your own direct subagents finish, not when siblings or other agents do. '
+        + 'When you need another agent\'s result, ask it to send the result to you with `send_message` when it is done.';
     },
   });
 }

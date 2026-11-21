@@ -19,7 +19,7 @@ test('Team collaboration notes follow the caller tree’s live mode', () => {
   assert.equal(text(other), '');
   assert.equal(text(), '');
   assert.equal(text(child), text(rootAgent));
-  assert.match(text(child), /not notified/);
+  assert.match(text(child), /notified only when your own direct subagents finish/);
   assert.match(text(child), /send_message\b(?!\s*\()/);
   enabled = false;
   assert.equal(text(child), '');
