@@ -241,7 +241,7 @@ export function preserveLiveRows(renderedText, liveText, retire = []) {
 
 // Retire stale home patch inserts without disabling the base and web bundle rows.
 export function homeRetiredRows(machine) {
-  return [...(machine.rowOps?.home?.retire ?? []), 'agent-team', 'ui-agent-team', 'team-wake-guidance'];
+  return [...(machine.rowOps?.home?.retire ?? []), 'ui-agent-team', 'team-wake-guidance'];
 }
 
 export function renderMachine(machinePath, label, catalog, { stage = true, generatedDir, deploymentHome } = {}) {

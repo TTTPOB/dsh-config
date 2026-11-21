@@ -27,15 +27,19 @@ test('legacy Team sessions use ordinary delegation and only fresh subagents get 
   assert.deepEqual(rows.find(row => row.id === 'subagent-model-selection-settings').config.allowedModels, machine.subagentModels);
 });
 
-test('the rc.5 home patch retires old Team inserts but keeps unrelated live rows', () => {
+test('the home patch replaces the old Team insert and retires legacy Team helpers', () => {
   const machine = readYaml(example);
   machine.rowOps = { home: { retire: ['private-obsolete'] } };
   const { rendered } = renderMachine(example, 'team-rows-migration', undefined, { stage: false });
   const old = ['agent-team', 'ui-agent-team', 'team-wake-guidance'];
-  const live = JSON.stringify([{ insert: [...old, 'private-obsolete', 'private-kept'].map(id => ({ id, name: 'fixture' })) }]);
+  const live = `- insert:
+${[...old, 'private-obsolete', 'private-kept'].map(id => `    - { id: ${id}, name: fixture }`).join('\n')}
+`;
   const result = preserveLiveRows(rendered.home, live, homeRetiredRows(machine));
-  assert.deepEqual(result.retired, [...old, 'private-obsolete']);
+  assert.deepEqual(result.retired, [...old.slice(1), 'private-obsolete']);
   assert.deepEqual(result.preserved, ['private-kept']);
+  const rows = validatePatch(result.text);
+  assert.deepEqual(rows.filter(({ entry }) => entry.id === 'agent-team').map(row => row.operation), ['patch']);
 });
 
 test('upgrading a managed tools row replaces obsolete configuration instead of preserving it', () => {
