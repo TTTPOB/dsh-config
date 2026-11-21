@@ -96,6 +96,8 @@ pnpm-workspace.yaml / pnpm-lock.yaml（仓库实际采用的文件）
 
 先读目标分支的 workflow：DSH 使用手动 dispatch，并选择包含 workflow 的源码 ref、同 commit 的既有新 tag、能力组和所需包；Pi／插件按各自 tag 触发规则执行。不要从旧 checkout 推断当前 inputs 或能力组。
 
+验收以精确的 Release 资产 URL 和下载后核对的 SHA256 为准。GitHub 的 `immutable` 标记不是选版条件，不要求开启该仓库设置，也不因标记为 `false` 阻止选版。
+
 发布失败时先确认 tag、Release／draft 和已上传资产状态，不重复覆盖或移动 tag；需要修订时使用新的版本／tag。下载正式资产后核对 tarball manifest 与 GitHub digest；有校验文件的再核对 SHA256SUMS／`.sha256`。把 run、commit、tag、URL、校验值与验证结果写入本次报告；不把凭据、机器端点、用户名或私有绝对路径写进公开文档。
 
 ## 5. 常见阻塞与处理
