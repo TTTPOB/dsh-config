@@ -142,8 +142,8 @@ packages:
   - package: "@deepseek-ai/dsh-llm-pi-ai"
     scope: global-override
     policy: release
-    version: 0.2.2-rc.5-fork1
-    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.5-fork2/deepseek-ai-dsh-llm-pi-ai-0.2.2-rc.5-fork1.tgz
+    version: 0.2.2-rc.5-fork2
+    url: https://github.com/TTTPOB/deepseek-harness/releases/download/daily-driver-v0.2.2-rc.5-fork5/deepseek-ai-dsh-llm-pi-ai-0.2.2-rc.5-fork2.tgz
     resetSelectors: true
   - package: "@deepseek-ai/dsh-mcp-client"
     scope: global-override
