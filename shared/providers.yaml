@@ -6,8 +6,6 @@
 providers:
   klaude-openai:
     compat:
-      maxConsecutiveWhitespaceChars: 2000
-      maxRepeatedPatternChars: 2000
       supportsStrictMode: true
       supportsToolSearch: true
       systemPromptFormat: instructions
@@ -18,9 +16,6 @@ providers:
       maxRetries: 5
     errorCodeRules:
       - match: "^upstream_error:"
-        code: SERVER
-      # The Pi fork aborts degenerate whitespace/repeat floods before tools run.
-      - match: "\\(degenerate output\\)"
         code: SERVER
     api: openai-responses
     models:
