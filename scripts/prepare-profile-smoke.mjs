@@ -87,7 +87,8 @@ const config = { runtimeVersion: catalog.runtimeVersion, presets, nativeTools, a
   pressureDefault: machine.acp.pressureDefault, expectedBasic: readYaml(join(root, 'shared/defaults.yaml')).defaults.compaction,
   expectedPackages: [...expectedEntries.map(item => ({ ...item, profileOwned: resolvesFromProfile(item, expectedEntries, 'web') })),
     { name: '@deepseek-ai/dsh-client-ui-settings', version: catalog.runtimeVersion, scope: 'global-override' }],
-  compatibility: [...new Set(catalog.packages.filter(item => item.policy === 'release').map(item => `${item.package}@${item.version}`))] };
+  compatibility: catalog.packages.map(item => `${item.package}@${item.version}`)
+    .filter(identity => catalog.verifiedCompatibility?.[identity]?.includes(catalog.runtimeVersion)) };
 function controlledPatch(text) {
   const document = YAML.parseDocument(text, { customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: expression => expression }] });
   for (const operation of document.contents.items) {

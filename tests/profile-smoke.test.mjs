@@ -280,7 +280,10 @@ test('preparation stages credential-free full preset input and an executable tar
   assert.ok(!argv.includes('--apply'));
 
   // An unpublished local build replaces its Release asset only in this smoke input.
-  const [name] = packages.keys();
+  const catalog = readDependencyCatalog();
+  const exemptions = Object.entries(catalog.verifiedCompatibility).filter(([, runtimes]) => runtimes.includes(catalog.runtimeVersion)).map(([identity]) => identity);
+  assert.deepEqual(rows.find(row => row.id === 'profile-smoke-probe').config.compatibility.toSorted(), exemptions.toSorted());
+  const name = [...packages.values()].find(item => exemptions.includes(`${item.package}@${item.version}`)).package;
   writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name, version: '9.9.9-local' }));
   const local = join(directory, 'local.tgz');
   execFileSync('tar', ['-czf', local, '-C', directory, 'package']);
@@ -292,7 +295,7 @@ test('preparation stages credential-free full preset input and an executable tar
   const probe = validatePatch(readYaml(join(localOutput, 'machine.yaml')).deployment.smoke.homePatch)
     .map(row => row.entry).find(row => row.id === 'profile-smoke-probe');
   assert.ok(probe.config.expectedPackages.filter(item => item.name === name).every(item => item.version === '9.9.9-local'));
-  assert.ok(probe.config.compatibility.includes(`${name}@9.9.9-local`));
+  assert.deepEqual(probe.config.compatibility.toSorted(), exemptions.filter(identity => identity !== `${name}@${packages.get(name).version}`).toSorted());
   assert.equal(readDependencyCatalog().packages.find(item => item.package === name).version, packages.get(name).version);
   assert.throws(() => execFileSync(process.execPath, [join(root, 'scripts/prepare-profile-smoke.mjs'), assets, localOutput, '--local', `unmanaged=${local}`], { stdio: 'pipe' }), /contains/);
 });

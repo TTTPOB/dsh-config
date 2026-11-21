@@ -11,7 +11,9 @@
 
 [依赖清单](<../shared/dependencies.yaml>)记录包版本与精确 Release URL。通过 `gh release view` 核对资产后下载全部 32 个 tarball；每个文件的 SHA256 均与 GitHub 资产摘要一致。DSH 子包来自 `daily-driver-v0.2.2-rc.5-fork1` 至 `fork4`，其中 `dsh-subagent` 统一取 `fork3` 资产。`dsh-better-sidebar` 与 `dsh-claude-image-recovery` 沿用既有资产，未阻塞隔离安装和启动。
 
-隔离 smoke 只在临时 profile 内放行选定的包版本，以验证组合行为。此结果不确定官方运行时实际拒绝哪些包；正式 `verifiedCompatibility` 仍为空，需按官方拒绝记录登记精确豁免。
+零豁免的隔离 Web 安装通过 pnpm，但 rc.5 的启动预检禁用了 8 个依赖 fork 精确 peer 的插件行，随后因必需服务缺失未能启动。只放行这 8 项后 Host 可启动，但加载 preset 时又禁用了 `dsh-tool-subagent-control`，导致 `send_message` 缺失。官方诊断格式为 `dsh: disabling profile plugin row "…": Plugin … is incompatible with dsh 0.2.2-rc.5: requirements …`，末尾为 `Exact-version exemption: not active.`。
+
+[依赖清单的 `verifiedCompatibility`](<../shared/dependencies.yaml>) 只记录实际被拒的这 9 个精确包版本，限定运行时 `0.2.2-rc.5`。组合 smoke 以清单为准，在隔离 profile 内调用官方 `dsh plugin --profile web allow-version <包名@版本> --dsh-version 0.2.2-rc.5 --accept-risk`，不再默认放行所有 Release 包，未登记的本地版本也不会继承豁免。
 
 ## 组合验收结果
 
