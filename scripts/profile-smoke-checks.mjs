@@ -24,6 +24,8 @@ export function verifyToolCatalog(id, schemas, assembly, { teamEnabled, acp = tr
     assert.ok(names.includes('context_compress'), `${id}: ACP is not registered`);
     const sdk = assembly.sections.filter(section => section.name === 'tools:sdk').map(section => section.text).join('\n');
     assert.match(sdk, /context_compress/, `${id}: ACP is missing from the PTC SDK`);
+    assert.ok(names.includes('context_boundaries'), `${id}: ACP boundary discovery is not registered`);
+    assert.match(sdk, /context_boundaries/, `${id}: ACP boundary discovery is not eager in the PTC SDK`);
   }
   assert.ok(!names.includes('present'), `${id}: present is disabled for every preset`);
   return { id, teamEnabled, tools: names.sort(), modelTools, ptc: true, acp };

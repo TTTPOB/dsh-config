@@ -35,14 +35,14 @@ test('probe Agent creation explicitly mounts its selected preset before publicat
 });
 
 function catalog(team) {
-  return ['subagent', 'subagent_fork', 'list_subagent_models', 'wait_agent', 'send_message', 'list_agents', 'interrupt_agent', 'workflow', 'ralph', 'context_compress',
+  return ['subagent', 'subagent_fork', 'list_subagent_models', 'wait_agent', 'send_message', 'list_agents', 'interrupt_agent', 'workflow', 'ralph', 'context_compress', 'context_boundaries',
     ...(team ? ['team_task_create', 'team_task_list', 'team_task_get', 'team_task_update'] : [])]
     .map(name => ({ name, parameters: { type: 'object', properties: name === 'send_message' ? { agent: {} }
       : name === 'subagent' ? { provider: {}, model: {}, reasoning_effort: {} } : {} } }));
 }
 const runtimeRows = [{ id: 'ptc-runtime',
   name: '@deepseek-ai/dsh-ptc-runtime-node', config: { executionMode: 'per-call' } }];
-const assembly = { tools: [{ name: 'run_code' }], sections: [{ name: 'tools:sdk', text: 'tools.context_compress' }] };
+const assembly = { tools: [{ name: 'run_code' }], sections: [{ name: 'tools:sdk', text: 'tools.context_compress tools.context_boundaries' }] };
 
 test('Web smoke exchanges the launch token and sends its cookie to the clean index', async () => {
   const urls = [];
@@ -77,6 +77,9 @@ test('profile assertions check the explicit Team mode independently of the prese
     assert.throws(() => verifyToolCatalog(id, wrong, assembly, options), /wrong send_message/);
   }
   assert.throws(() => verifyToolCatalog(id, catalog(false), { ...assembly, sections: [] }, off), /PTC SDK/);
+  assert.throws(() => verifyToolCatalog(id, catalog(false), { ...assembly, sections: [
+    { name: 'tools:sdk', text: 'tools.context_compress' },
+  ] }, off), /boundary discovery is not eager/);
   assert.throws(() => verifyToolCatalog(id, catalog(false), { ...assembly, sections: [
     { name: 'active-context', text: 'Use context_compress for completed work.' },
     { name: 'tools:sdk', text: 'tools.list_agents' },
