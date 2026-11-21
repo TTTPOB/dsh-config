@@ -12,7 +12,9 @@ Word 的 TypeScript 源码位于 [plugins-src/word](<../plugins-src/README.md>)�
 
 ## 运行时工具指引
 
-[runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`output`、`background`、`child`、`sdkMessage`。工具 schema 和运行时权限仍决定实际可调用能力。
+[runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`grep`、`output`、`background`、`child`、`sdkMessage`。工具 schema 和运行时权限仍决定实际可调用能力。
+
+`grep` 提示仅在当前可见的工具含 `grep.pattern` 时加入：11 月 11–21 日的三机审计中，ripgrep 拒绝了 152 次调用，其中 132 次报分组未闭合，因此提示重点说明字面元字符的转义。
 
 各段的出现条件：
 

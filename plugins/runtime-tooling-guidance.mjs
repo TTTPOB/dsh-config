@@ -6,6 +6,7 @@ export const DEFAULT_TEXT = {
   native: "Native tool calling is active. Issue independent tool calls together in one turn. Keep dependent calls in order. If the next step is already determined, don't spend a model round trip on it.",
   typescript: "Only the tools actually exposed to you can be called directly. The SDK bindings (`tools.*`) work only inside `run_code`. Put already-determined sequential operations in one program with `await`. Run independent read-only calls with `Promise.all`. Run modifications in order. Serialized execution doesn't mean you need separate model round trips.",
   python: "Only the tools actually exposed to you can be called directly. The SDK bindings work only inside the Python program. Put already-determined sequential operations in one program with `await`. Run independent read-only calls with `asyncio.gather`. Run modifications in order. Serialized execution doesn't mean you need separate model round trips. Use only syntax and libraries you know are available.",
+  grep: "The `grep` pattern uses Rust/ripgrep regex syntax, not PCRE. Escape metacharacters such as `()[]{}.?*+|^$` and `\\` when matching them literally (for example `openSource\\(`); lookaround and backreferences are unsupported.",
   output: "Output only what the next decision needs. Keep errors, statuses, paths, and location evidence. Keep intermediate data inside the program rather than returning it in full. Don't repeat complete tool objects.",
   background: "Background jobs, agents you delegated to, and messages addressed to you all notify you; each notice starts your next turn. After starting such work, keep doing independent work. When only waiting remains, end your turn instead of polling, sleeping, or re-listing status. Check status yourself only for work nothing will report, such as a process you detached or an external CI run. Before the task ends, collect needed results and stop unrelated work.",
   child: "Use the `send_message` tool to send your report to the parent agent named in your delegation identity. A message arriving while you write could start another turn, so the parent might not receive this report in your final reply. After sending it, end with a brief acknowledgement. Don't declare completion while your background work is still running.",
@@ -63,6 +64,7 @@ export function apply(ctx, config) {
     } else if (!ptc && visible.size) {
       selected.push(config.text.native);
     }
+    if (tool("grep")?.parameters?.properties?.pattern) selected.push(config.text.grep);
     const background = ["bash", "workflow"].some(name =>
       tool(name)?.parameters?.properties?.run_in_background?.type === "boolean");
     const messaging = tool("send_message")?.parameters?.properties;

@@ -52,6 +52,34 @@ test("parent reporting requires name-based messaging and follows the PTC SDK", a
   assert.ok(!(await assemble(child, true)).includes(text.child));
 });
 
+test("grep wording follows scoped visibility in Native and PTC", async () => {
+  const restricted = {}, ordinary = {};
+  const text = { grep: "Fixture-specific search guidance" };
+  let hook, section;
+  let grep = { name: "grep", parameters: { properties: { pattern: { type: "string" } } } };
+  Plugin.apply({
+    effect: callback => callback(),
+    on: (_event, handler) => { hook = handler; },
+    systemPrompt: { getSectionOrder: () => 0, section: value => { section = value; } },
+    tools: { schemas: scope => scope === restricted ? [] : [grep] },
+    get: () => undefined,
+  }, Plugin.Config["~standard"].validate({ text }).value);
+  async function assemble(scope, mode) {
+    const sections = [section];
+    if (mode !== "native") sections.push({ name: "tools:ptc-only", text: "PTC" });
+    if (mode === "sdk") sections.push({ name: "tools:sdk", text: "SDK" });
+    const result = await hook({}, { scope }, async () => ({ sections }));
+    return result.sections.find(row => row.name === Plugin.SECTION)?.text ?? "";
+  }
+  for (const mode of ["native", "sdk"]) {
+    assert.ok((await assemble(ordinary, mode)).includes(text.grep));
+    assert.ok(!(await assemble(restricted, mode)).includes(text.grep));
+  }
+  assert.ok(!(await assemble(ordinary, "ptc-without-sdk")).includes(text.grep));
+  grep = { ...grep, parameters: { properties: {} } };
+  assert.ok(!(await assemble(ordinary, "native")).includes(text.grep));
+});
+
 test("installed Loader selects fresh runtime capabilities without changing tools or SDK", {
   skip: !process.env.DSH_CLI_PACKAGE,
 }, async t => {
@@ -200,6 +228,17 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   const messageOnlyTools = child.ctx.tools.restrict({ deny: ["bash", "job_output", "job_kill"] });
   selected(await assemble(child), ["native", "background", "child"]);
   messageOnlyTools();
+  const grep = shadow("grep", { pattern: { type: "string", required: true } });
+  for (const [executor, expected] of [[NativeExecutor, ["native"]], [PtcExecutor, ["typescript", "output"]]]) {
+    await selectExecutor(executor);
+    const keys = [...expected, "background", "child", ...(executor === PtcExecutor ? ["sdkMessage"] : [])];
+    selected(await assemble(child), [...keys, "grep"]);
+    const restrictGrep = child.ctx.tools.restrict({ deny: ["grep"] });
+    selected(await assemble(child), keys);
+    restrictGrep();
+  }
+  grep();
+  await selectExecutor(NativeExecutor);
   const noMessagingParameters = shadow("send_message", {});
   selected(await assemble(child), ["native", "background"]);
   noMessagingParameters();
