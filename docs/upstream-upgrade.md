@@ -16,6 +16,8 @@
 
 ## 2. 按顺序推进
 
+开始前先读[待办](<../TODO.md>)，把列在其中、计划随本次升级处理的项目放进交付表。
+
 | 步骤 | 操作与产物 | 完成判据 |
 |---|---|---|
 | 1. 固定基线 | 先 `git fetch <TTTPOB-remote> --tags`，从刚 fetch 的远端长期分支新建升级分支；核实上游 tag／commit、旧 fork 基线和干净状态，记录各仓库最新 Release tag、已安装版本与计划目标 | 升级分支包含远端长期分支最新提交及最新 Release tag（分别用 `git merge-base --is-ancestor <ref-or-tag> HEAD` 检查）；计划发布版本高于最新 Release，不用记忆或 `latest` 代替证据 |
