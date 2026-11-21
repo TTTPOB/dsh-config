@@ -128,7 +128,7 @@ test('private smoke rows drop external services and keep every local row with it
   assert.match(kept, /trustedHosts: !!js ctx\.webStartup\.trustedHosts/);
 });
 
-test('dump assertions require the isolated bind and reject global Team tools', () => {
+test('dump assertions require the isolated bind and a single progressive executor', () => {
   const rows = [...runtimeRows, { id: 'webserver', config: { host: '127.0.0.1', port: 0 } },
     { name: '@deepseek-ai/dsh-agent-preset', config: { id: 'standard-ptc', plugins: [{ id: 'progressive-ptc-executor', name: 'dsh-progressive-tools/ptc' }] } }];
   verifyDumpConfiguration(rows, ['standard-ptc']);
@@ -152,6 +152,7 @@ test('smoke orchestration preserves workspace overrides, never ignores build pol
   Object.assign(process.env, { DSH_HOME: home, DSH_CONFIG_TEST_ROOT: directory, DSH_SECRET_CANARY: 'must-not-reach-host' });
   t.after(() => { for (const [key, value] of Object.entries(previous)) value === undefined ? delete process.env[key] : process.env[key] = value; });
   let stopped = 0, launched = 0;
+  let teamModes = [false, true];
   const commands = [];
   const dependencies = {
     run: (argv, cwd, env) => {
@@ -167,7 +168,7 @@ test('smoke orchestration preserves workspace overrides, never ignores build pol
     resolveCli: () => join(installation, 'fixture-cli.mjs'),
     launch: async () => { launched++; return { url: 'http://127.0.0.1:49152', stop: async () => { stopped++; } }; },
     fetch: async () => ({ status: 200, text: async () => '<script>window.__DSH_BOOT__={}</script>',
-      json: async () => ({ loaded: true, presets: [{ id: 'standard-ptc' }] }) }),
+      json: async () => ({ loaded: true, presets: teamModes.map(teamEnabled => ({ id: options.presets[0], teamEnabled })) }) }),
   };
   const patchPath = join(home, 'cordis.patch.yml');
   const patch = readFileSync(patchPath, 'utf8');
@@ -188,6 +189,9 @@ test('smoke orchestration preserves workspace overrides, never ignores build pol
   assert.ok(commands.some(argv => argv.includes('allow-version') && argv.includes('fixture@1.0.0-fork1')));
   await assert.rejects(runProfileSmoke(directory, home, { ...dependencies, fetch: async () => { throw new Error('probe failed'); } }), /probe failed/);
   assert.equal(stopped, 2);
+  teamModes = [false, false];
+  await assert.rejects(runProfileSmoke(directory, home, dependencies), /expected both Team modes/);
+  assert.equal(stopped, 3);
   await assert.rejects(runProfileSmoke(directory, join(directory, '..', 'unowned-home'), dependencies));
 });
 
