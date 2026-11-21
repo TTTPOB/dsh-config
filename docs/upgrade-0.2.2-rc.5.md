@@ -9,7 +9,7 @@
 
 ## Release 资产与兼容性
 
-[依赖清单](<../shared/dependencies.yaml>)记录包版本与精确 Release URL。通过 `gh release view` 核对资产后下载全部 32 个 tarball；每个文件的 SHA256 均与 GitHub 资产摘要一致。DSH 子包来自 `daily-driver-v0.2.2-rc.5-fork1` 至 `fork4`，其中 `dsh-subagent` 统一取 `fork3` 资产。`dsh-better-sidebar` 与 `dsh-claude-image-recovery` 沿用既有资产，未阻塞隔离安装和启动。
+[依赖清单](<../shared/dependencies.yaml>)记录包版本与精确 Release URL。通过 `gh release view` 核对资产后下载全部 32 个 tarball；每个文件的 SHA256 均与 GitHub 资产摘要一致，包括最终选用的 `dsh-active-context@0.7.1`。DSH 子包来自 `daily-driver-v0.2.2-rc.5-fork1` 至 `fork4`，其中 `dsh-subagent` 统一取 `fork3` 资产。`dsh-better-sidebar` 与 `dsh-claude-image-recovery` 沿用既有资产，未阻塞隔离安装和启动。
 
 零豁免的隔离 Web 安装通过 pnpm，但 rc.5 的启动预检禁用了 8 个依赖 fork 精确 peer 的插件行，随后因必需服务缺失未能启动。只放行这 8 项后 Host 可启动，但加载 preset 时又禁用了 `dsh-tool-subagent-control`，导致 `send_message` 缺失。官方诊断格式为 `dsh: disabling profile plugin row "…": Plugin … is incompatible with dsh 0.2.2-rc.5: requirements …`，末尾为 `Exact-version exemption: not active.`。
 
@@ -20,7 +20,7 @@
 | 检查 | 结果 |
 | --- | --- |
 | `node scripts/dsh-config.mjs check --machine workstation\|server\|nas` | 三份机器输入通过只读结构检查。 |
-| `prepare-profile-smoke.mjs` → `check` → `update --offline` → `run-profile-smoke.mjs` | 公开输入及 `--private workstation`、`--private server` 均通过。每套均检查 3 个 preset 在 Team 关闭与开启时的工具与提示，打开隔离 Web 首页，并在独立 Home 内执行 PTC 和 ACP 探针。 |
+| `prepare-profile-smoke.mjs` → `check` → `update --offline` → `run-profile-smoke.mjs` | 公开输入及 `--private workstation`、`--private server` 均通过。三套均以 `dsh-active-context@0.7.1` 和清单中的 9 项精确豁免复跑通过：检查 3 个 preset 在 Team 关闭与开启时的工具与提示，打开隔离 Web 首页，并在独立 Home 内执行 PTC 和 ACP 探针。ACP 探针分别验证非法压缩请求不改动 Surface、合法压缩请求提交摘要。 |
 | Team 与工具 | 两种模式均有普通子代理工具（包括模型查询与等待）；仅开启时有任务看板工具和协作提示。`context_boundaries` 在 PTC SDK 中直接展示；顶层工具仍只有 `run_code` 和设定的原生例外。 |
 | 搜索冷启动 | 使用 `fork1` 正式 tarball 运行 SQLite 的 `pack-smoke.mjs`：首次查询冷的 zstd 日志返回 `SESSION_QUERY_INDEX_WARMING`，重试命中已落盘的会话。私有 profile smoke 保留 SQLite 启动和同步选项，但将索引写入隔离 Home。 |
 

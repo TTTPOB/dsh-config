@@ -122,8 +122,8 @@ packages:
     scope: profile
     patchOnly: true
     policy: release
-    version: 0.7.0
-    url: https://github.com/TTTPOB/dsh-active-context/releases/download/v0.7.0/dsh-active-context-0.7.0.tgz
+    version: 0.7.1
+    url: https://github.com/TTTPOB/dsh-active-context/releases/download/v0.7.1/dsh-active-context-0.7.1.tgz
   - package: dsh-workspace-envrc
     scope: profile
     patchOnly: true
