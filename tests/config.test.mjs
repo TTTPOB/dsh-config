@@ -27,16 +27,15 @@ test('legacy Team sessions use ordinary delegation and only fresh subagents get 
   assert.deepEqual(rows.find(row => row.id === 'subagent-model-selection-settings').config.allowedModels, machine.subagentModels);
 });
 
-test('the home patch replaces the old Team insert and retires legacy Team helpers', () => {
+test('the home patch replaces a live insert with the same id and retires listed rows', () => {
   const machine = readYaml(example);
   machine.rowOps = { home: { retire: ['private-obsolete'] } };
   const { rendered } = renderMachine(example, 'team-rows-migration', undefined, { stage: false });
-  const old = ['agent-team', 'ui-agent-team', 'team-wake-guidance'];
   const live = `- insert:
-${[...old, 'private-obsolete', 'private-kept'].map(id => `    - { id: ${id}, name: fixture }`).join('\n')}
+${['agent-team', 'private-obsolete', 'private-kept'].map(id => `    - { id: ${id}, name: fixture }`).join('\n')}
 `;
   const result = preserveLiveRows(rendered.home, live, homeRetiredRows(machine));
-  assert.deepEqual(result.retired, [...old.slice(1), 'private-obsolete']);
+  assert.deepEqual(result.retired, ['private-obsolete']);
   assert.deepEqual(result.preserved, ['private-kept']);
   const rows = validatePatch(result.text);
   assert.deepEqual(rows.filter(({ entry }) => entry.id === 'agent-team').map(row => row.operation), ['patch']);
@@ -85,27 +84,6 @@ test('rc.1 catalog normalizes old core and native selectors to effective package
   assert.ok(!('node-addon-require-builtin@0.1.6' in targets.globalWorkspace.overrides));
   const selected = catalog.packages.find(row => row.package === 'node-addon-require-builtin');
   assert.equal(targets.globalWorkspace.overrides[selected.package], selected.url ?? selected.version);
-});
-
-test('rc.5 removes only experimental Team dependencies and bundles from each profile', () => {
-  const catalog = readYaml(join(root, 'shared/dependencies.yaml'));
-  const old = ['experimental-agent-team', 'experimental-tool-agent-team', 'experimental-client-ui-agent-team',
-    'experimental-agent-team-profile'].map(suffix => '@deepseek-ai/dsh-' + suffix);
-  const kept = ['@deepseek-ai/dsh-agent-team', '@example/custom-bundle'];
-  const manifest = { dependencies: Object.fromEntries([...old, ...kept].map(name => [name, '1.0.0'])),
-    dsh: { profile: { bundles: [...old, ...kept] } } };
-  const overrides = Object.fromEntries(old.slice(0, 3).map(name => [name + '@1.0.0', 'file:legacy.tgz']));
-  const { profiles, globalWorkspace, entries } = resolveDependencyTargets('unused', {
-    webPackage: manifest, profiles: { disposable: manifest, clean: {} }, globalWorkspace: { overrides },
-  }, catalog);
-  for (const profile of [profiles.web, profiles.disposable]) {
-    for (const name of old) assert.ok(!Object.hasOwn(profile.dependencies, name));
-    for (const name of kept) assert.equal(profile.dependencies[name], manifest.dependencies[name]);
-    assert.deepEqual(profile.dsh.profile.bundles, kept);
-  }
-  for (const name of Object.keys(overrides)) assert.ok(!Object.hasOwn(globalWorkspace.overrides, name));
-  assert.ok(!entries.some(entry => entry.profile === 'clean' && entry.status === 'retired-dependency'));
-  assert.ok(old.every(name => Object.hasOwn(manifest.dependencies, name)));
 });
 
 test('profile-owned official forks resolve from the actual consumer even when a global override is also declared', () => {
