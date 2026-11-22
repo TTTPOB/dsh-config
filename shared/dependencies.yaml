@@ -95,8 +95,8 @@ packages:
     profiles:
       - web
     policy: release
-    version: 3.5.1
-    url: https://github.com/TTTPOB/dsh-mobile-workbench/releases/download/v3.5.1/dsh-web-mobile-3.5.1.tgz
+    version: 3.5.2
+    url: https://github.com/TTTPOB/dsh-mobile-workbench/releases/download/v3.5.2/dsh-web-mobile-3.5.2.tgz
   - package: "@firecrawl/dsh-firecrawl"
     scope: profile
     policy: release
