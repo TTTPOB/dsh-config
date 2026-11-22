@@ -22,7 +22,7 @@ pnpm check --machine workstation
 | 独立个人插件 | 每个消费 profile 的 dependencies | 精确 GitHub Release tarball URL |
 | 官方运行时、普通库及明确允许的第三方插件 | 原有安装归属 | 精确 registry pin |
 
-机器 `installation.globalWorkspace` 和 `installation.webPackage` 保留无关 overrides、专属依赖及 bundles；受管项由共用清单覆盖。清单的 `retiredGlobalOverrides` 显式删除已退休包的裸名与版本选择器；`resetSelectors: true` 把目标包的旧选择器归一为裸包名，避免旧核心／Pi／native pins 的版本选择器只匹配旧版依赖。删除清单条目本身不会删除安装中的 override。未声明 installation 时，已有机器以首次迁移快照作为输入。缺少精确资产的条目保留目标版本并阻塞正式更新，不回退本地来源，也不自动改用新版或旧版。Pi 的同版本多资产由清单明确选定唯一来源。包含受管 Release overrides 的全局目标 workspace 设置 `blockExoticSubdeps: false`，允许 pnpm 11 用选定 URL 替换间接依赖；此设置随安装声明应用，预览不改写真实 workspace。
+离线命令使用机器 `installation.globalWorkspace` 和 `installation.webPackage` 中的 overrides、依赖及 bundles。Live update 的 overrides 和 profile 依赖以本机当前安装为基线；两种模式都由共用清单覆盖适用的受管项。清单的 `retiredGlobalOverrides` 显式删除已退休包的裸名与版本选择器；`resetSelectors: true` 把目标包的旧选择器归一为裸包名，避免旧核心／Pi／native pins 的版本选择器只匹配旧版依赖。删除清单条目本身不会删除安装中的 override。离线未声明 installation 时，已有机器以首次迁移快照作为输入。缺少精确资产的条目保留目标版本并阻塞正式更新，不回退本地来源，也不自动改用新版或旧版。Pi 的同版本多资产由清单明确选定唯一来源。包含受管 Release overrides 的全局目标 workspace 设置 `blockExoticSubdeps: false`，允许 pnpm 11 用选定 URL 替换间接依赖；此设置随安装声明应用，预览不改写真实 workspace。
 
 清单中 `patchOnly: true` 的包保留 profile dependency，但移除重复的 profile bundle 激活；MCP Panel、mobile 等仍通过 bundle 贡献客户端行的包不受影响。共用插件与 preset 声明在 `$DSH_HOME/cordis.patch.yml`；真正 profile 特化的配置留在对应 profile patch。依赖安装在 profile 不表示配置属于该 profile。覆盖既有行的 `config` 是整个对象替换；保留该行需要的全部配置键和 `!!js` 表达式。
 
@@ -149,7 +149,9 @@ node scripts/dsh-config.mjs doctor --machine workstation
 
 `update --offline` 预览使用机器 installation 参数或迁移快照，报告 `input: offline`；与 render/check 一样，不发现本机部署位置、不读取本机安装。可在工作机离线预览 server 参数。默认 update 预览使用执行机器的路径默认／覆盖和实际 manifest，报告 `input: live`；apply 始终使用 live 输入，与默认预览一致；`--offline` 不可与 `--apply` 组合。两个预览均只读且不运行 doctor 或安装器。部署目标尚未准备时，live 诊断会指出缺失字段／profile，离线预览仍可使用。
 
-Update 默认只展开变化的受管依赖与阻塞，显示旧来源 → 新来源；不变项及非受管保留项只计数。Live 预览还列出变化的安装声明文件、配置 patch 的新增／移除／修改行 ID，不打印可能含凭据的配置值。依赖变化比较的是声明来源，实际安装版本与入口由 doctor 检查；offline 仅与输入声明／快照比较，不检查本机配置。
+Update 默认只展开变化的受管依赖与阻塞，显示旧来源 → 新来源；不变项及非受管保留项只计数。Live 预览还列出变化的安装声明文件、配置 patch 的新增／移除／修改行 ID，不打印可能含凭据的配置值。Live 依赖变化按目标与当前安装的 manifest 比较，实际解析版本与入口由 doctor 检查；offline 仅与输入声明／快照比较，不检查本机配置。
+
+若机器有 `installation` 块，live 报告会单独列出非受管键的三类不符：仅声明未安装、取值不同、已安装但未声明。仅声明的键不会进入目标，取值不同的键保留实际安装值。可按提示更新 `machine.yaml`；这些提示不计入依赖变化，也不触发安装。
 
 Doctor 默认显示问题、已检查数量与下一步，通过项不逐项展开。输出格式与详细程度独立控制：
 

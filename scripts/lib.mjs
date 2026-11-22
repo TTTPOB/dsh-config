@@ -1,6 +1,7 @@
 import { readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, join, basename, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import assert from 'node:assert/strict';
 import YAML from 'yaml';
 import nunjucks from 'nunjucks';
@@ -372,7 +373,9 @@ export function readDependencyCatalog() {
   return catalog;
 }
 
-export function resolveDependencyTargets(snapshotDir, installation, catalog = readDependencyCatalog(), features = {}, quota) {
+const matchesDependencyKey = (scope, name, key) => key === name || (scope === 'global-override' && key.startsWith(name + '@'));
+
+export function resolveDependencyTargets(snapshotDir, installation, catalog = readDependencyCatalog(), features = {}, quota, live) {
   const snapshot = (file, fallback) => existsSync(join(snapshotDir, file)) ? readYaml(join(snapshotDir, file)) : fallback;
   const globalWorkspace = structuredClone(installation?.globalWorkspace ?? snapshot('global-workspace.yaml', { packages: ['.'] }));
   const profiles = structuredClone({ web: installation?.webPackage ?? snapshot('web.package.json', { private: true }), ...installation?.profiles });
@@ -392,20 +395,38 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
     }
   }
   const entries = [];
+  const declarationDrift = [];
   const merge = (container, field, scope, profile) => {
-    container[field] ??= {};
-    if (scope === 'global-override') {
-      for (const name of catalog.retiredGlobalOverrides ?? []) {
-        for (const key of Object.keys(container[field]).filter(key => key === name || key.startsWith(name + '@'))) {
-          delete container[field][key];
-          entries.push({ scope, name: key, status: 'retired-override', changed: true, target: '(removed)' });
-        }
+    const location = profile ? { scope, profile } : { scope };
+    const relevantPackages = packages.filter(item => item.scope === scope && (!profile || !item.profiles || item.profiles.includes(profile)));
+    const scopeInput = input => scope === 'global-override' ? input?.globalWorkspace
+      : profile === 'web' ? input?.webPackage : input?.profiles?.[profile];
+    const installed = scopeInput(installation)?.[field];
+    const retiredOverrides = scope === 'global-override' ? catalog.retiredGlobalOverrides ?? [] : [];
+    if (live?.declaredInstallation != null) {
+      const declared = scopeInput(live.declaredInstallation)?.[field] ?? {};
+      const actual = installed ?? {};
+      for (const name of new Set([...Object.keys(declared), ...Object.keys(actual)])) {
+        const installedHere = Object.hasOwn(actual, name);
+        if (relevantPackages.some(item => matchesDependencyKey(scope, item.package, name)) ||
+          (installedHere && retiredOverrides.some(item => matchesDependencyKey(scope, item, name)))) continue;
+        const status = !installedHere ? 'stale-declaration'
+          : !Object.hasOwn(declared, name) ? 'undeclared-installation'
+          : !isDeepStrictEqual(declared[name], actual[name]) ? 'declaration-value-mismatch' : undefined;
+        if (status) declarationDrift.push({ ...location, name, status });
       }
     }
-    for (const item of packages.filter(item => item.scope === scope)) {
-      if (scope === 'profile' && ((item.profiles && !item.profiles.includes(profile)) || (!item.required && !(item.package in container[field])))) continue;
+    container[field] ??= {};
+    for (const name of retiredOverrides) {
+      for (const key of Object.keys(container[field]).filter(key => matchesDependencyKey(scope, name, key))) {
+        delete container[field][key];
+        entries.push({ scope, name: key, status: 'retired-override', changed: true, target: '(removed)' });
+      }
+    }
+    for (const item of relevantPackages) {
+      if (scope === 'profile' && !item.required && !(item.package in container[field])) continue;
       const matchingKeys = scope === 'global-override'
-        ? Object.keys(container[field]).filter(key => key === item.package || key.startsWith(item.package + '@'))
+        ? Object.keys(container[field]).filter(key => matchesDependencyKey(scope, item.package, key))
         : [item.package];
       const reset = scope === 'global-override' && item.resetSelectors;
       const keys = !reset && matchingKeys.length ? matchingKeys : [item.package];
@@ -426,10 +447,15 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
     }
     const managed = new Set(entries.filter(row => row.scope === scope && row.profile === profile).map(row => row.name));
     for (const [name, source] of Object.entries(container[field])) {
-      if ([...managed].some(item => name === item || (scope === 'global-override' && name.startsWith(item + '@')))) continue;
+      if ([...managed].some(item => matchesDependencyKey(scope, item, name))) continue;
       const status = exactVersion.test(source) ? 'unmanaged-registry-pin' : releaseUrl.test(source) ? 'unmanaged-release' : 'unmanaged-local-or-range';
       // Unmanaged values remain private and are never proposed as managed targets.
-      entries.push({ scope, ...(profile ? { profile } : {}), name, status });
+      entries.push({ ...location, name, status });
+    }
+    // An absent live dependency map needs no manifest rewrite when there are no targets.
+    if (live && installed == null && !Object.keys(container[field]).length) {
+      if (installed === undefined) delete container[field];
+      else container[field] = installed;
     }
   };
   merge(globalWorkspace, 'overrides', 'global-override');
@@ -443,7 +469,7 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
     const bundles = manifest.dsh?.profile?.bundles;
     if (bundles) manifest.dsh.profile.bundles = bundles.filter(name => !patchOnly.has(name));
   }
-  return { globalWorkspace, profiles, entries };
+  return { globalWorkspace, profiles, entries, ...(live ? { declarationDrift } : {}) };
 }
 
 // A profile-owned fork may also have a global override even when the CLI never depends on it.

@@ -78,7 +78,17 @@ export function formatUpdate(report, verbose = false) {
   }
   for (const file of files.filter(row => row.planned)) lines.push('计划本地插件: ' + file.source + ' → ' + file.path);
   if (report.input === 'offline') lines.push('离线计划：与声明／快照比较，未检查本机安装与配置。');
-  else lines.push('依赖差异与本机声明比较；实际安装版本和入口由 doctor 验收。');
+  else lines.push('依赖变化按目标与本机当前安装的声明比较；实际安装版本和入口由 doctor 验收。');
+  if (report.declarationDrift?.length) {
+    lines.push('machine.yaml 与实际安装不符（不影响本次安装）');
+    const descriptions = {
+      'stale-declaration': 'installation 中的过时声明，实际未安装，可删除',
+      'declaration-value-mismatch': '声明与实际取值不同，以实际安装为准',
+      'undeclared-installation': '实际已安装，installation 中未声明',
+    };
+    for (const row of report.declarationDrift) lines.push(`  [${scopeOf(row)}] ${row.name}: ${descriptions[row.status]}`);
+    lines.push('可据此更新 machine.yaml。');
+  }
   if (report.granted?.length) lines.push(`已授权 ${report.granted.length} 个清单验证的精确兼容组合。`);
   if (report.backup) lines.push(`备份: ${report.backup}`);
   if (report.apply) lines.push(report.noOp ? '未执行安装或写入；未检查 Host 激活状态。' : '已安装，未确认激活；未启停 Host。');

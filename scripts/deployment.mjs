@@ -61,23 +61,24 @@ export function validateDeployment(deployment, { requireHost = true } = {}) {
 export function deploymentTargets(machine, snapshotDir, catalog) {
   const installation = structuredClone(machine.installation ?? {});
   const deployment = machine.deployment;
-  if (deployment?.globalWorkspacePath) {
-    validateDeployment(deployment);
-    if (!existsSync(deployment.globalWorkspacePath)) throw new Error('Missing local deployment.globalWorkspacePath target; check pnpm global installation or provide an explicit override');
-    const liveGlobal = readYaml(deployment.globalWorkspacePath);
-    installation.globalWorkspace = { ...installation.globalWorkspace, ...liveGlobal,
-      overrides: { ...installation.globalWorkspace?.overrides, ...liveGlobal.overrides } };
-    installation.profiles ??= {};
-    for (const [name, profile] of Object.entries(deployment.profiles)) {
-      const declared = name === 'web' ? installation.webPackage : installation.profiles[name];
-      if (!existsSync(profile.packagePath)) throw new Error(`Missing local deployment.profiles.${name}.packagePath target; prepare this profile or provide an explicit override`);
-      const live = json(profile.packagePath);
-      const merged = { ...declared, ...live, dependencies: { ...declared?.dependencies, ...live.dependencies } };
-      if (name === 'web') installation.webPackage = merged;
-      else installation.profiles[name] = merged;
-    }
+  if (!deployment?.globalWorkspacePath) {
+    return resolveDependencyTargets(snapshotDir, installation, catalog, machine.features, machine.quota);
   }
-  return resolveDependencyTargets(snapshotDir, installation, catalog, machine.features, machine.quota);
+  validateDeployment(deployment);
+  if (!existsSync(deployment.globalWorkspacePath)) throw new Error('Missing local deployment.globalWorkspacePath target; check pnpm global installation or provide an explicit override');
+  const liveGlobal = readYaml(deployment.globalWorkspacePath);
+  installation.globalWorkspace = { ...installation.globalWorkspace, ...liveGlobal, overrides: liveGlobal.overrides };
+  installation.profiles ??= {};
+  for (const [name, profile] of Object.entries(deployment.profiles)) {
+    const declared = name === 'web' ? installation.webPackage : installation.profiles[name];
+    if (!existsSync(profile.packagePath)) throw new Error(`Missing local deployment.profiles.${name}.packagePath target; prepare this profile or provide an explicit override`);
+    const live = json(profile.packagePath);
+    const merged = { ...declared, ...live, dependencies: live.dependencies };
+    if (name === 'web') installation.webPackage = merged;
+    else installation.profiles[name] = merged;
+  }
+  return resolveDependencyTargets(snapshotDir, installation, catalog, machine.features, machine.quota,
+    { declaredInstallation: machine.installation });
 }
 
 // Each inspection starts without modules or resolver state from an earlier installation.
@@ -231,6 +232,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
     : resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog, machine.features, machine.quota);
   const blocked = targets.entries.filter(row => row.status.startsWith('blocked'));
   const preview = { input: live ? 'live' : 'offline', entries: targets.entries, blocked: blocked.length, apply: false, hostLifecycle: 'external-maintenance-window' };
+  if (live) preview.declarationDrift = targets.declarationDrift;
   if (catalog.runtimeVersion) {
     preview.runtime = { targetVersion: catalog.runtimeVersion };
     if (live) {

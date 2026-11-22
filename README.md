@@ -144,7 +144,7 @@ Team 模式在根会话中开启，同一树的普通子代理共享任务看板
 
 可选 `acp.pressureDefault: { nudgeAtRatio: 0.70, resetBelowRatio: 0.65 }` 为未列出模型设置最大上下文比例阈值；`pressureRoutes` 保持精确路由绝对 token 覆盖。`features.activeContext: true` 选择 ACP，与 `features.sessionTools` 独立；未填写或为 false 时保留 Basic。见[公开 ACP 示例](<examples/active-context-machine.yaml>)和[ACP 配置与验收](<docs/install.md#active-context-pruningacp>)。
 
-可选 `installation.globalWorkspace`／`installation.webPackage` 提供安装输入；共用清单覆盖受管项，保留无关 overrides 和机器专属依赖。受管 fork／个人插件选择精确 Release URL，明确允许的官方包、普通库与第三方插件保留精确 registry pin。缺精确资产会阻塞正式更新，不自动换版本或回退本地来源。
+可选 `installation.globalWorkspace`／`installation.webPackage` 为离线命令提供安装输入。Live update 的依赖以本机当前安装为基线，共用清单覆盖受管项；仅写在 `machine.yaml` 里的非受管依赖不会被安装，声明不符会单独提示。受管 fork／个人插件选择精确 Release URL，明确允许的官方包、普通库与第三方插件保留精确 registry pin。缺精确资产会阻塞正式更新，不自动换版本或回退本地来源。
 
 `deployment` 可省略；doctor、update 默认预览和 apply 使用执行机器的 DSH_HOME／用户主目录及 pnpm 公共信息推导部署路径，显式路径支持 `~/` 和已定义环境变量。`update --offline`、render/check 只消费机器声明或快照，不引入执行机器的安装输入。共用本地模块要求明确的绝对 `deployment.home`，或沿已有一致的 `home/plugins` 目录；离线不展开 `~` 或环境变量，位置缺失或歧义会报错。具体默认和覆盖方式见[部署位置](docs/install.md#2-声明本机部署位置)。
 

@@ -258,11 +258,75 @@ test('missing assets remain visible blockers without a file fallback and patch r
   assert.ok(rendered.home.includes('!!js'));
 });
 
-test('machine deployment reads live unrelated dependencies even when stale installation inputs are present', t => {
-  const { machine } = fixture(t);
-  const targets = deploymentTargets(machine, 'unused', catalog);
-  assert.equal(targets.globalWorkspace.overrides['live-unrelated'], '4.0.0');
-  assert.equal(targets.profiles.web.dependencies['live-profile-plugin'], '4.0.0');
+test('live targets use installed dependency keys and report only unmanaged declaration drift', async t => {
+  const { directory, machine, machinePath } = fixture(t);
+  const { globalWorkspace, webPackage } = machine.installation;
+  globalWorkspace.packages = ['declared-package'];
+  webPackage.dsh = { profile: { bundles: ['declared-bundle'] } };
+  globalWorkspace.overrides['retired-runtime@1'] = 'file:declared-retired.tgz';
+  globalWorkspace.overrides['managed-runtime@obsolete'] = 'file:declared-managed.tgz';
+  webPackage.dependencies['declared-plugin'] = 'file:declared-plugin.tgz';
+  webPackage.dependencies['managed-plugin'] = 'file:declared-managed.tgz';
+  machine.installation.profiles = { headless: { dependencies: { local: 'file:declared-local.tgz' } } };
+  const headlessPath = join(directory, 'headless.json');
+  machine.deployment.profiles.headless = { packagePath: headlessPath };
+  const headless = { dependencies: { local: 'file:installed-local.tgz' } };
+  writeJson(headlessPath, headless);
+  writeJson(machinePath, machine);
+  const [runtime, plugin, optional] = catalog.packages;
+  const selected = { packages: [runtime, plugin, optional, { ...optional, package: 'required-plugin', required: true, profiles: ['web'] }],
+    retiredGlobalOverrides: ['retired-runtime'] };
+  const liveGlobal = readYaml(machine.deployment.globalWorkspacePath);
+  const liveWeb = readYaml(machine.deployment.profiles.web.packagePath);
+  const targets = deploymentTargets(machine, 'unused', selected);
+  assert.deepEqual(targets.globalWorkspace.overrides, { ...liveGlobal.overrides, 'managed-runtime@1.0.0': runtime.version });
+  assert.deepEqual(targets.profiles.web.dependencies, { ...liveWeb.dependencies, [plugin.package]: plugin.url, 'required-plugin': optional.version });
+  assert.deepEqual(targets.profiles.headless.dependencies, headless.dependencies);
+  assert.deepEqual(targets.globalWorkspace.packages, globalWorkspace.packages);
+  assert.deepEqual(targets.profiles.web.dsh, webPackage.dsh);
+  assert.deepEqual(targets.declarationDrift, [
+    { scope: 'global-override', name: 'declared-unrelated', status: 'stale-declaration' },
+    { scope: 'global-override', name: 'retired-runtime@1', status: 'stale-declaration' },
+    { scope: 'global-override', name: 'live-unrelated', status: 'undeclared-installation' },
+    { scope: 'profile', profile: 'web', name: 'declared-plugin', status: 'stale-declaration' },
+    { scope: 'profile', profile: 'web', name: 'live-profile-plugin', status: 'undeclared-installation' },
+    { scope: 'profile', profile: 'headless', name: 'local', status: 'declaration-value-mismatch' },
+  ]);
+  assert.ok(!targets.entries.some(row => row.status.startsWith('retired')));
+  const noDeclaration = { ...machine };
+  delete noDeclaration.installation;
+  assert.deepEqual(deploymentTargets(noDeclaration, 'unused', selected).declarationDrift, []);
+
+  const offline = await updateMachine(machinePath, 'offline-declarations', false, { catalog: selected, offline: true });
+  assert.equal(offline.declarationDrift, undefined);
+  for (const name of ['declared-unrelated', 'declared-plugin']) {
+    assert.ok(offline.entries.some(row => row.name === name && row.status.startsWith('unmanaged')));
+  }
+  assert.ok(!offline.entries.some(row => row.name === 'live-unrelated' || row.name === 'live-profile-plugin'));
+});
+
+test('declaration drift alone does not change manifests or invoke the installer', async t => {
+  const { machine, machinePath, home } = fixture(t);
+  const selected = { packages: [] };
+  const globalPath = machine.deployment.globalWorkspacePath;
+  const webPath = machine.deployment.profiles.web.packagePath;
+  writeJson(globalPath, {});
+  writeJson(webPath, { private: true });
+  const { rendered, localPlugins } = render(machinePath, 'drift-only', selected, { stage: false });
+  for (const { path, contents } of localPlugins) {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, contents);
+  }
+  writeFileSync(join(home, 'cordis.patch.yml'), rendered.home);
+  writeFileSync(join(home, 'profiles/web/cordis.patch.yml'), rendered.web);
+
+  const report = selectReport(await updateMachine(machinePath, 'drift-only', true, {
+    catalog: selected, doctor: healthy, runStep: () => assert.fail('declaration drift triggered the installer'),
+  }));
+  assert.equal(report.noOp, true);
+  assert.equal(report.summary.changed, 0);
+  assert.equal(report.files.length, 0);
+  assert.ok(report.declarationDrift.some(row => row.status === 'stale-declaration'));
 });
 
 test('preview and blocked apply cannot call installers or touch target files', async t => {
@@ -513,6 +577,8 @@ test('CLI separates JSON format from verbosity and hides unchanged items and pri
   writeFileSync(join(home, 'cordis.patch.yml'), rendered.home);
   writeFileSync(join(home, 'profiles/web/cordis.patch.yml'), rendered.web);
   const source = readYaml(machine.deployment.globalWorkspacePath);
+  machine.installation.globalWorkspace.overrides['live-unrelated'] = 'file:/fixture/declared-secret';
+  source.overrides['live-unrelated'] = 'file:/fixture/installed-secret';
   const changedName = '@smithy/core';
   source.overrides[changedName] = '0.0.1';
   writeJson(machine.deployment.globalWorkspacePath, source);
@@ -532,12 +598,21 @@ test('CLI separates JSON format from verbosity and hides unchanged items and pri
   assert.equal(compact.entries.find(row => row.name === changedName).currentSources[0].source, '0.0.1');
   assert.ok(full.entries.length > compact.entries.length);
   assert.deepEqual(compact.summary, full.summary);
+  assert.deepEqual(compact.declarationDrift, full.declarationDrift);
+  assert.deepEqual(new Set(compact.declarationDrift.map(row => row.status)),
+    new Set(['stale-declaration', 'declaration-value-mismatch', 'undeclared-installation']));
   const text = cli([]), verbose = cli(['--verbose']);
   assert.ok(text.includes(changedName));
   assert.ok(!text.includes('node-addon-native-custom-loader'));
   assert.ok(verbose.includes('node-addon-native-custom-loader'));
   assert.ok(compact.files.some(file => file.added?.includes('private-row')));
-  for (const output of [text, verbose, JSON.stringify(compact), JSON.stringify(full)]) assert.ok(!output.includes('secret-marker'));
+  assert.match(text, /machine\.yaml 与实际安装不符/);
+  assert.match(text, /\[global\] declared-unrelated: .*实际未安装，可删除/);
+  assert.match(text, /\[global\] live-unrelated: 声明与实际取值不同/);
+  assert.match(text, /\[web\] live-profile-plugin: 实际已安装/);
+  for (const output of [text, verbose, JSON.stringify(compact), JSON.stringify(full)]) {
+    assert.doesNotMatch(output, /secret-marker|declared-secret|installed-secret/);
+  }
   assert.equal(readYaml(machine.deployment.globalWorkspacePath).overrides[changedName], '0.0.1', 'preview did not apply changes');
 });
 
