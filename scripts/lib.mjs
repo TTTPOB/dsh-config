@@ -64,16 +64,11 @@ function quotaAccounts(quota) {
 function providerQuotas(quota, defaults, providers) {
   const accounts = quotaAccounts(quota);
   if (!accounts.length) return;
-  const { provider: providerId = defaults.provider } = quota;
-  assert.ok(typeof providerId === 'string' && Object.hasOwn(providers, providerId), 'quota.provider must name a configured provider');
-  const { apiKeyEnv: authRef, baseURL } = providers[providerId];
-  assert.ok(typeof authRef === 'string' && authRef.trim(), 'quota.provider requires apiKeyEnv');
-  const input = quota.url === undefined ? baseURL : quota.url;
-  const endpoint = typeof input === 'string' && URL.parse(input);
-  assert.ok(endpoint && ['http:', 'https:'].includes(endpoint.protocol) && !endpoint.username && !endpoint.password,
-    quota.url === undefined ? 'quota requires provider.baseURL or an explicit quota.url (HTTP(S), without inline credentials)'
-      : 'quota.url must be an HTTP(S) URL without inline credentials');
-  const url = quota.url === undefined ? `${endpoint.origin}/_dsh/quota` : endpoint.href;
+  // dsh-credits shows only the binding of the current model's provider, so each listed provider gets its own binding.
+  const selected = quota.provider ?? defaults.provider;
+  const providerIds = Array.isArray(selected) ? selected : [selected];
+  assert.ok(providerIds.length > 0 && new Set(providerIds).size === providerIds.length,
+    'quota.provider must be a provider ID or a nonempty list of distinct provider IDs');
 
   const ids = new Set();
   const metrics = accounts.flatMap(account => {
@@ -95,11 +90,22 @@ function providerQuotas(quota, defaults, providers) {
       };
     });
   });
-  return [{ providerId, enabled: true, sourceType: 'custom', source: {
-    id: 'sub2api', kind: 'metric',
-    request: { method: 'GET', url, credentialMode: 'reference', dshProvider: '', authRef, authStyle: 'bearer' },
-    response: { metrics },
-  } }];
+  return providerIds.map(providerId => {
+    assert.ok(typeof providerId === 'string' && Object.hasOwn(providers, providerId), 'quota.provider must name a configured provider');
+    const { apiKeyEnv: authRef, baseURL } = providers[providerId];
+    assert.ok(typeof authRef === 'string' && authRef.trim(), 'quota.provider requires apiKeyEnv');
+    const input = quota.url === undefined ? baseURL : quota.url;
+    const endpoint = typeof input === 'string' && URL.parse(input);
+    assert.ok(endpoint && ['http:', 'https:'].includes(endpoint.protocol) && !endpoint.username && !endpoint.password,
+      quota.url === undefined ? 'quota requires provider.baseURL or an explicit quota.url (HTTP(S), without inline credentials)'
+        : 'quota.url must be an HTTP(S) URL without inline credentials');
+    const url = quota.url === undefined ? `${endpoint.origin}/_dsh/quota` : endpoint.href;
+    return { providerId, enabled: true, sourceType: 'custom', source: {
+      id: 'sub2api', kind: 'metric',
+      request: { method: 'GET', url, credentialMode: 'reference', dshProvider: '', authRef, authStyle: 'bearer' },
+      response: { metrics },
+    } };
+  });
 }
 
 export function validateMachine(machine) {

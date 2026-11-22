@@ -34,13 +34,13 @@ pnpm check --machine workstation
 
 ```yaml
 quota:
-  provider: klaude-cl  # 可省略，默认 klaude-cl
+  provider: klaude-cl  # 可省略，默认 klaude-cl；也可写列表，如 [klaude-openai, klaude-cl]
   accounts:
     - { id: "12", label: "A" }
     - { id: "claude-demo", label: "Claude" }
 ```
 
-默认端点取选定 provider 合并后 `baseURL` 的 origin，再拼接 `/_dsh/quota`，例如 `https://gateway.example.invalid/v1` 得到 `https://gateway.example.invalid/_dsh/quota`。额度服务若不在同一 origin，在私有参数中设置 `quota.url` 为服务的完整 URL。`authRef` 引用同一 provider 合并后的 `apiKeyEnv`；渲染不读取 Key。实际运行时须让 Web Host 能按该引用取得已有 LLM Key。
+dsh-credits 只显示当前模型所属 provider 的额度绑定，不会回退到其他 provider；平时会切换的 provider 都要列进 `provider`，每个生成一份绑定，账户相同，Key 和端点各取自该 provider。默认端点取选定 provider 合并后 `baseURL` 的 origin，再拼接 `/_dsh/quota`，例如 `https://gateway.example.invalid/v1` 得到 `https://gateway.example.invalid/_dsh/quota`。额度服务若不在同一 origin，在私有参数中设置 `quota.url` 为服务的完整 URL。`authRef` 引用同一 provider 合并后的 `apiKeyEnv`；渲染不读取 Key。实际运行时须让 Web Host 能按该引用取得已有 LLM Key。
 
 有选中账户的机器仅在 Web profile 安装精确 npm registry 版本 `dsh-credits@0.4.5`，由 Web patch 挂载，不重复使用包的 bundle。每个选中账户生成 `<label> 5h` 和 `<label> 7d`；服务返回 `null` 的窗口不会被插件计作 0。以[只选 B 的公开示例](<../examples/server-machine.yaml>)验证结构：`pnpm check examples/server-machine.yaml`。填写私有参数后，先运行 `pnpm check --machine <name>`，再按正常维护流程部署并验收。
 

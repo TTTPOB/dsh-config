@@ -100,6 +100,21 @@ test('B-only quota uses the selected provider and accepts a private URL override
   assert.deepEqual(binding.source.response.metrics.map(({ key }) => key), ['acct-13-5h', 'acct-13-7d']);
 });
 
+test('a provider list binds the same accounts under each provider with its own key and endpoint', t => {
+  let providers;
+  const { rows } = renderQuotaFixture(t, machine => {
+    machine.quota.provider = ['klaude-openai', 'klaude-cl'];
+    providers = machine.quota.provider;
+  });
+  const bindings = rows[0].entry.config.providerQuotas;
+  assert.deepEqual(bindings.map(({ providerId }) => providerId), providers);
+  assert.notEqual(bindings[0].source.request.authRef, bindings[1].source.request.authRef);
+  assert.deepEqual(bindings[0].source.response, bindings[1].source.response);
+  for (const id of [[], ['klaude-cl', 'klaude-cl'], ['klaude-cl', 'missing']]) {
+    assert.throws(() => renderQuotaFixture(t, machine => { machine.quota.provider = id; }), /quota\.provider must/);
+  }
+});
+
 test('named quota accounts keep their IDs in metric keys and JSONPaths', t => {
   const { rows } = renderQuotaFixture(t, machine => {
     machine.quota.accounts.push({ id: 'claude-demo_1', label: 'Claude' });
