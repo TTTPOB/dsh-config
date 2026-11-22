@@ -65,6 +65,14 @@ server、nas 使用各自机器名；check 和离线预览只消费本地输入�
 
 运行 `node --test tests/stream-loop-guard.test.mjs` 验证检测和重试。设置 `DSH_CLI_PACKAGE` 为已安装 CLI 的 package.json 路径后，同一测试还会用真实 Loader 跑进程内 AgentLoop；不启动 Host、不调用真实模型。
 
+## 工具调用纠错重试
+
+[tool-call-hint.mjs](<tool-call-hint.mjs>) 在 Host 层挂载一次，使用 `config: {}`。网关因顶层工具不在 schema 中，或因调用了未开放的原生工具而拒绝整条响应时，插件在重试前追加一条来源为 `tool-call-hint` 的英文用户消息，提示使用 schema 中的完整顶层名称或在 `run_code` 内调用 `tools.<name>(...)`。被拒绝响应中的工具没有执行。
+
+同一会话的同一轮和同一步最多因此重试三次。第四次匹配不追加消息，交给后续错误处理。
+
+运行 `node --test tests/tool-call-hint.test.mjs` 验证。设置 `DSH_CLI_PACKAGE` 为已安装 CLI 的 package.json 路径，可额外用真实 Loader 跑进程内 AgentLoop，并用本地模拟网关验证 pi-ai 错误分类。不启动 Host，不调用真实模型。
+
 ## Provider 路由提示词
 
 [provider-prompt.mjs](<provider-prompt.mjs>) 的 `config.rules` 写在对应插件项内。部署规则见[安装指南](<../docs/install.md#本地-esm-插件>)，声明见[本地插件示例](<../examples/local-plugins-machine.yaml>)。

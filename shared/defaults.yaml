@@ -10,6 +10,9 @@ localPlugins:
   - id: stream-loop-guard
     module: stream-loop-guard.mjs
     config: {}
+  - id: tool-call-hint
+    module: tool-call-hint.mjs
+    config: {}
 defaults:
   quota:
     provider: klaude-cl
