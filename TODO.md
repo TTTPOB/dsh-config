@@ -24,7 +24,7 @@
 |---|---|
 | 工具参数只在结束时解析（性能） | 官方 1.6.0 已消除逐片重扫：200 KiB 参数旧版 1.4.0 约 4.7 s CPU，fork 9.6 ms，1.6.0 17.5 ms，带转义多约 41 ms；截断与修复行为一致。多路并发未测 |
 | 系统提示放到顶层 `instructions` | klaude-openai 已于 2026-11-22 改回 `input`（GPT-6.2 后端把 `instructions` 拼在 `input` 之后，系统提示每轮不命中缓存；Sub2API 账户开透传后不再补 Codex 内置提示）。不要让网关把 developer 消息归入 instructions |
-| 关闭缓存后仍发送会话 ID 请求头 | 共享配置、公开示例和本地三台机器的 Responses 路由均未设置 `cacheRetention: none`。DSH 只转发显式配置，Pi 1.6.0 默认 `short` 且继续发送 `x-client-request-id`，因此不加插件。`session_id` 在 1.6.0 改名为 `session-id`；Claude 和 AGY 网关优先读 `x-client-request-id`，Sub2API 上游同时识别两种拼写；切换时验证三个网关的会话亲和性（尤其是实际部署的 Sub2API）。将来若关闭缓存，再用 `llm-pi-ai/request-headers` 按需给指定 provider 补头 |
+| 关闭缓存后仍发送会话 ID 请求头 | 共享配置、公开示例和本地三台机器的 Responses 路由均未设置 `cacheRetention: none`。DSH 只转发显式配置，Pi 1.6.0 默认 `short` 且继续发送 `x-client-request-id`，因此不加插件。`session_id` 在 1.6.0 改名为 `session-id`，不补发旧头。Claude 网关优先读 `x-client-request-id`。Sub2API（按 v0.2.24 源码核对）选账号时 `session-id` 优先级最高；转发 Codex 上游时，没有 `session_id` 就用 body 的 `prompt_cache_key` 生成，Pi 发送的值与会话 ID 相同，因此补发 `session_id` 不改变结果。切换后看 klaude-openai 连续两轮是否命中缓存。将来若关闭缓存，再用 `llm-pi-ai/request-headers` 按需给指定 provider 补头 |
 | Gemini 走 Chat Completions 时的思考签名 | 共享配置、公开示例和本地三台机器均无 Gemini 的 `openai-completions` 路由；本地 Gemini 只走 `agy-gateway` 的 `openai-responses`，远端也没有该路由；撤回 fork 时不保留这项改动 |
 
 DSH 适配器 `llm-pi-ai` 上的相关 fork 改动：
