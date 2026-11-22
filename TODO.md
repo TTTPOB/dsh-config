@@ -1,22 +1,22 @@
 # 待办
 
-## 撤回 Pi fork（下次修改 DSH 时一起做）
+## 撤回 Pi fork：只剩切换和验收
 
-目标：DSH 直接使用官方 `@earendil-works/pi-ai`，不再维护 Pi fork。决策依据（性能实测、`systemPromptFormat` 与 GPT-6.2 缓存、Gemini 签名）记在 DSH 适配器分支的 Agent Note `.agents/notes/implemented/architecture/2026-11-22-official-pi-ai-dependency.md`。
+目标：DSH 直接使用官方 `@earendil-works/pi-ai`，不再维护 Pi fork。决策依据（性能实测、`systemPromptFormat` 与 GPT-6.2 缓存、Gemini 签名）记在 DSH 的 Agent Note `.agents/notes/implemented/architecture/2026-11-22-official-pi-ai-dependency.md`。
 
-### 已完成（2026-11-22，均未 push）
+### 已完成（2026-11-23）
 
-- **DSH 适配器**：worktree `deepseek-harness-pi-retire`，分支 `llm-pi-ai-official-1.6`，基于 `fork/daily-driver` `398a33da61`。提交 `5468d304ed` 改用官方 1.6.0：修完 10 个 tsc 诊断，删除 `systemPromptFormat` 和 Gemini Chat Completions 签名测试，开放 3 个新 compat 字段，前缀摘要换成 v2，包版本 `0.2.2-rc.5-fork3`。提交 `eabd2b9fa3` 是 Agent Note。已审查；包测试 482、core 2246 通过，7 个变异被抓到。
-- **Claude 网关**：现有代码已同时识别 `instructions` 和 input 里的 developer 消息，线上版本同样具备，不用改代码。分支 `fix/pi-retire` 的 `c1ca041` 只补了回归测试，合并前先 rebase 到 main。
-- **会话头**：不需要插件（见下表）。**Gemini Chat Completions 路由**：本地三台和远端都没有，不再检查。
+- **DSH 适配器与发版**：`daily-driver` `0bb03a26bd` 改用官方 Pi AI 1.6.0，删除 Pi fork 发版路径和适配器里的 `errorCodeRules`。Release `daily-driver-v0.2.2-rc.5-fork6` 发布 `dsh-llm-pi-ai` `0.2.2-rc.5-fork3`，已核对 SHA256、依赖版本和产物内容。
+- **dsh-config**：`main` `931af2d`。依赖清单换成新资产，`retiredGlobalOverrides` 删除旧 Pi override；错误码改写移到 home 插件 [error-code-rules](<plugins/README.md#错误码改写>)；删除 klaude-cl 和工作站 agy-gateway 的 `systemPromptFormat`（新适配器会拒绝这个字段）。
+- **三机 live dry run**：三台结果一致，依赖只有两项变化（移除 `@earendil-works/pi-ai` override、`dsh-llm-pi-ai` fork2 → fork3），另新增 `error-code-rules` 行、修改 `llm-pi-ai` 行，0 阻塞。
+- **Claude 网关**：现有代码已同时识别 `instructions` 和 input 里的 developer 消息，不用改代码。分支 `fix/pi-retire` 的 `c1ca041` 只补了回归测试，合并前先 rebase 到 main。
 
-### 下次要做（按顺序）
+### 切换时要做（按顺序）
 
-1. **发版路径（DSH fork，同一分支上改）**：删除 `scripts/daily-driver-pi.mjs` 及其测试；`scripts/daily-driver.mjs` 删除 `withPiFork` 的 import、测试列表里的 `daily-driver-pi.test.mjs`、verify 里的 `withPiFork` 分支、release 里要求 `DSH_PI_AI_TARBALL` 的断言；`.github/workflows/daily-driver-release.yml` 删除 `pi_tarball_url` 输入、`PI_TARBALL_URL` 环境变量和 core 下载块；同步 `scripts/README.daily-driver.md`。不改的话 core 发版会直接失败。
-2. **发版**：分支合并到 `daily-driver`，走 Release workflow 发布新的 `dsh-llm-pi-ai`。
-3. **dsh-config 依赖配置**：`shared/dependencies.yaml` 删除 `@earendil-works/pi-ai` 的 Pi fork 条目，`dsh-llm-pi-ai` 换成新发布的资产地址。
-4. **部署验收**：klaude-cl 连发两轮相同系统提示的请求，第二轮命中缓存，网关不重建会话。skelviper（`anthropic-messages`）已有会话里的签名思考会失效一次，属预期。AGY 网关不验收，见下文退役项。
-5. **收尾**：停用 Pi 仓库 fork 的私有打包与发布 workflow。
+1. **兼容拦截**：`verifiedCompatibility` 没有 `dsh-llm-pi-ai@0.2.2-rc.5-fork3`。先在隔离 profile 跑 doctor 取全部拦截再登记，否则 apply 后的 doctor 会让切换自动回滚。
+2. **切换**：有全局依赖变化，必须走 host-switch（不能热加载），并设置 `DSH_APPLY_TIMEOUT=900 DSH_ROLLBACK_TIMEOUT=900`。远端的 machine.yaml 已和工作站同步。
+3. **部署验收**：确认全局安装解析到官方 `@earendil-works/pi-ai` 1.6.0。klaude-cl 和 klaude-openai 各连发两轮相同系统提示的请求，第二轮命中缓存，网关不重建会话。skelviper（`anthropic-messages`）已有会话里的签名思考会失效一次，属预期。AGY 网关不验收，见下文退役项。
+4. **收尾**：停用 Pi 仓库 fork 的私有打包与发布 workflow。
 
 ### 逐项依据
 
