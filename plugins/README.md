@@ -73,6 +73,19 @@ server、nas 使用各自机器名；check 和离线预览只消费本地输入�
 
 运行 `node --test tests/tool-call-hint.test.mjs` 验证。设置 `DSH_CLI_PACKAGE` 为已安装 CLI 的 package.json 路径，可额外用真实 Loader 跑进程内 AgentLoop，并用本地模拟网关验证 pi-ai 错误分类。不启动 Host，不调用真实模型。
 
+## 错误码改写
+
+[error-code-rules.mjs](<error-code-rules.mjs>) 按错误消息改写模型请求失败时的错误码，`llm-retry` 再按改写后的错误码决定是否重试。它取代了 Pi 适配器 fork 里的 provider 字段 `errorCodeRules`，在 home 挂载一次，覆盖所有 preset。
+
+`config.rules` 中每条规则写 `providers`（精确的 provider ID 列表）、`match`（正则源码）和 `code`（新错误码）。同一请求按顺序取第一条命中的规则。只有分类器给出的 8 种错误码会被改写：`AUTH`、`QUOTA_EXCEEDED`、`RATE_LIMIT`、`INVALID_REQUEST`、`SERVER`、`TIMEOUT`、`TRANSPORT`、`PI_AI_ERROR`；新错误码也只能是这 8 种之一。上下文超限、空响应、流式循环等专用错误码和中止的请求保持原样。`config: { rules: [] }` 禁用插件。
+
+[共享配置](<../shared/defaults.yaml>)目前有两条规则：
+
+- Klaude 两个网关的 `upstream_error` 改为 `SERVER`，按路由的重试策略重试。
+- `klaude-cl` 拒绝未开放工具的错误改为 `PI_AI_ERROR`。不改的话，内建分类器会把 `web_fetch` 里的 "fetch" 当成网络错误（`TRANSPORT`），`llm-retry` 会直接重发同一请求，[tool-call-hint](<tool-call-hint.mjs>) 就没有机会提示模型纠正工具名。
+
+运行 `node --test tests/error-code-rules.test.mjs tests/tool-call-hint.test.mjs` 验证。设置 `DSH_CLI_PACKAGE` 为已安装 CLI 的 package.json 路径后，测试还会用真实 Loader 确认 `llm-retry` 读到改写后的错误码，并用本地模拟网关确认工具名错误交给了 tool-call-hint。测试不启动 Host，也不调用真实模型。
+
 ## Provider 路由提示词
 
 [provider-prompt.mjs](<provider-prompt.mjs>) 的 `config.rules` 写在对应插件项内。部署规则见[安装指南](<../docs/install.md#本地-esm-插件>)，声明见[本地插件示例](<../examples/local-plugins-machine.yaml>)。

@@ -14,7 +14,7 @@
 
 1. **发版路径（DSH fork，同一分支上改）**：删除 `scripts/daily-driver-pi.mjs` 及其测试；`scripts/daily-driver.mjs` 删除 `withPiFork` 的 import、测试列表里的 `daily-driver-pi.test.mjs`、verify 里的 `withPiFork` 分支、release 里要求 `DSH_PI_AI_TARBALL` 的断言；`.github/workflows/daily-driver-release.yml` 删除 `pi_tarball_url` 输入、`PI_TARBALL_URL` 环境变量和 core 下载块；同步 `scripts/README.daily-driver.md`。不改的话 core 发版会直接失败。
 2. **发版**：分支合并到 `daily-driver`，走 Release workflow 发布新的 `dsh-llm-pi-ai`。
-3. **dsh-config 配置**：删除 `shared/providers.yaml` 里 klaude-cl 的 `systemPromptFormat: instructions`，以及工作站私有参数里 agy-gateway 的同一字段；新适配器不认识这个字段，留着会导致配置加载失败。`shared/dependencies.yaml` 删除 `@earendil-works/pi-ai` 的 Pi fork 条目，`dsh-llm-pi-ai` 换成新发布的资产地址。
+3. **dsh-config 依赖配置**：`shared/dependencies.yaml` 删除 `@earendil-works/pi-ai` 的 Pi fork 条目，`dsh-llm-pi-ai` 换成新发布的资产地址。
 4. **部署验收**：klaude-cl 连发两轮相同系统提示的请求，第二轮命中缓存，网关不重建会话。skelviper（`anthropic-messages`）已有会话里的签名思考会失效一次，属预期。AGY 网关不验收，见下文退役项。
 5. **收尾**：停用 Pi 仓库 fork 的私有打包与发布 workflow。
 
@@ -29,9 +29,9 @@
 
 DSH 适配器 `llm-pi-ai` 上的相关 fork 改动：
 
-- `errorCodeRules`（例如 `^upstream_error:` → `SERVER`）可移到 `llm/stream` 插件：在流的结尾改写错误码，再由 `llm-retry` 重试。klaude-cl 的 `^tool_protocol_error: Model called an unavailable tool:` → `PI_AI_ERROR` 规则必须一起迁移：它阻止内建分类器把 `web_fetch` 等工具名误判为可重试的 TRANSPORT／TIMEOUT，恢复交给 `tool-call-hint`。
+- Klaude 网关的[错误码改写](<plugins/README.md#错误码改写>)由 home 插件处理，不再依赖适配器 fork。
 - `supportsToolSearch` 是官方 pi-ai 字段，但上游 DSH 适配器的 compat 白名单不放行它；白名单这一处修改必须保留，删除后工具搜索失效。
 
 ## 退役 AGY 网关
 
-`agy-gateway` 目前基本不可用，也很久没用。退役时删除工作站私有参数里的 `agy-gateway` provider 行和 `subagentModels` 中的 `gemini-3.8-flash`，并从工作区约定里移除 `agy-localharness-gateway` 仓库条目。撤回 Pi fork 时不验收 AGY 网关；若届时 provider 行仍在，只删除其 `systemPromptFormat`。
+`agy-gateway` 目前基本不可用，也很久没用。退役时删除工作站私有参数里的 `agy-gateway` provider 行和 `subagentModels` 中的 `gemini-3.8-flash`，并从工作区约定里移除 `agy-localharness-gateway` 仓库条目。撤回 Pi fork 时不验收 AGY 网关。

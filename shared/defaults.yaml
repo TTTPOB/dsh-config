@@ -13,6 +13,18 @@ localPlugins:
   - id: tool-call-hint
     module: tool-call-hint.mjs
     config: {}
+  - id: error-code-rules
+    module: error-code-rules.mjs
+    config:
+      rules:
+        - providers: [klaude-openai, klaude-cl]
+          match: "^upstream_error:"
+          code: SERVER
+        # Override the classifier's retryable TRANSPORT result for tool names such as web_fetch,
+        # leaving recovery to tool-call-hint.
+        - providers: [klaude-cl]
+          match: "^tool_protocol_error: Model called an unavailable tool: "
+          code: PI_AI_ERROR
 defaults:
   quota:
     provider: klaude-cl

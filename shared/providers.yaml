@@ -16,9 +16,6 @@ providers:
     retryPolicy:
       mode: normal
       maxRetries: 5
-    errorCodeRules:
-      - match: "^upstream_error:"
-        code: SERVER
     api: openai-responses
     models:
       - id: gpt-6.2-astra
@@ -62,17 +59,9 @@ providers:
           max: max
   klaude-cl:
     apiKeyEnv: KLAUDE_CL_API_KEY
-    errorCodeRules:
-      - match: "^upstream_error:"
-        code: SERVER
-      # Prevent the built-in classifier from treating tool names as retryable errors, leaving recovery to tool-call-hint.
-      - match: "^tool_protocol_error: Model called an unavailable tool: "
-        code: PI_AI_ERROR
-        after: false
     api: openai-responses
     compat:
       supportsToolSearch: true
-      systemPromptFormat: instructions
     models:
       - id: claude-fable-5-2
         name: Claude Fable 5.2
