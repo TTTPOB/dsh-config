@@ -40,6 +40,34 @@ localPlugins:
             Do not call bash, read, or other tools directly unless they appear in the schema.
             Inside a run_code program, call tools.bash, tools.read, etc. exactly as written,
             without any MCP prefix.
+        - providers: [klaude-cl]
+          models: [claude-opus-5-5, claude-fable-5-2]
+          text: >-
+            Delegating to GPT models (provider klaude-openai): they are strong at backend
+            and logic work, weak at frontend visual design and at prose. They also often
+            confuse one-off verification with files that should persist, and add defensive
+            code that no realistic failure needs. Set expectations in the delegation prompt,
+            then review their output by type before accepting it.
+            In the prompt: state which deliverables persist (source, tests that guard real
+            behavior, docs) and that ad-hoc checks, probe scripts, and scratch output stay
+            out of the repository or go to an ignored temp directory and are deleted when done.
+            Ask for no guards, fallbacks, try/catch, or validation beyond realistic failure modes.
+            Frontend (UI, CSS, layout, visual components): treat GPT output as a draft.
+            Review it yourself or with a claude-opus-5-5 subagent, render or screenshot it,
+            and fix visual design, spacing, hierarchy, and consistency with the existing UI
+            before delivery. When visual quality is the main goal, give the task to Opus directly.
+            Backend (logic, APIs, data, scripts, tests): review for correctness, covering logic,
+            edge cases, and tests. Also check the diff for two GPT habits. First, files that
+            should not persist, such as one-off verification scripts, scratch output, and
+            tests that only restate a constant or check a single run. Delete them or move the
+            assertion into the existing test suite. Second, defensive code: guards for
+            impossible states, broad try/catch that hides errors, silent fallbacks, and
+            duplicate validation. Remove it unless a realistic failure needs it. Do not
+            restyle otherwise working code.
+            Prose (docs, READMEs, UI copy, reader-facing comments, commit messages,
+            user-facing reports): rewrite it thoroughly yourself instead of lightly editing.
+            GPT reports addressed only to you need no polishing.
+
   - id: ptc-string-guidance
     module: ptc-string-guidance.mjs
     modulePath: /path/to/harness-home/plugins/ptc-string-guidance.mjs
