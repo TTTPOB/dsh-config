@@ -67,6 +67,10 @@ node scripts/dsh-config.mjs update --machine workstation
 
 Web profile 统一启用 `@nagi-ovo/dsh-visualize`，使用依赖清单中的精确 GitHub Release 资产；其他 profile 不自动安装。插件由共用 Web patch 激活，不重复加载 bundle。OpenUI 不再由配置安装或激活，已安装的旧包在维护窗口通过 pnpm 卸载。
 
+### Sub2API 额度
+
+在私有机器参数中填写 `quota.accounts`，即可在 Web 中为所选 provider 展示指定账户的 5h／7d 剩余额度。见[启用方法和示例](<docs/install.md#sub2api-额度>)。
+
 ### Better Sidebar
 
 Web profile 使用个人 fork `dsh-better-sidebar@0.28.2-fork1` 的精确 GitHub Release tarball，由[依赖清单](shared/dependencies.yaml)管理；其他 profile 不自动安装。使用 `patchOnly: true` 移除重复 bundle 激活，由共用 Web patch 挂载一次 `better-sidebar`，不覆盖界面拥有的偏好字段。

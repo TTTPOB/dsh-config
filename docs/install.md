@@ -28,6 +28,24 @@ pnpm check --machine workstation
 
 模板不渲染界面拥有的字段（`.volatile()`）：设置页只能写这些字段，并写进 profile patch，模板再钉住它们就只会在下一次 apply 被覆盖。归属划分与列表见 [README 的配置归属](<../README.md#配置归属模板界面与机器>)。apply 写 patch 时保留 live 中模板不产生的行，删除由共用迁移和机器参数 `rowOps.<layer>.retire` 指定；锚点的作用范围、分层与限制见 [README 的 rowOps.retire](<../README.md#按-id-保留与删除顶层行rowopsretire>)。预览会列出保留行与生效的移除锚点。
 
+### Sub2API 额度
+
+额度服务上线后，在 `private/machines/<name>/machine.yaml` 填写这台机器要显示的账户。`id` 是 Sub2API 的账户 ID，按字符串填写；`label` 是自己选的显示名：
+
+```yaml
+quota:
+  provider: klaude-cl  # 可省略，默认 klaude-cl
+  accounts:
+    - { id: "12", label: "A" }
+    - { id: "13", label: "B" }
+```
+
+默认端点取选定 provider 合并后 `baseURL` 的 origin，再拼接 `/_dsh/quota`，例如 `https://gateway.example.invalid/v1` 得到 `https://gateway.example.invalid/_dsh/quota`。额度服务若不在同一 origin，在私有参数中设置 `quota.url` 为服务的完整 URL。`authRef` 引用同一 provider 合并后的 `apiKeyEnv`；渲染不读取 Key。实际运行时须让 Web Host 能按该引用取得已有 LLM Key。
+
+有选中账户的机器仅在 Web profile 安装精确 npm registry 版本 `dsh-credits@0.4.5`，由 Web patch 挂载，不重复使用包的 bundle。每个选中账户生成 `<label> 5h` 和 `<label> 7d`；服务返回 `null` 的窗口不会被插件计作 0。以[只选 B 的公开示例](<../examples/server-machine.yaml>)验证结构：`pnpm check examples/server-machine.yaml`。填写私有参数后，先运行 `pnpm check --machine <name>`，再按正常维护流程部署并验收。
+
+省略 `quota` 或清空 `accounts` 不生成额度配置，也不接管已存在的插件配置。如果这台机器曾经部署本仓库生成的额度行，要撤下该行需同时在 `rowOps.web.retire` 加入 `dsh-credits`，避免保守合并继续保留旧行；重新启用前先移除该 retire 项。
+
 ### 本地 ESM 插件
 
 小型无 npm 依赖的模块通过 `localPlugins` 纳入 render/check/update。完整示例见[本地插件示例](<../examples/local-plugins-machine.yaml>)；各插件用法见[插件目录](<../plugins/README.md>)。

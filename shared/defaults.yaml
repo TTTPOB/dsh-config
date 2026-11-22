@@ -11,6 +11,8 @@ localPlugins:
     module: stream-loop-guard.mjs
     config: {}
 defaults:
+  quota:
+    provider: klaude-cl
   # The default conversation model belongs to the UI model picker and is never rendered.
   sessionTitle:
     provider: deepseek-official

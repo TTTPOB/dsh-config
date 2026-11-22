@@ -12,6 +12,9 @@ providers:
       baseURL: https://klaude.example.invalid/v1
     klaude-cl:
       baseURL: https://klaude.example.invalid
+quota:
+  accounts:
+    - { id: "13", label: "B" }
 mcp:
   siyuan:
     url: https://siyuan.example.invalid/mcp

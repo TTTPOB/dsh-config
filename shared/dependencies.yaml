@@ -191,6 +191,13 @@ packages:
     profiles: [web]
     required: true
     patchOnly: true
+  # Upstream dsh-credits publishes this third-party package on npm.
+  - package: dsh-credits
+    scope: profile
+    profiles: [web]
+    policy: registry
+    version: 0.4.5
+    patchOnly: true
   - package: dsh-mcp-panel
     scope: profile
     policy: release

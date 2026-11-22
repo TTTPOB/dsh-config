@@ -77,7 +77,7 @@ export function deploymentTargets(machine, snapshotDir, catalog) {
       else installation.profiles[name] = merged;
     }
   }
-  return resolveDependencyTargets(snapshotDir, installation, catalog, machine.features);
+  return resolveDependencyTargets(snapshotDir, installation, catalog, machine.features, machine.quota);
 }
 
 // Each inspection starts without modules or resolver state from an earlier installation.
@@ -228,7 +228,7 @@ export async function updateMachine(machinePath, label, apply = false, dependenc
   if (live) machine.deployment = normalizeDeployment(machine.deployment, dependencies.discovery);
   const targets = live
     ? deploymentTargets(machine, join(dirname(machinePath), 'snapshot'), catalog)
-    : resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog, machine.features);
+    : resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog, machine.features, machine.quota);
   const blocked = targets.entries.filter(row => row.status.startsWith('blocked'));
   const preview = { input: live ? 'live' : 'offline', entries: targets.entries, blocked: blocked.length, apply: false, hostLifecycle: 'external-maintenance-window' };
   if (catalog.runtimeVersion) {

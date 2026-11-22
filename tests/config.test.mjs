@@ -14,6 +14,98 @@ function fixture(t) {
 
 const example = join(root, 'examples/workstation-machine.yaml');
 
+function renderQuotaFixture(t, configure) {
+  const machine = readYaml(join(root, 'examples/server-machine.yaml'));
+  const path = join(fixture(t), 'machine.yaml');
+  configure(machine);
+  writeFileSync(path, JSON.stringify(machine));
+  const { rendered } = renderMachine(path, 'quota-test', undefined, { stage: false });
+  return {
+    rows: validatePatch(rendered.web).filter(({ entry }) => entry.id === 'dsh-credits'),
+    webPackage: JSON.parse(rendered.webPackage),
+    workspace: JSON.parse(rendered.globalWorkspace),
+  };
+}
+
+test('quota generates one Web-only plugin with a metric per selected account/window', t => {
+  const { rows, webPackage, workspace } = renderQuotaFixture(t, machine => {
+    machine.quota.accounts.unshift({ id: '12', label: 'A' });
+    machine.providers.set['klaude-cl'] = { baseURL: 'https://llm.example.invalid:8443/v1', apiKeyEnv: 'MOCK_LLM_KEY' };
+    machine.installation = { webPackage: { dsh: { profile: { bundles: ['dsh-credits', 'existing-bundle'] } } } };
+  });
+  assert.equal(webPackage.dependencies['dsh-credits'], '0.4.5');
+  assert.deepEqual(webPackage.dsh.profile.bundles, ['existing-bundle']);
+  assert.equal(workspace.overrides['dsh-credits'], undefined);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].operation, 'insert');
+  assert.equal(rows[0].entry.name, 'dsh-credits');
+  const [binding] = rows[0].entry.config.providerQuotas;
+  assert.equal(rows[0].entry.config.providerQuotas.length, 1);
+  assert.equal(binding.providerId, 'klaude-cl');
+  assert.equal(binding.enabled, true);
+  assert.equal(binding.sourceType, 'custom');
+  assert.equal(binding.source.kind, 'metric');
+  assert.deepEqual(binding.source.request, {
+    method: 'GET', url: 'https://llm.example.invalid:8443/_dsh/quota', credentialMode: 'reference',
+    dshProvider: '', authRef: 'MOCK_LLM_KEY', authStyle: 'bearer',
+  });
+  const metrics = binding.source.response.metrics;
+  assert.deepEqual(metrics.map(({ key, label, calculation }) => [key, label, calculation]), [
+    ['acct-12-5h', 'A 5h', 'direct'], ['acct-12-7d', 'A 7d', 'direct'],
+    ['acct-13-5h', 'B 5h', 'direct'], ['acct-13-7d', 'B 7d', 'direct'],
+  ]);
+  // Stage 0 A/B sample adapted to the endpoint contract, including an unmeasurable window.
+  const reset5h = '2026-11-22T13:00:00Z';
+  const reset7d = '2026-11-27T00:00:00Z';
+  const payload = { percent_base: 100, accounts: {
+    '12': { windows: { '5h': { remaining_percent: 58, resets_at: reset5h }, '7d': { remaining_percent: 89.5, resets_at: reset7d } } },
+    '13': { windows: { '5h': { remaining_percent: 30, resets_at: reset5h }, '7d': { remaining_percent: null, resets_at: null } } },
+  } };
+  const read = path => {
+    assert.match(path, /^\$(?:\.[a-z_]+|\["[\da-z]+"\])+$/);
+    return path.match(/[\da-z_]+/g).reduce((value, key) => value[key], payload);
+  };
+  assert.deepEqual(metrics.map(m => [read(m.valuePath), read(m.totalPath), read(m.resetsAtPath)]), [
+    [58, 100, reset5h], [89.5, 100, reset7d], [30, 100, reset5h], [null, 100, null],
+  ]);
+});
+
+test('omitted or empty quota does not generate or replace credits config', t => {
+  for (const quota of [undefined, { accounts: [] }]) {
+    const { rows, webPackage } = renderQuotaFixture(t, machine => { machine.quota = quota; });
+    assert.deepEqual(rows, []);
+    assert.equal(webPackage.dependencies['dsh-credits'], undefined);
+  }
+  const { rows, webPackage } = renderQuotaFixture(t, machine => {
+    delete machine.quota;
+    machine.webPrivate = '- id: dsh-credits\n  config: { showDock: false }';
+    machine.installation = { webPackage: {
+      dependencies: { 'dsh-credits': '0.4.4' }, dsh: { profile: { bundles: ['dsh-credits'] } },
+    } };
+  });
+  assert.deepEqual(rows, [{ operation: 'patch', entry: { id: 'dsh-credits', config: { showDock: false } } }]);
+  assert.equal(webPackage.dependencies['dsh-credits'], '0.4.4');
+  assert.deepEqual(webPackage.dsh.profile.bundles, ['dsh-credits']);
+});
+
+test('B-only quota uses the selected provider and accepts a private URL override', t => {
+  const { rows } = renderQuotaFixture(t, machine => {
+    machine.quota.provider = 'klaude-openai';
+    machine.quota.url = 'https://quota.example.invalid/_dsh/quota';
+  });
+  const [binding] = rows[0].entry.config.providerQuotas;
+  assert.equal(binding.providerId, 'klaude-openai');
+  assert.equal(binding.source.request.url, 'https://quota.example.invalid/_dsh/quota');
+  assert.equal(binding.source.request.authRef, 'KLAUDE_OPENAI_API_KEY');
+  assert.deepEqual(binding.source.response.metrics.map(({ key }) => key), ['acct-13-5h', 'acct-13-7d']);
+});
+
+test('quota without a provider baseURL or URL override fails with an actionable error', t => {
+  assert.throws(() => renderQuotaFixture(t, machine => {
+    delete machine.providers.set['klaude-cl'].baseURL;
+  }), /quota requires provider\.baseURL or an explicit quota\.url/);
+});
+
 test('legacy Team sessions use ordinary delegation and only fresh subagents get the machine route', () => {
   const machine = readYaml(example);
   const { rendered } = renderMachine(example, 'delegation-branches', undefined, { stage: false });

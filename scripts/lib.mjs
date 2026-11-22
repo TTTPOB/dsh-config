@@ -53,6 +53,54 @@ export function readYaml(path) {
   return parseYaml(readFileSync(path, 'utf8'));
 }
 
+function quotaAccounts(quota) {
+  if (quota === undefined) return [];
+  assert.ok(quota && typeof quota === 'object' && !Array.isArray(quota), 'quota must be an object');
+  const { accounts = [] } = quota;
+  assert.ok(Array.isArray(accounts), 'quota.accounts must be an array');
+  return accounts;
+}
+
+function providerQuotas(quota, defaults, providers) {
+  const accounts = quotaAccounts(quota);
+  if (!accounts.length) return;
+  const { provider: providerId = defaults.provider } = quota;
+  assert.ok(typeof providerId === 'string' && Object.hasOwn(providers, providerId), 'quota.provider must name a configured provider');
+  const { apiKeyEnv: authRef, baseURL } = providers[providerId];
+  assert.ok(typeof authRef === 'string' && authRef.trim(), 'quota.provider requires apiKeyEnv');
+  const input = quota.url === undefined ? baseURL : quota.url;
+  const endpoint = typeof input === 'string' && URL.parse(input);
+  assert.ok(endpoint && ['http:', 'https:'].includes(endpoint.protocol) && !endpoint.username && !endpoint.password,
+    quota.url === undefined ? 'quota requires provider.baseURL or an explicit quota.url (HTTP(S), without inline credentials)'
+      : 'quota.url must be an HTTP(S) URL without inline credentials');
+  const url = quota.url === undefined ? `${endpoint.origin}/_dsh/quota` : endpoint.href;
+
+  const ids = new Set();
+  const metrics = accounts.flatMap(account => {
+    const { id, label } = account ?? {};
+    assert.ok(typeof id === 'string' && /^[1-9]\d*$/.test(id), 'quota.accounts[].id must be a quoted positive integer');
+    assert.ok(typeof label === 'string' && label.trim(), 'quota.accounts[].label must be a nonempty string');
+    assert.ok(!ids.has(id), 'Duplicate quota account id');
+    ids.add(id);
+    return ['5h', '7d'].map(window => {
+      const path = `$.accounts["${id}"].windows["${window}"]`;
+      return {
+        key: `acct-${id}-${window}`,
+        label: `${label} ${window}`,
+        calculation: 'direct',
+        valuePath: `${path}.remaining_percent`,
+        totalPath: '$.percent_base',
+        resetsAtPath: `${path}.resets_at`,
+      };
+    });
+  });
+  return [{ providerId, enabled: true, sourceType: 'custom', source: {
+    id: 'sub2api', kind: 'metric',
+    request: { method: 'GET', url, credentialMode: 'reference', dshProvider: '', authRef, authStyle: 'bearer' },
+    response: { metrics },
+  } }];
+}
+
 export function validateMachine(machine) {
   assert.equal(machine.schemaVersion, 1, 'Unsupported machine schema');
   for (const key of ['sessionTools', 'promptOverlay']) {
@@ -247,7 +295,7 @@ export function homeRetiredRows(machine) {
 export function renderMachine(machinePath, label, catalog, { stage = true, generatedDir, deploymentHome } = {}) {
   assert.match(label, /^[a-zA-Z0-9_-]+$/, 'Invalid output label');
   const machine = validateMachine(readYaml(machinePath));
-  const targets = resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog, machine.features);
+  const targets = resolveDependencyTargets(join(dirname(machinePath), 'snapshot'), machine.installation, catalog, machine.features, machine.quota);
   machine.installation = { globalWorkspace: targets.globalWorkspace, webPackage: targets.profiles.web };
   const output = join(generatedDir ?? join(root, 'generated'), label);
   const shared = readYaml(join(root, 'shared/defaults.yaml'));
@@ -255,7 +303,9 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
     assert.ok(value && typeof value === 'object' && !Array.isArray(value), `Missing installation object: ${key}`);
   }
   const providers = resolveProviders(readYaml(join(root, 'shared/providers.yaml')).providers, machine.providers);
-  const templateData = { shared, machine, providersYaml: indentYaml(providers, 6) };
+  const quotas = providerQuotas(machine.quota, shared.defaults.quota, providers);
+  const templateData = { shared, machine, providersYaml: indentYaml(providers, 6),
+    providerQuotasYaml: quotas && indentYaml(quotas, 10) };
   const homeRetire = homeRetiredRows(machine);
   const rendered = {
     home: dropRows(applyPresetRowOverrides(templates.render('home.patch.yml.njk', templateData), machine.overrides.presetRows), homeRetire),
@@ -315,10 +365,17 @@ export function readDependencyCatalog() {
   return catalog;
 }
 
-export function resolveDependencyTargets(snapshotDir, installation, catalog = readDependencyCatalog(), features = {}) {
+export function resolveDependencyTargets(snapshotDir, installation, catalog = readDependencyCatalog(), features = {}, quota) {
   const snapshot = (file, fallback) => existsSync(join(snapshotDir, file)) ? readYaml(join(snapshotDir, file)) : fallback;
   const globalWorkspace = structuredClone(installation?.globalWorkspace ?? snapshot('global-workspace.yaml', { packages: ['.'] }));
   const profiles = structuredClone({ web: installation?.webPackage ?? snapshot('web.package.json', { private: true }), ...installation?.profiles });
+  const credits = 'dsh-credits';
+  const enableCredits = quotaAccounts(quota).length > 0;
+  const packages = catalog.packages.filter(item => item.package !== credits || enableCredits);
+  if (enableCredits && packages.some(item => item.package === credits)) {
+    profiles.web.dependencies ??= {};
+    profiles.web.dependencies[credits] ??= '';
+  }
   if (features.activeContext) {
     for (const [name, manifest] of Object.entries(profiles)) {
       if (name !== 'web' && !manifest.dependencies?.['dsh-active-context']) continue;
@@ -338,7 +395,7 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
         }
       }
     }
-    for (const item of catalog.packages.filter(item => item.scope === scope)) {
+    for (const item of packages.filter(item => item.scope === scope)) {
       if (scope === 'profile' && ((item.profiles && !item.profiles.includes(profile)) || (!item.required && !(item.package in container[field])))) continue;
       const matchingKeys = scope === 'global-override'
         ? Object.keys(container[field]).filter(key => key === item.package || key.startsWith(item.package + '@'))
@@ -374,7 +431,7 @@ export function resolveDependencyTargets(snapshotDir, installation, catalog = re
   if (entries.some(row => row.scope === 'global-override' && row.status === 'verified-release')) globalWorkspace.blockExoticSubdeps = false;
   for (const [profile, manifest] of Object.entries(profiles)) {
     merge(manifest, 'dependencies', 'profile', profile);
-    const patchOnly = new Set(catalog.packages.filter(item => item.scope === 'profile' && item.patchOnly
+    const patchOnly = new Set(packages.filter(item => item.scope === 'profile' && item.patchOnly
       && (!item.profiles || item.profiles.includes(profile))).map(item => item.package));
     const bundles = manifest.dsh?.profile?.bundles;
     if (bundles) manifest.dsh.profile.bundles = bundles.filter(name => !patchOnly.has(name));

@@ -18,7 +18,7 @@ try {
     renderMachine(path, label, undefined, { stage: false });
     console.log(`${label}: current configuration checks passed`);
     const machine = readYaml(path);
-    const pending = resolveDependencyTargets(snapshotDir, machine.installation, undefined, machine.features).entries
+    const pending = resolveDependencyTargets(snapshotDir, machine.installation, undefined, machine.features, machine.quota).entries
       .filter(row => row.status.startsWith('blocked'));
     if (pending.length) console.log(`待发布来源（结构检查不验证安装）：${[...new Set(pending.map(row => row.name))].join(', ')}`);
   } else if (command === 'update') {

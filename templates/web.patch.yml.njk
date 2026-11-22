@@ -12,4 +12,11 @@
 - id: agent-preset-registry
   config:
     default: standard-ptc
-[[ machine.webPrivate ]]
+[% if providerQuotasYaml %]
+- insert:
+    - id: dsh-credits
+      name: dsh-credits
+      config:
+        providerQuotas:
+[[ providerQuotasYaml ]]
+[% endif %][[ machine.webPrivate ]]
