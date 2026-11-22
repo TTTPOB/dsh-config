@@ -8,7 +8,9 @@ providers:
     compat:
       supportsStrictMode: true
       supportsToolSearch: true
-      systemPromptFormat: instructions
+      # Keep the system prompt as the leading input item: GPT-6.2 backends append
+      # top-level instructions after input, so every turn re-bills the whole prompt.
+      # Sub2API passthrough accounts no longer inject Codex defaults when it is absent.
     displayName: Klaude OpenAI Gateway
     apiKeyEnv: KLAUDE_OPENAI_API_KEY
     retryPolicy:
