@@ -73,7 +73,7 @@ Web profile 统一启用 `@nagi-ovo/dsh-visualize`，使用依赖清单中的精
 
 ### Better Sidebar
 
-Web profile 使用个人 fork `dsh-better-sidebar@0.28.2-fork1` 的精确 GitHub Release tarball，由[依赖清单](shared/dependencies.yaml)管理；其他 profile 不自动安装。使用 `patchOnly: true` 移除重复 bundle 激活，由共用 Web patch 挂载一次 `better-sidebar`，不覆盖界面拥有的偏好字段。
+Web profile 使用个人 fork `dsh-better-sidebar@0.32.1-fork1` 的精确 GitHub Release tarball，由[依赖清单](shared/dependencies.yaml)管理；其他 profile 不自动安装。使用 `patchOnly: true` 移除重复 bundle 激活，由共用 Web patch 挂载一次 `better-sidebar`，不覆盖界面拥有的偏好字段。
 
 个人 fork 使用宿主异步鉴权，支持 Cloudflare Access；手机条件 `(max-width: 1023px) and (pointer: coarse)` 下不挂载客户端增强，保留原生工作区和 Mobile Workbench。模式在插件激活时判断，改变设备模式后刷新页面。后端仍加载，桌面窄窗口鼠标设备仍启用。配置检查和 update dry-run 不代表插件已安装；浏览器和手机实际效果由用户验收。
 
