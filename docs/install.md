@@ -28,16 +28,16 @@ pnpm check --machine workstation
 
 模板不渲染界面拥有的字段（`.volatile()`）：设置页只能写这些字段，并写进 profile patch，模板再钉住它们就只会在下一次 apply 被覆盖。归属划分与列表见 [README 的配置归属](<../README.md#配置归属模板界面与机器>)。apply 写 patch 时保留 live 中模板不产生的行，删除由共用迁移和机器参数 `rowOps.<layer>.retire` 指定；锚点的作用范围、分层与限制见 [README 的 rowOps.retire](<../README.md#按-id-保留与删除顶层行rowopsretire>)。预览会列出保留行与生效的移除锚点。
 
-### Sub2API 额度
+### 上游账户额度
 
-额度服务上线后，在 `private/machines/<name>/machine.yaml` 填写这台机器要显示的账户。`id` 是 Sub2API 的账户 ID，按字符串填写；`label` 是自己选的显示名：
+在 `private/machines/<name>/machine.yaml` 填写这台机器要显示的账户。`id` 对应额度响应里 `accounts` 的键，按字符串填写，格式为 `^[A-Za-z0-9][A-Za-z0-9_-]*$`。Sub2API 使用数字 ID，Claude Gateway 使用实例 ID。`label` 是自己选的显示名：
 
 ```yaml
 quota:
   provider: klaude-cl  # 可省略，默认 klaude-cl
   accounts:
     - { id: "12", label: "A" }
-    - { id: "13", label: "B" }
+    - { id: "claude-demo", label: "Claude" }
 ```
 
 默认端点取选定 provider 合并后 `baseURL` 的 origin，再拼接 `/_dsh/quota`，例如 `https://gateway.example.invalid/v1` 得到 `https://gateway.example.invalid/_dsh/quota`。额度服务若不在同一 origin，在私有参数中设置 `quota.url` 为服务的完整 URL。`authRef` 引用同一 provider 合并后的 `apiKeyEnv`；渲染不读取 Key。实际运行时须让 Web Host 能按该引用取得已有 LLM Key。

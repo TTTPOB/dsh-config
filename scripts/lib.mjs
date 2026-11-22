@@ -78,7 +78,8 @@ function providerQuotas(quota, defaults, providers) {
   const ids = new Set();
   const metrics = accounts.flatMap(account => {
     const { id, label } = account ?? {};
-    assert.ok(typeof id === 'string' && /^[1-9]\d*$/.test(id), 'quota.accounts[].id must be a quoted positive integer');
+    assert.ok(typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id),
+      'quota.accounts[].id must be a string matching ^[A-Za-z0-9][A-Za-z0-9_-]*$');
     assert.ok(typeof label === 'string' && label.trim(), 'quota.accounts[].label must be a nonempty string');
     assert.ok(!ids.has(id), 'Duplicate quota account id');
     ids.add(id);

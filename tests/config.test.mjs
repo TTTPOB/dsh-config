@@ -100,6 +100,25 @@ test('B-only quota uses the selected provider and accepts a private URL override
   assert.deepEqual(binding.source.response.metrics.map(({ key }) => key), ['acct-13-5h', 'acct-13-7d']);
 });
 
+test('named quota accounts keep their IDs in metric keys and JSONPaths', t => {
+  const { rows } = renderQuotaFixture(t, machine => {
+    machine.quota.accounts.push({ id: 'claude-demo_1', label: 'Claude' });
+  });
+  const metrics = rows[0].entry.config.providerQuotas[0].source.response.metrics.slice(-2);
+  assert.deepEqual(metrics.map(({ key, valuePath, resetsAtPath }) => [key, valuePath, resetsAtPath]), [
+    ['acct-claude-demo_1-5h', '$.accounts["claude-demo_1"].windows["5h"].remaining_percent', '$.accounts["claude-demo_1"].windows["5h"].resets_at'],
+    ['acct-claude-demo_1-7d', '$.accounts["claude-demo_1"].windows["7d"].remaining_percent', '$.accounts["claude-demo_1"].windows["7d"].resets_at'],
+  ]);
+});
+
+test('quota account IDs reject non-strings and invalid characters', t => {
+  for (const id of [13, '', '-leading', 'claude.demo', 'claude"demo', 'claude/demo', 'claude\n']) {
+    assert.throws(() => renderQuotaFixture(t, machine => {
+      machine.quota.accounts = [{ id, label: 'Claude' }];
+    }), /quota\.accounts\[\]\.id must be a string matching/);
+  }
+});
+
 test('quota without a provider baseURL or URL override fails with an actionable error', t => {
   assert.throws(() => renderQuotaFixture(t, machine => {
     delete machine.providers.set['klaude-cl'].baseURL;
