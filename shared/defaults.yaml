@@ -25,6 +25,10 @@ localPlugins:
         - providers: [klaude-cl]
           match: "^tool_protocol_error: Model called an unavailable tool: "
           code: PI_AI_ERROR
+  - id: session-id-header
+    module: session-id-header.mjs
+    config:
+      providers: [klaude-cl]
 defaults:
   quota:
     provider: klaude-cl

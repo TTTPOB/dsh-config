@@ -85,6 +85,16 @@ server、nas 使用各自机器名；check 和离线预览只消费本地输入�
 
 运行 `node --test tests/error-code-rules.test.mjs tests/tool-call-hint.test.mjs` 验证。设置 `DSH_CLI_PACKAGE` 为已安装 CLI 的 package.json 路径后，测试还会用真实 Loader 确认 `llm-retry` 读到改写后的错误码，并用本地模拟网关确认工具名错误交给了 tool-call-hint。测试不启动 Host，也不调用真实模型。
 
+## 会话 ID 请求头
+
+[session-id-header.mjs](<session-id-header.mjs>) 给 `config.providers` 中的 provider 补发旧的 `session_id` 请求头，值为 DSH 会话 ID。它挂在 Pi 适配器的 `llm-pi-ai/request-headers` waterfall 上，没有会话 ID 的请求不加。
+
+Pi AI 1.6.0 的 Responses 路由只发 `x-client-request-id`，不再发 `session_id`。`klaude-cl` 经 Sub2API 到 Claude 网关时，`x-client-request-id` 到不了网关：切换到 1.6.0 后，网关日志的 `identitySource` 从 `session_id` 全部变成 `none`。没有会话 ID，网关不写会话快照，会话空闲被回收或网关重启后，再发消息会以 `history_requires_live_session`（409）失败。补发 `session_id` 后，网关重新按 DSH 会话 ID 续接，包括切换期间失败的会话。
+
+[共享配置](<../shared/defaults.yaml>)只对 `klaude-cl` 启用。`klaude-openai` 发往 Codex 上游，Sub2API 在缺少 `session_id` 时会用 `prompt_cache_key` 代替，不需要补发。
+
+运行 `node --test tests/session-id-header.test.mjs` 验证。
+
 ## Provider 路由提示词
 
 [provider-prompt.mjs](<provider-prompt.mjs>) 的 `config.rules` 写在对应插件项内。部署规则见[安装指南](<../docs/install.md#本地-esm-插件>)，声明见[本地插件示例](<../examples/local-plugins-machine.yaml>)。
