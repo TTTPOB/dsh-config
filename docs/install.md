@@ -63,7 +63,7 @@ live update/apply 使用解析后的目标 home。render/check 和 `update --off
 
 Word 的部署源是已提交的 [word.mjs](<../plugins/word.mjs>)；改动 TypeScript 或 skill 后先按[源码说明](<../plugins-src/README.md>)构建并检查。render 不编译源码，将模块复制到生成目录的 plugins/<id>.mjs，patch 中仍引用最终 modulePath；check 只在内存中验证与规划，不导入模块、不读取凭据。live update preview 按字节比较源码目标，并在 files 中报告 kind: local-plugin；offline 只列 source → path 计划（planned: true），不读取真实目标。预览不会创建模块目标或目标父目录。
 
-显式 apply 将模块与现有 patch 一同纳入文件备份：先写源文件，再写引用它的 patch；模块单独变化也会应用，无需重复安装 npm 包。新增的本地插件随 patch 热生效；已加载模块的源码变化不会被 HMR 替换，要切换 Host，见[热加载边界](<#客户端更新链与热加载边界>)。rollback 恢复原源码，若原文件不存在则删除本次新增文件。删除声明只撤销生成的插件行，不自动删除旧源码文件。凭据文件、用户数据和安装目录中的其他文件不在模块同步范围。
+显式 apply 将模块与现有 patch 一同纳入文件备份：先写源文件，再写引用它的 patch；模块单独变化也会应用，无需重复安装 npm 包。新增的本地插件随 patch 热生效；已加载模块的源码变化由 HMR 监听插件目录后热替换，见[热加载边界](<#客户端更新链与热加载边界>)。rollback 恢复原源码，若原文件不存在则删除本次新增文件。删除声明只撤销生成的插件行，不自动删除旧源码文件。凭据文件、用户数据和安装目录中的其他文件不在模块同步范围。
 
 ### pnpm 11 安装规则
 
@@ -255,8 +255,9 @@ journalctl --user -u dsh-switch -f
 - **服务端模块的热替换范围。** 每次 profile 重新组合时（patch 变化、Plugin Manager 的更新或 `updateBundle`），HMR 比较 **profile 目录及其链接包目标**之下已加载文件的 inode、大小和修改时间，先卸载文件有变化的插件，再加载新代码。新代码加载失败时插件状态为 `failed`，旧代码也不再运行；修好文件或依赖后，下一次重新组合会重新导入。以下变化仍要切换 Host：
   - 全局安装的包，包括 CLI 和 DSH fork override。它们属于宿主静态导入的模块图，Plugin Manager 报 `restart-required`。
   - 包被解析到另一个目录：`restart-required`，`restartReason: package-moved`。
-  - 本地插件 `$DSH_HOME/plugins/*.mjs`：不在 profile 目录下，HMR 不比较它们，也不报待处理。apply 改写已加载模块的源码后，旧代码会继续运行。
   - `update --apply` 用 pnpm 安装，不经过 Plugin Manager。如果只有安装变化、patch 不变，就不会触发重新组合。
+
+  本地插件 `$DSH_HOME/plugins/*.mjs` 不在 profile 目录下，上面的比较不覆盖它们。为此，渲染时给 home patch 加一行 `hmr`，把 `root` 设为所有本地插件模块所在的目录（base 组合包默认 `root: []`，即不监听模块目录）。apply 原地写入模块后，HMR 的文件监听会卸载旧插件，并用新代码重新启动它，不需要切换 Host。2026-11-24 在 NAS 和 server 上实测：Host 启动时间不变，插件的 `apply` 按新代码重新执行，旧实例的清理也执行了。机器 patch 里不要再声明 `hmr` 行，否则会覆盖这个 `root`。
 
   依据：[dsh-hmr README](<https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/boot/hmr/README.md>) 与 [`profileRoots`](<https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/boot/hmr/src/index.ts#L1107-L1116>)。不确定运行中的 Host 是否启用了 HMR 时，在插件页更新任意一个第三方插件：结果是 `applied` 说明已启用；`restart-required` 且原因为 `no-hmr` 说明未启用。
 - **服务端替换不等于客户端已换版。** 以 Plugin Manager 报告的结果为准，`restart-required` 时按当次授权另行安排切换。依赖安装、配置中的新路径、Host 路由重新出现，都不能证明客户端已升级。绝对构建入口在 metadata 中合法，也不是生产热升级保证；不靠反复改名、私有清缓存或猴补绕过运行代际。未激活时明确报告“已安装、未激活”，需要重启则按当次授权另行安排运维切换。
