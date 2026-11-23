@@ -63,7 +63,7 @@ live update/apply 使用解析后的目标 home。render/check 和 `update --off
 
 Word 的部署源是已提交的 [word.mjs](<../plugins/word.mjs>)；改动 TypeScript 或 skill 后先按[源码说明](<../plugins-src/README.md>)构建并检查。render 不编译源码，将模块复制到生成目录的 plugins/<id>.mjs，patch 中仍引用最终 modulePath；check 只在内存中验证与规划，不导入模块、不读取凭据。live update preview 按字节比较源码目标，并在 files 中报告 kind: local-plugin；offline 只列 source → path 计划（planned: true），不读取真实目标。预览不会创建模块目标或目标父目录。
 
-显式 apply 将模块与现有 patch 一同纳入文件备份：先写源文件，再写引用它的 patch；模块单独变化也会应用，无需重复安装 npm 包。rollback 恢复原源码，若原文件不存在则删除本次新增文件。删除声明只撤销生成的插件行，不自动删除旧源码文件。凭据文件、用户数据和安装目录中的其他文件不在模块同步范围。
+显式 apply 将模块与现有 patch 一同纳入文件备份：先写源文件，再写引用它的 patch；模块单独变化也会应用，无需重复安装 npm 包。新增的本地插件随 patch 热生效；已加载模块的源码变化不会被 HMR 替换，要切换 Host，见[热加载边界](<#客户端更新链与热加载边界>)。rollback 恢复原源码，若原文件不存在则删除本次新增文件。删除声明只撤销生成的插件行，不自动删除旧源码文件。凭据文件、用户数据和安装目录中的其他文件不在模块同步范围。
 
 ### pnpm 11 安装规则
 
@@ -251,8 +251,15 @@ journalctl --user -u dsh-switch -f
 
 以下边界决定「装了」和「页面真的用上了」之间的距离。
 
-- **配置热加载 ≠ Node 模块重新导入 ≠ 客户端资源换版。** Profile patch 可触发 fiber 撤销与重挂，但不保证清除 Node 解析、模块或 ClientModules 来源缓存。首次新增插件可热生效，不能据此推断已有包升级也可热生效。
-- **已有 bundle 升级按正式管理器的 `restart-required` 处理。** 依赖安装、配置中的新路径、Host 路由重新出现，都不能证明客户端已升级。绝对构建入口在 metadata 中合法，也不是生产热升级保证；不靠反复改名、私有清缓存或猴补绕过运行代际。未激活时明确报告“已安装、未激活”，需要重启则按当次授权另行安排运维切换。
+- **配置热加载 ≠ Node 模块重新导入 ≠ 客户端资源换版。** Profile 或 home patch 变化会触发 profile 重新组合，新增的插件行（包括本地插件）因此不重启即生效。
+- **服务端模块的热替换范围。** 每次 profile 重新组合时（patch 变化、Plugin Manager 的更新或 `updateBundle`），HMR 比较 **profile 目录及其链接包目标**之下已加载文件的 inode、大小和修改时间，先卸载文件有变化的插件，再加载新代码。新代码加载失败时插件状态为 `failed`，旧代码也不再运行；修好文件或依赖后，下一次重新组合会重新导入。以下变化仍要切换 Host：
+  - 全局安装的包，包括 CLI 和 DSH fork override。它们属于宿主静态导入的模块图，Plugin Manager 报 `restart-required`。
+  - 包被解析到另一个目录：`restart-required`，`restartReason: package-moved`。
+  - 本地插件 `$DSH_HOME/plugins/*.mjs`：不在 profile 目录下，HMR 不比较它们，也不报待处理。apply 改写已加载模块的源码后，旧代码会继续运行。
+  - `update --apply` 用 pnpm 安装，不经过 Plugin Manager。如果只有安装变化、patch 不变，就不会触发重新组合。
+
+  依据：[dsh-hmr README](<https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/boot/hmr/README.md>) 与 [`profileRoots`](<https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/boot/hmr/src/index.ts#L1107-L1116>)。不确定运行中的 Host 是否启用了 HMR 时，在插件页更新任意一个第三方插件：结果是 `applied` 说明已启用；`restart-required` 且原因为 `no-hmr` 说明未启用。
+- **服务端替换不等于客户端已换版。** 以 Plugin Manager 报告的结果为准，`restart-required` 时按当次授权另行安排切换。依赖安装、配置中的新路径、Host 路由重新出现，都不能证明客户端已升级。绝对构建入口在 metadata 中合法，也不是生产热升级保证；不靠反复改名、私有清缓存或猴补绕过运行代际。未激活时明确报告“已安装、未激活”，需要重启则按当次授权另行安排运维切换。
 - **客户端有独立的生产更新链：** Host ClientModules 发布实际 graph/bundle，`/plugins/events` 的 graph/rebuilt 通知浏览器执行 entries.sync/reload。源码自动重建需确认同一 checkout 的 `dev:web` watcher；已构建产物的生产通知不等于必须开开发服务器。Web shell/普通包修改仍需构建对应产物并刷新原 GUI，另起服务器不会更新原页面。
 - **更新验收先查服务端实物，再查页面。** 读取公开 SSE 首个完整 graph 后关闭连接，定位目标插件广告的 revision/脚本 URL，对照实际服务脚本与目标包的构建入口，再核对已认证 boot/页面加载结果。combo 响应带分隔符与 source-map 尾缀，比较完整可执行内容时要区分这些包装；revision 基于文件 metadata，重新安装可变，不硬编码某个 hash 为永久版本号。磁盘版本、manifest、图标、登录 HTML、独立 link 实验或新进程烟测均不能替代日用客户端验收。
 - **公开版本状态有边界：** `ctx.modules.manifest` 是最新解析的 Host graph，不是已成功应用版本；`entries.state` 只公开 syncing/failures，成功 revision 表是私有实现。不得把 SSE 首帧或当前 manifest 伪装成页面已应用版本，也不得读取／包装私有表来补接口。精确更新横幅需公开 applied/settled 契约；现有失败状态可用于诚实的手动重载恢复提示。
