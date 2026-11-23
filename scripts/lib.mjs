@@ -155,11 +155,6 @@ export function validateMachine(machine) {
       }
     }
   }
-  for (const [key, fields] of Object.entries({ siyuan: ['url', 'headersFile'] })) {
-    for (const field of fields) {
-      assert.ok(typeof machine.mcp?.[key]?.[field] === 'string' && machine.mcp[key][field].length, `Missing machine mcp input: ${key}.${field}`);
-    }
-  }
   assert.ok(Array.isArray(machine.subagentModels) && machine.subagentModels.length
     && machine.subagentModels.every(route => typeof route.provider === 'string' && route.provider.length && typeof route.model === 'string' && route.model.length),
   'subagentModels requires provider/model routes');

@@ -15,10 +15,6 @@ providers:
 quota:
   accounts:
     - { id: "13", label: "B" }
-mcp:
-  siyuan:
-    url: https://siyuan.example.invalid/mcp
-    headersFile: /path/to/credentials/siyuan-headers.json
 subagentModels:
   - provider: deepseek-official
     model: deepseek-flash

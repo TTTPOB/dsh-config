@@ -55,7 +55,7 @@ dsh-credits 只显示当前模型所属 provider 的额度绑定，不会回退�
 机器级声明接受 `id`、`module`、`modulePath`、`config`：
 
 - id 是 home patch 顶层唯一行 ID；自动生成 insert 行，不要在其他 patch 中重复声明。
-- module 是仓库 plugins 目录内已存在的 .mjs 文件名，例如 siyuan-tools.mjs；未知、缺失或包含目录穿越的模块报错。
+- module 是仓库 plugins 目录内已存在的 .mjs 文件名，例如 provider-prompt.mjs；未知、缺失或包含目录穿越的模块报错。
 - modulePath 是执行目标上的绝对 .mjs 文件路径，同时写入 Loader 行的 name；不会隐式展开环境变量或波浪号。
 - config 是完整的字面对象，原样传给插件，不做深合并或 !!js 求值。省略机器级 localPlugins 表示不增加机器专属项。
 

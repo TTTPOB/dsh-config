@@ -2,7 +2,6 @@
 
 仓库模块可以通过 localPlugins 纳入配置部署文件计划，见[安装指南](<../docs/install.md#本地-esm-插件>)。
 
-- [思源上传和双端同步](<siyuan-tools.md>)
 - [Word 与 Zotero 原生工具](<word.md>)
 - [PowerPoint 原生工具](<powerpoint.md>)
 

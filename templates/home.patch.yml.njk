@@ -35,7 +35,6 @@
         toolDisclosureRules:
           - { glob: '*', disclosure: eager }
           - { glob: 'mcp__*', disclosure: deferred }
-          - { glob: 'siyuan_*', disclosure: deferred }
         maxSearchResults: 10
         maxDescribeTools: 10
         maxSummaryChars: 240
@@ -96,16 +95,6 @@
   config:
     enabled: true
     allowedModels: [[ machine.subagentModels | dump ]]
-- insert:
-    - id: mcp-siyuan
-      name: '@deepseek-ai/dsh-mcp-client'
-      config:
-        serverName: siyuan
-        transport: streamable-http
-        url: [[ machine.mcp.siyuan.url | quote ]]
-        headers: !!js JSON.parse(process.getBuiltinModule('fs').readFileSync([[ machine.mcp.siyuan.headersFile | quote ]], 'utf8'))
-        toolCallTimeoutMs: 60000
-        failOnStartupError: false
 [% macro preset(entryId, presetId, name, description, order, overlay, promptSections) %]
 - insert:
     - id: [[ entryId | quote ]]

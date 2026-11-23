@@ -11,8 +11,8 @@ function fixture(t) {
   const dir = mkdtempSync(join(tmpdir(), 'dsh-local-plugins-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const machine = readYaml(join(root, 'examples/server-machine.yaml'));
-  const target = { baseURL: 'https://notes.example.invalid', headersFile: join(dir, 'unread-headers.json') };
-  machine.localPlugins = [{ id: 'siyuan-tools', module: 'siyuan-tools.mjs', modulePath: join(dir, 'home/plugins/siyuan-tools.mjs'), config: { self: target, peer: target } }];
+  const target = { headersFile: join(dir, 'unread-headers.json') };
+  machine.localPlugins = [{ id: 'ptc-raw-text-reminder', module: 'ptc-raw-text-reminder.mjs', modulePath: join(dir, 'home/plugins/ptc-raw-text-reminder.mjs'), config: { target } }];
   const machinePath = join(dir, 'machine.yaml');
   writeFileSync(machinePath, JSON.stringify(machine));
   return { dir, machine, machinePath };
@@ -23,24 +23,24 @@ test('render/check plan and stage module source without importing modules, readi
   const generatedDir = join(dir, 'generated');
   const options = { generatedDir, stage: false };
   const checked = renderMachine(machinePath, 'local-plugin', undefined, options);
-  const row = validatePatch(checked.rendered.home).find(row => row.entry.id === 'siyuan-tools');
+  const row = validatePatch(checked.rendered.home).find(row => row.entry.id === 'ptc-raw-text-reminder');
   assert.equal(row.operation, 'insert');
-  assert.deepEqual(row.entry, { id: 'siyuan-tools', name: machine.localPlugins[0].modulePath, config: machine.localPlugins[0].config });
-  assert.equal(checked.localPlugins.find(file => file.id === 'siyuan-tools').source, join(root, 'plugins/siyuan-tools.mjs'));
+  assert.deepEqual(row.entry, { id: 'ptc-raw-text-reminder', name: machine.localPlugins[0].modulePath, config: machine.localPlugins[0].config });
+  assert.equal(checked.localPlugins.find(file => file.id === 'ptc-raw-text-reminder').source, join(root, 'plugins/ptc-raw-text-reminder.mjs'));
   assert.ok(!existsSync(generatedDir));
   const cli = spawnSync(process.execPath, [join(root, 'scripts/dsh-config.mjs'), 'check', machinePath], { encoding: 'utf8' });
   assert.equal(cli.status, 0, cli.stderr);
   assert.match(cli.stdout, /checks passed/);
   assert.ok(!existsSync(generatedDir));
   const staged = renderMachine(machinePath, 'local-plugin', undefined, { generatedDir });
-  assert.equal(readFileSync(join(staged.output, 'plugins/siyuan-tools.mjs'), 'utf8'), readFileSync(checked.localPlugins.find(file => file.id === 'siyuan-tools').source, 'utf8'));
+  assert.equal(readFileSync(join(staged.output, 'plugins/ptc-raw-text-reminder.mjs'), 'utf8'), readFileSync(checked.localPlugins.find(file => file.id === 'ptc-raw-text-reminder').source, 'utf8'));
   assert.ok(!existsSync(machine.localPlugins[0].modulePath));
 });
 
 test('unknown/missing modules, traversal, duplicate targets and unsupported declarations fail before staging', t => {
   const { dir, machine, machinePath } = fixture(t);
   const entry = machine.localPlugins[0];
-  for (const localPlugins of [null, {}, [{ ...entry, module: 'missing.mjs' }], [{ ...entry, module: '../plugins/siyuan-tools.mjs' }], [{ ...entry, modulePath: 'relative.mjs' }], [entry, entry], [{ ...entry, extra: true }], [{ ...entry, config: [] }]]) {
+  for (const localPlugins of [null, {}, [{ ...entry, module: 'missing.mjs' }], [{ ...entry, module: '../plugins/ptc-raw-text-reminder.mjs' }], [{ ...entry, modulePath: 'relative.mjs' }], [entry, entry], [{ ...entry, extra: true }], [{ ...entry, config: [] }]]) {
     writeFileSync(machinePath, JSON.stringify({ ...machine, localPlugins }));
     assert.throws(() => renderMachine(machinePath, 'invalid', undefined, { generatedDir: join(dir, 'generated') }));
     assert.ok(!existsSync(join(dir, 'generated')));

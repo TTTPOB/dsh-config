@@ -90,14 +90,13 @@ test('local modules appear in both previews, apply without installation, and rol
     const modulePath = join(home, 'plugins', existing ? 'existing.mjs' : 'new.mjs');
     mkdirSync(dirname(modulePath), { recursive: true });
     if (existing) writeFileSync(modulePath, '// original module\n');
-    const endpoint = { baseURL: 'https://notes.example.invalid', headersFile: join(directory, 'unread-headers.json') };
-    machine.localPlugins = [{ id: 'siyuan-tools', module: 'siyuan-tools.mjs', modulePath, config: { self: endpoint, peer: endpoint } }];
+    machine.localPlugins = [{ id: 'ptc-raw-text-reminder', module: 'ptc-raw-text-reminder.mjs', modulePath, config: {} }];
     writeJson(machinePath, machine);
     for (const offline of [false, true]) {
       const preview = await updateMachine(machinePath, 'module-preview', false, { catalog, offline });
       const planned = preview.files.find(file => file.path === modulePath);
       assert.equal(planned.kind, 'local-plugin');
-      assert.equal(planned.source, join(root, 'plugins/siyuan-tools.mjs'));
+      assert.equal(planned.source, join(root, 'plugins/ptc-raw-text-reminder.mjs'));
       assert.equal(offline ? planned.planned : planned.changed, true);
       assert.match(formatUpdate(selectReport(preview)), /本地插件/);
       assert.equal(read(join(home, 'cordis.patch.yml')), oldPatch);
@@ -105,7 +104,7 @@ test('local modules appear in both previews, apply without installation, and rol
       if (existing) assert.equal(read(modulePath), '// original module\n');
     }
     const applied = await updateMachine(machinePath, 'module-apply', true, { ...options, runStep: () => assert.fail('source-only apply must not install') });
-    assert.equal(read(modulePath), read(join(root, 'plugins/siyuan-tools.mjs')));
+    assert.equal(read(modulePath), read(join(root, 'plugins/ptc-raw-text-reminder.mjs')));
     assert.ok(JSON.parse(read(join(applied.backup, 'files.json'))).includes(modulePath));
     const noOp = await updateMachine(machinePath, 'module-noop', true, options);
     assert.equal(noOp.noOp, true);
