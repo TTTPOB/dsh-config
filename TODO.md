@@ -1,6 +1,6 @@
 # 待办
 
-## 撤回 Pi fork：只剩切换和验收
+## 撤回 Pi fork：已完成（2026-11-24）
 
 目标：DSH 直接使用官方 `@earendil-works/pi-ai`，不再维护 Pi fork。决策依据（性能实测、`systemPromptFormat` 与 GPT-6.2 缓存、Gemini 签名）记在 DSH 的 Agent Note `.agents/notes/implemented/architecture/2026-11-22-official-pi-ai-dependency.md`。
 
@@ -11,12 +11,12 @@
 - **三机 live dry run**：三台结果一致，依赖只有两项变化（移除 `@earendil-works/pi-ai` override、`dsh-llm-pi-ai` fork2 → fork3），另新增 `error-code-rules` 行、修改 `llm-pi-ai` 行，0 阻塞。
 - **Claude 网关**：现有代码已同时识别 `instructions` 和 input 里的 developer 消息，不用改代码。分支 `fix/pi-retire` 的 `c1ca041` 只补了回归测试，合并前先 rebase 到 main。
 
-### 切换时要做（按顺序）
+### 切换与验收（2026-11-24 完成）
 
-1. **兼容拦截**：`verifiedCompatibility` 没有 `dsh-llm-pi-ai@0.2.2-rc.5-fork3`。先在隔离 profile 跑 doctor 取全部拦截再登记，否则 apply 后的 doctor 会让切换自动回滚。
-2. **切换**：有全局依赖变化，必须走 host-switch（不能热加载），并设置 `DSH_APPLY_TIMEOUT=900 DSH_ROLLBACK_TIMEOUT=900`。远端的 machine.yaml 已和工作站同步。
-3. **部署验收**：确认全局安装解析到官方 `@earendil-works/pi-ai` 1.6.0。klaude-cl 和 klaude-openai 各连发两轮相同系统提示的请求，第二轮命中缓存，网关不重建会话。skelviper（`anthropic-messages`）已有会话里的签名思考会失效一次，属预期。AGY 网关不验收，见下文退役项。
-4. **收尾**：停用 Pi 仓库 fork 的私有打包与发布 workflow。
+1. **兼容拦截**：原记录说 `verifiedCompatibility` 缺 `dsh-llm-pi-ai@0.2.2-rc.5-fork3` 会让 apply 回滚，这个判断不成立。实测 fork3 没有兼容冲突，三机 apply 的 post-install doctor 均为 `blocked=0`。
+2. **切换**：NAS → LLab3 → 工作站依次 host-switch 成功，均为 `[switch] done`。
+3. **验收**：三机解析到官方 `@earendil-works/pi-ai` 1.6.0，`error-code-rules` 已加载。用户在 NAS、LLab3 上用 klaude-openai 和 klaude-cl 试过，确认正常。切换后 klaude-cl 丢失会话 ID（见下表更正），已用 `session-id-header` 修复，热应用到三机。
+4. **收尾**：`TTTPOB/pi` 的 `dsh-release.yml` 已停用（`disabled_manually`）。
 
 ### 逐项依据
 
