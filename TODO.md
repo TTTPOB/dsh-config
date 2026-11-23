@@ -9,7 +9,7 @@
 - **DSH 适配器与发版**：`daily-driver` `0bb03a26bd` 改用官方 Pi AI 1.6.0，删除 Pi fork 发版路径和适配器里的 `errorCodeRules`。Release `daily-driver-v0.2.2-rc.5-fork6` 发布 `dsh-llm-pi-ai` `0.2.2-rc.5-fork3`，已核对 SHA256、依赖版本和产物内容。
 - **dsh-config**：`main` `931af2d`。依赖清单换成新资产，`retiredGlobalOverrides` 删除旧 Pi override；错误码改写移到 home 插件 [error-code-rules](<plugins/README.md#错误码改写>)；删除 klaude-cl 和工作站 agy-gateway 的 `systemPromptFormat`（新适配器会拒绝这个字段）。
 - **三机 live dry run**：三台结果一致，依赖只有两项变化（移除 `@earendil-works/pi-ai` override、`dsh-llm-pi-ai` fork2 → fork3），另新增 `error-code-rules` 行、修改 `llm-pi-ai` 行，0 阻塞。
-- **Claude 网关**：现有代码已同时识别 `instructions` 和 input 里的 developer 消息，不用改代码。分支 `fix/pi-retire` 的 `c1ca041` 只补了回归测试，合并前先 rebase 到 main。
+- **Claude 网关**：现有代码已同时识别 `instructions` 和 input 里的 developer 消息，不用改代码。分支 `fix/pi-retire` 的 `c1ca041` 只补了回归测试，已合入 main（`a05f5cdb`）。
 
 ### 切换与验收（2026-11-24 完成）
 
