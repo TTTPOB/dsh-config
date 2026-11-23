@@ -317,7 +317,12 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
     webPackage: JSON.stringify(machine.installation.webPackage, null, 2) + '\n',
   };
   const localPlugins = planLocalPlugins(resolveLocalPlugins(shared.localPlugins, machine, { home: deploymentHome }));
-  if (localPlugins.length) rendered.home += '\n' + YAML.stringify([{ insert: localPlugins.map(file => file.row) }]);
+  if (localPlugins.length) {
+    // Local modules live outside the profile directory, which HMR's recomposition does not compare; watch their
+    // directories so source changes replace the loaded plugins without a Host restart.
+    const roots = [...new Set(localPlugins.map(file => dirname(file.path)))];
+    rendered.home += '\n' + YAML.stringify([{ insert: localPlugins.map(file => file.row) }, { id: 'hmr', config: { root: roots } }]);
+  }
   // Validate every patch before writing any staged output.
   validatePatch(rendered.home);
   validatePatch(rendered.web);

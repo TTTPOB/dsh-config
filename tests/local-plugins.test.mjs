@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { root, readYaml, renderMachine, validatePatch } from '../scripts/lib.mjs';
 import { planLocalPlugins } from '../scripts/local-plugins.mjs';
@@ -27,6 +27,9 @@ test('render/check plan and stage module source without importing modules, readi
   assert.equal(row.operation, 'insert');
   assert.deepEqual(row.entry, { id: 'ptc-raw-text-reminder', name: machine.localPlugins[0].modulePath, config: machine.localPlugins[0].config });
   assert.equal(checked.localPlugins.find(file => file.id === 'ptc-raw-text-reminder').source, join(root, 'plugins/ptc-raw-text-reminder.mjs'));
+  const hmr = validatePatch(checked.rendered.home).find(row => row.entry.id === 'hmr');
+  assert.deepEqual(new Set(hmr.entry.config.root), new Set(checked.localPlugins.map(file => dirname(file.path))));
+  assert.ok(hmr.entry.config.root.includes(dirname(machine.localPlugins[0].modulePath)));
   assert.ok(!existsSync(generatedDir));
   const cli = spawnSync(process.execPath, [join(root, 'scripts/dsh-config.mjs'), 'check', machinePath], { encoding: 'utf8' });
   assert.equal(cli.status, 0, cli.stderr);
