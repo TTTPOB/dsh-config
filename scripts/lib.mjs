@@ -54,6 +54,8 @@ export function readYaml(path) {
   return parseYaml(readFileSync(path, 'utf8'));
 }
 
+const QUOTA_WINDOWS = ['5h', '7d'];
+
 function quotaAccounts(quota) {
   if (quota === undefined) return [];
   assert.ok(quota && typeof quota === 'object' && !Array.isArray(quota), 'quota must be an object');
@@ -73,13 +75,16 @@ function providerQuotas(quota, defaults, providers) {
 
   const ids = new Set();
   const metrics = accounts.flatMap(account => {
-    const { id, label } = account ?? {};
+    const { id, label, windows = QUOTA_WINDOWS } = account ?? {};
     assert.ok(typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id),
       'quota.accounts[].id must be a string matching ^[A-Za-z0-9][A-Za-z0-9_-]*$');
     assert.ok(typeof label === 'string' && label.trim(), 'quota.accounts[].label must be a nonempty string');
     assert.ok(!ids.has(id), 'Duplicate quota account id');
     ids.add(id);
-    return ['5h', '7d'].map(window => {
+    assert.ok(Array.isArray(windows) && windows.length > 0 && new Set(windows).size === windows.length
+      && windows.every(window => QUOTA_WINDOWS.includes(window)),
+      `quota.accounts[].windows must be a nonempty list of distinct values from ${QUOTA_WINDOWS.join(', ')}`);
+    return QUOTA_WINDOWS.filter(window => windows.includes(window)).map(window => {
       const path = `$.accounts["${id}"].windows["${window}"]`;
       return {
         key: `acct-${id}-${window}`,

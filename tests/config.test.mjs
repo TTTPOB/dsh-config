@@ -126,6 +126,19 @@ test('named quota accounts keep their IDs in metric keys and JSONPaths', t => {
   ]);
 });
 
+test('quota account windows select which metrics an account shows', t => {
+  const { rows } = renderQuotaFixture(t, machine => {
+    machine.quota.accounts.push({ id: '14', label: 'C', windows: ['7d'] }, { id: '15', label: 'D', windows: ['7d', '5h'] });
+  });
+  const metrics = rows[0].entry.config.providerQuotas[0].source.response.metrics;
+  assert.deepEqual(metrics.map(({ key }) => key), ['acct-13-5h', 'acct-13-7d', 'acct-14-7d', 'acct-15-5h', 'acct-15-7d']);
+  for (const windows of [[], ['1d'], ['7d', '7d'], '7d']) {
+    assert.throws(() => renderQuotaFixture(t, machine => {
+      machine.quota.accounts = [{ id: '14', label: 'C', windows }];
+    }), /quota\.accounts\[\]\.windows must be/);
+  }
+});
+
 test('quota account IDs reject non-strings and invalid characters', t => {
   for (const id of [13, '', '-leading', 'claude.demo', 'claude"demo', 'claude/demo', 'claude\n']) {
     assert.throws(() => renderQuotaFixture(t, machine => {

@@ -38,11 +38,12 @@ quota:
   accounts:
     - { id: "12", label: "A" }
     - { id: "claude-demo", label: "Claude" }
+    - { id: "13", label: "B", windows: [7d] }  # 只显示 7d
 ```
 
 dsh-credits 只显示当前模型所属 provider 的额度绑定，不会回退到其他 provider；平时会切换的 provider 都要列进 `provider`，每个生成一份绑定，账户相同，Key 和端点各取自该 provider。默认端点取选定 provider 合并后 `baseURL` 的 origin，再拼接 `/_dsh/quota`，例如 `https://gateway.example.invalid/v1` 得到 `https://gateway.example.invalid/_dsh/quota`。额度服务若不在同一 origin，在私有参数中设置 `quota.url` 为服务的完整 URL。`authRef` 引用同一 provider 合并后的 `apiKeyEnv`；渲染不读取 Key。实际运行时须让 Web Host 能按该引用取得已有 LLM Key。
 
-有选中账户的机器仅在 Web profile 安装精确 npm registry 版本 `dsh-credits@0.4.5`，由 Web patch 挂载，不重复使用包的 bundle。每个选中账户生成 `<label> 5h` 和 `<label> 7d`；服务返回 `null` 的窗口不会被插件计作 0。以[只选 B 的公开示例](<../examples/server-machine.yaml>)验证结构：`pnpm check examples/server-machine.yaml`。填写私有参数后，先运行 `pnpm check --machine <name>`，再按正常维护流程部署并验收。
+有选中账户的机器仅在 Web profile 安装精确 npm registry 版本 `dsh-credits@0.4.5`，由 Web patch 挂载，不重复使用包的 bundle。每个选中账户默认生成 `<label> 5h` 和 `<label> 7d`，`windows` 可只选其中一部分，例如上游不再设 5h 限额的账户写 `windows: [7d]`；服务返回 `null` 的窗口不会被插件计作 0。以[只选 B 的公开示例](<../examples/server-machine.yaml>)验证结构：`pnpm check examples/server-machine.yaml`。填写私有参数后，先运行 `pnpm check --machine <name>`，再按正常维护流程部署并验收。
 
 省略 `quota` 或清空 `accounts` 不生成额度配置，也不接管已存在的插件配置。如果这台机器曾经部署本仓库生成的额度行，要撤下该行需同时在 `rowOps.web.retire` 加入 `dsh-credits`，避免保守合并继续保留旧行；重新启用前先移除该 retire 项。
 
