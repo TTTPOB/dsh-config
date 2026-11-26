@@ -7,6 +7,9 @@ localPlugins:
   - id: skill-reload-reminder
     module: skill-reload-reminder.mjs
     config: {}
+  - id: describe-tools-guard
+    module: describe-tools-guard.mjs
+    config: {}
   - id: team-collaboration-notes
     module: team-collaboration-notes.mjs
     config: {}

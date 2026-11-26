@@ -37,6 +37,14 @@ Native 和 PTC 子调用使用同一监听器。插件在 `session.deriveMessage
 
 运行 `NODE_OPTIONS=--max-old-space-size=4096 node --test tests/skill-reload-reminder.test.mjs` 验证。
 
+## 工具 Schema 重复获取拦截
+
+[describe-tools-guard.mjs](<describe-tools-guard.mjs>) 在 `describe_tools` 的工具体运行前检查当前会话上下文。只有每个请求名称的完整描述、输入 schema 和输出 schema 都仍可见，并与本步可执行的定义相同，才跳过工具体并提示复用。首次查询、仅部分重合、定义改变或原结果已被压缩时，调用照常运行。
+
+Native 结果与 `run_code` 输出都从 `session.deriveMessages()` 读取。PTC 可返回完整 JSON 值，或用 `console.log(JSON.stringify(...))` 输出整个结果、工具数组或单条工具定义。只打印摘要或 SDK 类型，或让子调用结果只留在执行日志里，都不算完整 schema。重复的 PTC 子调用成功返回 `{ tools: [] }`，提示随外层调用送到下一步，即使代码没有打印返回值。
+
+运行 `NODE_OPTIONS=--max-old-space-size=4096 node --test tests/describe-tools-guard.test.mjs` 验证。
+
 ## Team 协作提示
 
 [team-collaboration-notes.mjs](<team-collaboration-notes.mjs>) 仅在当前 Agent 的根会话开启 Team 模式时提示：同级或非直接子代理完成时不会通知当前 Agent；若需要结果，请对方完成后用 `send_message` 发送。插件额外注册独立提示段，不改写上游文案或工具描述。
