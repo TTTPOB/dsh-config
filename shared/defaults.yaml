@@ -4,6 +4,9 @@ localPlugins:
   - id: runtime-tooling-guidance
     module: runtime-tooling-guidance.mjs
     config: {}
+  - id: skill-reload-reminder
+    module: skill-reload-reminder.mjs
+    config: {}
   - id: team-collaboration-notes
     module: team-collaboration-notes.mjs
     config: {}

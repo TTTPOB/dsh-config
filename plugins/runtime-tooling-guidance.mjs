@@ -16,9 +16,6 @@ export const DEFAULT_TEXT = {
 Don't repeat work you've already delegated. Continue independent work while it runs. When a report arrives, review and integrate it yourself.
 
 You design the study, freeze its rules, and write the final report yourself; subagent findings are inputs, not conclusions. When a delegated task stalls on performance or keeps running in the background far longer than expected, take over the diagnosis yourself instead of waiting or re-delegating. Route independent review of results to the high tier.`,
-  skills: `## Skill reuse
-
-Reuse a skill's full instructions while they remain in context. Reload only if they're missing, have changed, or the user asks for a refresh. A catalog summary isn't the full instructions.`,
   models: "## DSH task model routing\n\nGPT models are available only through `klaude-openai`. Use `gpt-6.2-sol`, the best available GPT model, for these tiers:\n\n- Cheap (`low`): exploration, research, and simple implementation.\n- Mid (`medium`): complicated implementation and reasoning.\n- Expensive (`high`): broad, high-risk, or difficult cross-module work.\n\nSet `provider`, `model`, and `reasoning_effort` on `subagent`. Follow any model or reasoning effort the user explicitly requests.",
 };
 
@@ -85,7 +82,6 @@ export function apply(ctx, config) {
       if (sdk) selected.push(config.text.sdkMessage);
     }
     if (tool("subagent")) selected.push(config.text.delegation, config.text.models);
-    if (tool("skill")) selected.push(config.text.skills);
     const text = ["## Runtime tooling", ...selected].join("\n\n");
     return { ...assembled, sections: assembled.sections.flatMap(section => section.name !== SECTION
       ? [section] : selected.length ? [{ ...section, text }] : []) };

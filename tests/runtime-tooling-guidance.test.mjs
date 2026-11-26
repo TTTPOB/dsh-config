@@ -80,8 +80,8 @@ test("grep wording follows scoped visibility in Native and PTC", async () => {
   assert.ok(!(await assemble(ordinary, "native")).includes(text.grep));
 });
 
-test("delegation, model routing, and skill overrides follow their own visible tools", async () => {
-  const text = { delegation: "Fixture delegation", models: "Fixture model routing", skills: "Fixture skills" };
+test("delegation and model routing overrides follow subagent visibility", async () => {
+  const text = { delegation: "Fixture delegation", models: "Fixture model routing" };
   let hook, section;
   Plugin.apply({
     effect: callback => callback(),
@@ -103,11 +103,9 @@ test("delegation, model routing, and skill overrides follow their own visible to
   }
   for (const mode of ["native", "sdk"]) {
     await selected(mode, ["subagent"], ["delegation", "models"]);
-    await selected(mode, ["skill"], ["skills"]);
-    await selected(mode, ["subagent", "skill"], ["delegation", "models", "skills"]);
     await selected(mode, ["subagent_fork", "list_subagent_models"], []);
   }
-  await selected("ptc-without-sdk", ["subagent", "skill"], []);
+  await selected("ptc-without-sdk", ["subagent"], []);
 });
 
 test("installed Loader selects fresh runtime capabilities without changing tools or SDK", {
@@ -281,18 +279,15 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   selected(await assemble(child), ["typescript", "output"]);
   await selectExecutor(NativeExecutor);
   register("subagent");
-  register("skill");
-  selected(await assemble(child), ["native", "background", "delegation", "models", "skills"]);
+  selected(await assemble(child), ["native", "background", "delegation", "models"]);
   await selectExecutor(PtcExecutor);
-  selected(await assemble(child), ["typescript", "output", "background", "delegation", "models", "skills"]);
+  selected(await assemble(child), ["typescript", "output", "background", "delegation", "models"]);
   const hideSubagent = child.ctx.tools.restrict({ deny: ["subagent"] });
-  selected(await assemble(child), ["typescript", "output", "skills"]);
+  selected(await assemble(child), ["typescript", "output"]);
   hideSubagent();
   await selectExecutor(NativeExecutor);
-  for (const name of ["subagent", "skill"]) {
-    disposers[name]();
-    delete disposers[name];
-  }
+  disposers.subagent();
+  delete disposers.subagent;
   restrict();
   const complete = child.ctx.systemPrompt.section({ name: "complete", order: 0, complete: true, interpolate: false, text: "authoritative" });
   assert.equal(renderPrompt(await assemble(child)), "authoritative");

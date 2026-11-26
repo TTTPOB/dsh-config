@@ -11,7 +11,7 @@ Word 的 TypeScript 源码位于 [plugins-src/word](<../plugins-src/README.md>)�
 
 ## 运行时工具指引
 
-[runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、可见工具、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`grep`、`output`、`background`、`child`、`sdkMessage`、`delegation`、`skills`、`models`。工具 schema 和运行时权限仍决定实际可调用能力。
+[runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、可见工具、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`grep`、`output`、`background`、`child`、`sdkMessage`、`delegation`、`models`。工具 schema 和运行时权限仍决定实际可调用能力。
 
 `grep` 提示仅在当前可见的工具含 `grep.pattern` 时加入：11 月 11–21 日的三机审计中，ripgrep 拒绝了 152 次调用，其中 132 次报分组未闭合，因此提示重点说明字面元字符的转义。
 
@@ -24,11 +24,18 @@ Word 的 TypeScript 源码位于 [plugins-src/word](<../plugins-src/README.md>)�
 | `sdkMessage` | PTC SDK 模式且已选中 `child` | `send_message` 是 SDK 绑定，须在程序内调用 |
 | `delegation` | 可见 `subagent` | 委派后继续独立工作，由自己诊断阻塞并整合结果 |
 | `models` | 可见 `subagent` | 按任务复杂度选择 DSH 子代理模型与推理档位，优先遵循用户指定 |
-| `skills` | 可见 `skill` | 完整指引仍在上下文中时直接复用 |
 
 **为什么先发消息再简短确认：** rc.5 本地子代理等 Agent 活动和待处理输入都结束后才关闭接纳，自动送达的是最后一轮普通轮次的输出。写报告时若收到消息并再开一轮，父代理收到的就是新一轮的输出，原报告可能没有送达。用 `send_message` 显式发送的报告不依赖最后一轮输出；当最后一个动作是给父代理发消息时，rc.5 会通过 `omitClosingText` 在完成通知中省略最终答复，因此发完只需简短确认，不必重述报告正文。
 
 依据：rc.5 的 [Activation settlement](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/subagent/subagent/README.md#activation-settlement) 与 [`withResultDeliveryGuidance`](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/packages/subagent/subagent/src/continuation-messages.ts#L83-L95)。上述时序按代码和文档推断，未用真实模型复现。
+
+## Skill 重载提醒
+
+[skill-reload-reminder.mjs](<skill-reload-reminder.mjs>) 仅在 `skill` 调用成功、同一份完整指引已在当前上下文中时提醒复用。插件使用 `tools/post-execute`，通过 `additionalContexts` 把提醒送到下一步，不拦截调用，也不改写 skill 返回值。
+
+Native 和 PTC 子调用使用同一监听器。插件在 `session.deriveMessages()` 中匹配完整指引，包括 `run_code` 输出的正文或完整 JSON；仅留在执行日志中、已被压缩替换或内容已改变的指引不触发提醒。
+
+运行 `NODE_OPTIONS=--max-old-space-size=4096 node --test tests/skill-reload-reminder.test.mjs` 验证。
 
 ## Team 协作提示
 
