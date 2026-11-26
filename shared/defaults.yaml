@@ -13,6 +13,9 @@ localPlugins:
   - id: goal-policy
     module: goal-policy.mjs
     config: {}
+  - id: agent-instructions-reminder
+    module: agent-instructions-reminder.mjs
+    config: {}
   - id: stream-loop-guard
     module: stream-loop-guard.mjs
     config: {}

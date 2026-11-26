@@ -70,6 +70,12 @@ NODE_OPTIONS=--max-old-space-size=4096 node --test tests/goal-policy.test.mjs
 
 设置 `DSH_CLI_PACKAGE` 为已安装 CLI 的 `package.json` 路径后，测试会用真实 Loader 加载已安装的 `tool-goal` 和 PTC executor，确认两处原句存在并被替换、卸载后恢复。测试不启动 Host，也不调用模型。
 
+## 工作区指引已加载提醒
+
+[agent-instructions-reminder.mjs](<agent-instructions-reminder.mjs>) 在 `agent/pre-step` 中紧随本步新进入的工作区指引添加一条英文提醒，列出显示路径及绝对路径。首步加载和后续目录发现均适用；只含移除通知或没有新指引时不添加。提醒不改写原消息，也不拦截工具调用；用户要求重读或需核对自己刚做的修改时，可以重读。
+
+项目路径以指引基线记录的项目根为准。首次注入只有子目录指引、还没有基线时，沿用受管 preset 的默认 `.git` 根标记。运行 `NODE_OPTIONS=--max-old-space-size=4096 node --test tests/agent-instructions-reminder.test.mjs` 验证。
+
 ## 流式循环拦截
 
 [stream-loop-guard.mjs](<stream-loop-guard.mjs>) 在 Host 层挂载一次，覆盖所有 preset。它只检查带会话 ID 的模型流，分别累计每个文本块、推理块及工具调用的参数增量。默认使用 `cross2`：每个分支的得分须连续 `consecutive` 次达到阈值才算命中，任一分支命中即停止读取上游，并以 `STREAM_LOOP_DETECTED` 结束这次响应。已经收到但尚未转发的触发增量不会进入下游。失败响应只留在尝试日志中，不进入对话历史，不执行其中的工具。
