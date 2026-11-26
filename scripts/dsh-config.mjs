@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { renderMachine, resolveMachineArgument, parseCommandArguments, validatePatch, readYaml, resolveDependencyTargets } from './lib.mjs';
+import { renderMachine, renderAgentsMd, planAgentsMd, resolveMachineArgument, parseCommandArguments, validateMachine, validatePatch, readYaml, resolveDependencyTargets } from './lib.mjs';
 import { deploymentTargets, doctor, isolatedTest, updateMachine, rollbackMachine, normalizeDeployment } from './deployment.mjs';
-import { formatDoctor, formatUpdate, selectReport } from './report.mjs';
+import { formatDoctor, formatUpdate, selectReport, summarizeAgentsMd } from './report.mjs';
 
 try {
   const { command, machineArgument, apply, offline, json, verbose, tarballs, backup } = parseCommandArguments(process.argv.slice(2));
@@ -30,12 +30,13 @@ try {
   } else if (command === 'test') {
     console.log(JSON.stringify(isolatedTest(path, label, tarballs), null, 2));
   } else if (command === 'doctor') {
-    const machine = readYaml(path);
+    const machine = validateMachine(readYaml(path));
     machine.deployment = normalizeDeployment(machine.deployment);
     const targets = deploymentTargets(machine, snapshotDir);
     const report = await doctor(machine, targets);
     const unresolvedAssets = targets.entries.filter(row => row.status.startsWith('blocked'));
-    const result = selectReport({ ...report, unresolvedAssets, blocked: report.blocked + unresolvedAssets.length,
+    const files = [summarizeAgentsMd(planAgentsMd(machine.deployment.home, renderAgentsMd(machine)))];
+    const result = selectReport({ ...report, files, unresolvedAssets, blocked: report.blocked + unresolvedAssets.length,
       ...(unresolvedAssets.length ? { next: '补齐清单中缺少的精确发布资产，并处理上述安装问题。' } : {}),
     }, verbose);
     console.log(json ? JSON.stringify(result, null, 2) : formatDoctor(result, verbose));

@@ -116,6 +116,7 @@ function providerQuotas(quota, defaults, providers) {
 
 export function validateMachine(machine) {
   assert.equal(machine.schemaVersion, 1, 'Unsupported machine schema');
+  if (machine.agentsMd !== undefined && typeof machine.agentsMd !== 'string') throw new Error('agentsMd must be a Markdown string');
   for (const key of ['sessionTools', 'promptOverlay']) {
     assert.equal(typeof machine.features?.[key], 'boolean', `Missing feature: ${key}`);
   }
@@ -300,6 +301,18 @@ export function homeRetiredRows(machine) {
   return machine.rowOps?.home?.retire ?? [];
 }
 
+const agentsMdTemplate = 'AGENTS.md.njk';
+
+export function renderAgentsMd(machine) {
+  const extra = machine.agentsMd;
+  const fragment = extra ? '\n' + extra + (extra.endsWith('\n') ? '' : '\n') : '';
+  return templates.render(agentsMdTemplate, { fragment });
+}
+
+export function planAgentsMd(home, contents) {
+  return { path: join(home, 'AGENTS.md'), source: join(root, 'templates', agentsMdTemplate), kind: 'configuration', contents };
+}
+
 export function renderMachine(machinePath, label, catalog, { stage = true, generatedDir, deploymentHome } = {}) {
   assert.match(label, /^[a-zA-Z0-9_-]+$/, 'Invalid output label');
   const machine = validateMachine(readYaml(machinePath));
@@ -318,6 +331,7 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
   const rendered = {
     home: dropRows(applyPresetRowOverrides(templates.render('home.patch.yml.njk', templateData), machine.overrides.presetRows), homeRetire),
     web: dropRows(templates.render('web.patch.yml.njk', templateData), machine.rowOps?.web?.retire),
+    agentsMd: renderAgentsMd(machine),
     globalWorkspace: JSON.stringify(machine.installation.globalWorkspace, null, 2) + '\n',
     webPackage: JSON.stringify(machine.installation.webPackage, null, 2) + '\n',
   };
@@ -333,7 +347,7 @@ export function renderMachine(machinePath, label, catalog, { stage = true, gener
   validatePatch(rendered.web);
   if (stage) {
     mkdirSync(output, { recursive: true, mode: 0o700 });
-    for (const [key, file] of Object.entries({ home: 'home.patch.yml', web: 'web.patch.yml', globalWorkspace: 'global-workspace.yaml', webPackage: 'web.package.json' })) {
+    for (const [key, file] of Object.entries({ home: 'home.patch.yml', web: 'web.patch.yml', agentsMd: 'AGENTS.md', globalWorkspace: 'global-workspace.yaml', webPackage: 'web.package.json' })) {
       writeFileSync(join(output, file), rendered[key], { mode: 0o600 });
     }
   }

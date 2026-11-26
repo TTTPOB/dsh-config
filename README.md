@@ -34,7 +34,7 @@ node scripts/dsh-config.mjs update --machine workstation
 | [shared/defaults.yaml](shared/defaults.yaml) | 共用默认配置 |
 | [shared/providers.yaml](shared/providers.yaml) | 三机共用的 pi-ai provider 目录（纯数据，无 `!!js`） |
 | [shared/dependencies.yaml](shared/dependencies.yaml) | 唯一选定版本、来源策略、安装归属和缺资产原因 |
-| `templates/` | home/Web patch 文本模板；安装声明由脚本直接序列化 |
+| `templates/` | home/Web patch 和[用户全局指令](<templates/AGENTS.md.njk>)模板；安装声明由脚本直接序列化 |
 | `private/machines/<name>/machine.yaml` | 各机私有差异与部署位置 |
 | `private/machines/<name>/snapshot/` | 未显式声明 installation 时使用的安装依赖输入 |
 | `generated/` | 渲染、隔离测试与维护暂存 |
@@ -53,9 +53,13 @@ node scripts/dsh-config.mjs update --machine workstation
 
 0.2.2-rc.5 使用 scoped progressive executor：Host 挂载一次 discovery 与 Native executor，每个自定义 PTC preset 挂载 `dsh-progressive-tools/ptc` 并禁用上游 executor；PTC 配置保留并行限制及 `context_compress`／`mcp_probe` 原生例外。共用有序 `toolDisclosureRules` 让普通工具 eager、`mcp__*` deferred。版本和缺来源原因由[依赖清单](<shared/dependencies.yaml>)选定。
 
+### 用户全局指令
+
+[共用模板](<templates/AGENTS.md.njk>)生成每台机器的用户全局指令；如需追加本机专用 Markdown，在私有机器参数中填写可选的 `agentsMd: |`。`render` 将结果暂存为 `AGENTS.md`，apply 将它写到 `$DSH_HOME/AGENTS.md`，与 patch 一同备份和回滚。预览与迁移步骤见[安装指南](<docs/install.md#用户全局指令>)。
+
 ### 运行时工具指引
 
-[runtime-tooling-guidance.mjs](<plugins/runtime-tooling-guidance.mjs>) 按当前工具模式、PTC 语言与子代理身份加入适用的简短指引，替代 agentsmd 中整段静态 tooling 说明。在[共用默认配置](<shared/defaults.yaml>)中声明一次，各机沿原 apply 流程部署到目标 home；配置和验证见[本地插件说明](<plugins/README.md#运行时工具指引>)；不改变工具权限或执行行为。
+[runtime-tooling-guidance.mjs](<plugins/runtime-tooling-guidance.mjs>) 根据当前工具模式、可见工具、PTC 语言与子代理身份加入适用的指引，包括委派、模型路由与技能复用。在[共用默认配置](<shared/defaults.yaml>)中声明一次，各机沿原 apply 流程部署到目标 home；配置和验证见[本地插件说明](<plugins/README.md#运行时工具指引>)；不改变工具权限或执行行为。
 
 [Team 协作提示](<plugins/README.md#team-协作提示>)仅在当前 Agent 的根会话开启 Team 模式时注入。
 

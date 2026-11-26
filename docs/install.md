@@ -28,6 +28,21 @@ pnpm check --machine workstation
 
 模板不渲染界面拥有的字段（`.volatile()`）：设置页只能写这些字段，并写进 profile patch，模板再钉住它们就只会在下一次 apply 被覆盖。归属划分与列表见 [README 的配置归属](<../README.md#配置归属模板界面与机器>)。apply 写 patch 时保留 live 中模板不产生的行，删除由共用迁移和机器参数 `rowOps.<layer>.retire` 指定；锚点的作用范围、分层与限制见 [README 的 rowOps.retire](<../README.md#按-id-保留与删除顶层行rowopsretire>)。预览会列出保留行与生效的移除锚点。
 
+### 用户全局指令
+
+[共用模板](<../templates/AGENTS.md.njk>)生成 `$DSH_HOME/AGENTS.md`。在私有的 `private/machines/<name>/machine.yaml` 中用可选的 `agentsMd` 追加本机专用 Markdown：
+
+```yaml
+agentsMd: |
+  ## 本机专用指引
+
+  在这里记录只适用于本机的工作约定。
+```
+
+`render` 在私有暂存目录写 `AGENTS.md`；`check` 在内存中校验并渲染，不写目标。离线 update 列部署路径，不读取目标；live update 预览 `AGENTS.md` 的文本差异，可能包含私有追加内容，请勿公开转发。Doctor 只报告文件是否与目标不同，不打印正文；差异不阻塞 apply。显式 apply 整体替换文件（不像 YAML patch 那样保留未管理的行），与 patch 一起备份；rollback 恢复旧文件，若旧文件不存在则删除本次新增文件。
+
+从 agentsmd 迁移时，先把要保留的本机片段放进 `agentsMd`，再预览、审查差异并走下文维护流程。切换后不要再让旧渲染器覆盖该文件。DSH 新会话会读取更新后的全局指令。
+
 ### 上游账户额度
 
 在 `private/machines/<name>/machine.yaml` 填写这台机器要显示的账户。`id` 对应额度响应里 `accounts` 的键，按字符串填写，格式为 `^[A-Za-z0-9][A-Za-z0-9_-]*$`。Sub2API 使用数字 ID，Claude Gateway 使用实例 ID。`label` 是自己选的显示名：
@@ -150,7 +165,7 @@ node scripts/dsh-config.mjs doctor --machine workstation
 
 `update --offline` 预览使用机器 installation 参数或迁移快照，报告 `input: offline`；与 render/check 一样，不发现本机部署位置、不读取本机安装。可在工作机离线预览 server 参数。默认 update 预览使用执行机器的路径默认／覆盖和实际 manifest，报告 `input: live`；apply 始终使用 live 输入，与默认预览一致；`--offline` 不可与 `--apply` 组合。两个预览均只读且不运行 doctor 或安装器。部署目标尚未准备时，live 诊断会指出缺失字段／profile，离线预览仍可使用。
 
-Update 默认只展开变化的受管依赖与阻塞，显示旧来源 → 新来源；不变项及非受管保留项只计数。Live 预览还列出变化的安装声明文件、配置 patch 的新增／移除／修改行 ID，不打印可能含凭据的配置值。Live 依赖变化按目标与当前安装的 manifest 比较，实际解析版本与入口由 doctor 检查；offline 仅与输入声明／快照比较，不检查本机配置。
+Update 默认只展开变化的受管依赖与阻塞，显示旧来源 → 新来源；不变项及非受管保留项只计数。Live 预览还列出变化的安装声明文件、配置 patch 的新增／移除／修改行 ID 和用户全局指令的文本差异；不会打印 patch 中可能含凭据的配置值。Live 依赖变化按目标与当前安装的 manifest 比较，实际解析版本与入口由 doctor 检查；offline 仅与输入声明／快照比较，不检查本机配置。
 
 若机器有 `installation` 块，live 报告会单独列出非受管键的三类不符：仅声明未安装、取值不同、已安装但未声明。仅声明的键不会进入目标，取值不同的键保留实际安装值。可按提示更新 `machine.yaml`；这些提示不计入依赖变化，也不触发安装。
 

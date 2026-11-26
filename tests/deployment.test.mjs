@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, statSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
-import { root, readYaml, resolveDependencyTargets, parseCommandArguments, renderMachine as render } from '../scripts/lib.mjs';
+import { root, readYaml, resolveDependencyTargets, parseCommandArguments, planAgentsMd, renderMachine as render } from '../scripts/lib.mjs';
 import { deploymentTargets, updateMachine as update, rollbackMachine, isolatedTest, runStep, grantVerifiedCompatibility } from '../scripts/deployment.mjs';
-import { selectReport, formatUpdate, formatDoctor } from '../scripts/report.mjs';
+import { selectReport, formatUpdate, formatDoctor, summarizeAgentsMd } from '../scripts/report.mjs';
 
 const url = 'https://github.com/example/plugin/releases/download/v2.0.0/plugin-2.0.0.tgz';
 const catalog = { schemaVersion: 2, packages: [
@@ -112,6 +112,65 @@ test('local modules appear in both previews, apply without installation, and rol
     assert.equal(read(join(home, 'cordis.patch.yml')), oldPatch);
     assert.equal(existsSync(modulePath), existing);
     if (existing) assert.equal(read(modulePath), '// original module\n');
+  }
+});
+
+test('render appends private Markdown verbatim and rejects a non-string fragment', t => {
+  const { home, machine, machinePath } = fixture(t);
+  const base = renderMachine(machinePath, 'shared-instructions', catalog).rendered.agentsMd;
+  assert.ok(base.trim());
+  const extra = '## Fixture instructions\n\nKeep [[ literal ]] and {{model}} & <text>.\n';
+  machine.agentsMd = extra;
+  writeJson(machinePath, machine);
+  const { output, rendered } = renderMachine(machinePath, 'private-instructions', catalog);
+  assert.equal(rendered.agentsMd, base + '\n' + extra);
+  assert.equal(read(join(output, 'AGENTS.md')), rendered.agentsMd);
+  assert.ok(!existsSync(join(home, 'AGENTS.md')));
+
+  machine.agentsMd = ['not a YAML block scalar'];
+  writeJson(machinePath, machine);
+  assert.throws(() => render(machinePath, 'invalid-instructions', catalog, { stage: false }), /agentsMd must be a Markdown string/);
+});
+
+test('AGENTS.md preview is read-only; apply and rollback handle old and new files', async t => {
+  const { directory, home, machine, machinePath } = fixture(t);
+  await updateMachine(machinePath, 'baseline', true, { catalog, doctor: healthy, runStep: () => {} });
+  const path = join(home, 'AGENTS.md');
+  const instruction = 'A machine-scoped fixture instruction.';
+  machine.agentsMd = instruction;
+  writeJson(machinePath, machine);
+  const expected = render(machinePath, 'agents-preview', catalog, { stage: false }).rendered.agentsMd;
+  const preview = { catalog, doctor: () => assert.fail('preview ran doctor'), runStep: () => assert.fail('preview ran installation') };
+  const apply = { catalog, doctor: healthy, runStep: () => assert.fail('a Markdown-only change must not install') };
+  const old = 'Prior instructions to restore.';
+  for (const previous of [old, undefined]) {
+    if (previous !== undefined) writeFileSync(path, previous + '\n');
+    else rmSync(path);
+    const offline = selectReport(await updateMachine(machinePath, 'agents-offline', false, { ...preview, offline: true }));
+    const planned = offline.files.find(file => file.path === path);
+    assert.equal(planned.kind, 'configuration');
+    assert.equal(planned.planned, true);
+    assert.equal(planned.changed, undefined);
+    assert.equal(planned.diff, undefined);
+    assert.ok(formatUpdate(offline).includes(path));
+
+    const live = selectReport(await updateMachine(machinePath, 'agents-preview', false, preview));
+    const change = live.files.find(file => file.path === path);
+    assert.equal(change.kind, 'configuration');
+    assert.equal(change.changed, true);
+    assert.ok(change.diff.includes('+' + instruction));
+    if (previous !== undefined) assert.ok(change.diff.includes('-' + previous));
+    assert.ok(formatUpdate(live).includes('+' + instruction));
+    assert.equal(existsSync(path) ? read(path) : undefined, previous === undefined ? undefined : previous + '\n');
+
+    const applied = await updateMachine(machinePath, 'agents-apply', true, apply);
+    assert.equal(read(path), expected);
+    assert.ok(JSON.parse(read(join(applied.backup, 'files.json'))).includes(path));
+    const aligned = await updateMachine(machinePath, 'agents-aligned', true, apply);
+    assert.equal(aligned.noOp, true);
+    assert.equal(aligned.files.find(file => file.path === path).changed, false);
+    await rollbackMachine(machinePath, applied.backup, { runStep: () => {}, generatedDir: join(directory, 'generated') });
+    assert.equal(existsSync(path) ? read(path) : undefined, previous === undefined ? undefined : previous + '\n');
   }
 });
 
@@ -318,6 +377,7 @@ test('declaration drift alone does not change manifests or invoke the installer'
   }
   writeFileSync(join(home, 'cordis.patch.yml'), rendered.home);
   writeFileSync(join(home, 'profiles/web/cordis.patch.yml'), rendered.web);
+  writeFileSync(join(home, 'AGENTS.md'), rendered.agentsMd);
 
   const report = selectReport(await updateMachine(machinePath, 'drift-only', true, {
     catalog: selected, doctor: healthy, runStep: () => assert.fail('declaration drift triggered the installer'),
@@ -628,6 +688,26 @@ test('doctor summary retains actionable failures while verbose adds successful p
   const update = selectReport({ input: 'live', apply: false, entries: [{ name: 'unchanged', status: 'registry-pin', changed: false }] });
   assert.equal(update.summary.unchanged, 1);
   assert.ok(!formatUpdate(update).includes('unchanged'));
+});
+
+test('doctor reports instructions drift without showing private content or blocking installation', t => {
+  const home = temporaryDirectory(t);
+  const privateText = 'A private fixture note.';
+  const file = planAgentsMd(home, privateText);
+  const report = () => ({ checked: 0, blocked: 0, issues: [], next: '', files: [summarizeAgentsMd(file)] });
+  writeFileSync(file.path, 'Old fixture instructions.');
+  const changed = selectReport(report());
+  assert.equal(changed.blocked, 0);
+  assert.equal(changed.files[0].changed, true);
+  assert.ok(formatDoctor(changed).includes(file.path));
+  assert.ok(!JSON.stringify(changed).includes(privateText));
+  assert.ok(!formatDoctor(changed).includes(privateText));
+
+  writeFileSync(file.path, privateText);
+  const aligned = report();
+  assert.equal(aligned.files[0].changed, false);
+  assert.ok(!formatDoctor(selectReport(aligned)).includes(file.path));
+  assert.ok(formatDoctor(selectReport(aligned, true), true).includes(file.path));
 });
 
 test('CLI rejects plan without a compatibility alias', () => {

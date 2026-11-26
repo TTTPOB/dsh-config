@@ -20,8 +20,17 @@ export function resolveLocalPlugins(shared = [], machine, { home } = {}) {
   planLocalPlugins(local);
   const inherited = shared.filter(entry => !local.some(row => row.id === entry.id));
   if (!inherited.length) return local;
+  home = resolveManagedHome(machine, home);
+  const combined = [...inherited.map(entry => ({ ...entry, modulePath: join(home, 'plugins', entry.module ?? '') })), ...local];
+  for (const entry of inherited) assert.equal(combined.filter(row => row.module === entry.module).length, 1,
+    'Shared and machine localPlugins must not deploy the same module under different ids');
+  return combined;
+}
+
+/** Resolve the managed home from a live selection or the existing offline declarations. */
+export function resolveManagedHome(machine, home) {
   const declaredHome = machine.deployment?.home;
-  const directories = new Set(local.map(entry => dirname(entry.modulePath)));
+  const directories = new Set((machine.localPlugins ?? []).map(entry => dirname(entry.modulePath)));
   let inferred;
   if (directories.size === 1) {
     const directory = [...directories][0];
@@ -30,10 +39,10 @@ export function resolveLocalPlugins(shared = [], machine, { home } = {}) {
   if (home === undefined) {
     if (declaredHome !== undefined) {
       assert.ok(typeof declaredHome === 'string' && isAbsolute(declaredHome) && !/[$~]/.test(declaredHome),
-        'Offline shared localPlugins requires a literal absolute deployment.home; do not expand the inspecting machine environment');
+        'Offline managed files require a literal absolute deployment.home; do not expand the inspecting machine environment');
       home = declaredHome;
     } else {
-      assert.ok(inferred, 'Shared localPlugins requires deployment.home or one existing absolute home/plugins directory');
+      assert.ok(inferred, 'Planning managed files requires deployment.home or one existing absolute home/plugins directory');
       home = inferred;
     }
   } else {
@@ -41,10 +50,7 @@ export function resolveLocalPlugins(shared = [], machine, { home } = {}) {
     if (declaredHome === undefined && inferred) assert.equal(resolve(home), resolve(inferred),
       'Resolved deployment home differs from existing localPlugins home; declare deployment.home explicitly');
   }
-  const combined = [...inherited.map(entry => ({ ...entry, modulePath: join(home, 'plugins', entry.module ?? '') })), ...local];
-  for (const entry of inherited) assert.equal(combined.filter(row => row.module === entry.module).length, 1,
-    'Shared and machine localPlugins must not deploy the same module under different ids');
-  return combined;
+  return home;
 }
 
 /** Plan repository-owned ESM files without importing them or reading credentials. */

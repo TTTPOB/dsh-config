@@ -458,7 +458,7 @@ test('declared installation files render beside shared patches and drive source 
   const path = join(directory, 'installation-machine.yaml');
   writeFileSync(path, JSON.stringify(machine), { mode: 0o600 });
   const { output, rendered } = renderMachine(path, 'test-installation', undefined, { generatedDir: directory });
-  assert.deepEqual(readdirSync(output).sort(), ['global-workspace.yaml', 'home.patch.yml', 'plugins', 'web.package.json', 'web.patch.yml']);
+  assert.deepEqual(readdirSync(output).sort(), ['AGENTS.md', 'global-workspace.yaml', 'home.patch.yml', 'plugins', 'web.package.json', 'web.patch.yml']);
   assert.equal(readYaml(join(output, 'global-workspace.yaml')).overrides['@deepseek-ai/dsh-example'], '0.1.7-rc.2');
   assert.equal(parseYaml(rendered.globalWorkspace).blockExoticSubdeps, false);
   assert.equal(JSON.parse(readFileSync(join(output, 'web.package.json'), 'utf8')).dependencies['example-plugin'], '1.0.0');

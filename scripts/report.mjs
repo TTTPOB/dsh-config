@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { readYaml, parseYaml, validatePatch } from './lib.mjs';
@@ -29,6 +30,21 @@ export function summarizeFiles(manifests, patches, localPlugins = []) {
   ];
 }
 
+export function summarizeAgentsMd({ path, source, kind, contents }, { withDiff = false } = {}) {
+  const present = existsSync(path);
+  const changed = !present || readFileSync(path, 'utf8') !== contents;
+  const file = { path, source, kind, changed };
+  if (changed && withDiff) {
+    const diff = spawnSync('git', ['diff', '--no-index', '--no-ext-diff', '--no-textconv', '--no-color', '--', present ? path : '/dev/null', '-'], {
+      input: contents, encoding: 'utf8',
+    });
+    if (diff.error) throw diff.error;
+    if (diff.status !== 0 && diff.status !== 1) throw new Error('AGENTS.md diff failed: ' + diff.stderr.trim());
+    file.diff = diff.stdout;
+  }
+  return file;
+}
+
 const scopeOf = row => row.profile ?? 'global';
 const sourceOf = source => source ?? '(未声明)';
 
@@ -46,7 +62,7 @@ export function selectReport(report, verbose = false) {
     };
   }
   const { checks, hostManifest, ...summary } = report;
-  return verbose ? report : summary;
+  return verbose ? report : { ...summary, ...(report.files ? { files: report.files.filter(row => row.changed) } : {}) };
 }
 
 export function formatUpdate(report, verbose = false) {
@@ -70,13 +86,16 @@ export function formatUpdate(report, verbose = false) {
     for (const [key, label] of [['added', '新增'], ['removed', '移除'], ['modified', '修改']]) {
       if (file[key]?.length) lines.push(`  ${label}行: ${file[key].join(', ')}`);
     }
-    if (file.kind === 'configuration' && !file.added.length && !file.removed.length && !file.modified.length) {
+    if (file.added && !file.added.length && !file.removed.length && !file.modified.length) {
       lines.push(file.orderChanged ? '  行顺序变化' : '  仅文本格式变化');
     }
+    if (file.diff) lines.push(file.diff.replace(/\n$/, ''));
     if (file.preserved?.length) lines.push('  保留行（模板不产生，原样留在文件中）: ' + file.preserved.join(', '));
     if (file.retired?.length) lines.push('  移除锚点生效: ' + file.retired.join(', '));
   }
-  for (const file of files.filter(row => row.planned)) lines.push('计划本地插件: ' + file.source + ' → ' + file.path);
+  for (const file of files.filter(row => row.planned)) {
+    lines.push('计划' + (file.kind === 'configuration' ? '配置' : '本地插件') + ': ' + file.source + ' → ' + file.path);
+  }
   if (report.input === 'offline') lines.push('离线计划：与声明／快照比较，未检查本机安装与配置。');
   else lines.push('依赖变化按目标与本机当前安装的声明比较；实际安装版本和入口由 doctor 验收。');
   if (report.declarationDrift?.length) {
@@ -110,6 +129,10 @@ export function formatDoctor(report, verbose = false) {
     if (issue.manifestPath) lines.push(`  包声明: ${issue.manifestPath}`);
     if (issue.reason) lines.push(`  原因: ${issue.reason}`);
     if (issue.detail) lines.push(`  详情: ${issue.detail}`);
+  }
+  for (const file of report.files ?? []) {
+    if (file.changed) lines.push('~ 配置与目标不同: ' + file.path);
+    else if (verbose) lines.push('= 文件不变: ' + file.path);
   }
   for (const row of report.unresolvedAssets ?? []) lines.push(`! [${scopeOf(row)}] ${row.name}: ${row.status} — ${row.reason}`);
   if (verbose) {
