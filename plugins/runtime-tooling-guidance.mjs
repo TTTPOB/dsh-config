@@ -11,6 +11,15 @@ export const DEFAULT_TEXT = {
   background: "Background jobs, agents you delegated to, and messages addressed to you all notify you; each notice starts your next turn. After starting such work, keep doing independent work. When only waiting remains, end your turn instead of polling, sleeping, or re-listing status. Check status yourself only for work nothing will report, such as a process you detached or an external CI run. Before the task ends, collect needed results and stop unrelated work.",
   child: "Send your report with `send_message` to your parent agent, the agent named in your delegation identity. If a message arrives while you are writing, it starts another turn, and a report left only in your final reply may never reach the parent. After sending, end with a one-line acknowledgement. Don't declare completion while your background work is still running.",
   sdkMessage: "`send_message` is an SDK binding here: call it inside the program like any other tool, not as a direct tool call.",
+  delegation: `## Delegation ownership
+
+Don't repeat work you've already delegated. Continue independent work while it runs. When a report arrives, review and integrate it yourself.
+
+You design the study, freeze its rules, and write the final report yourself; subagent findings are inputs, not conclusions. When a delegated task stalls on performance or keeps running in the background far longer than expected, take over the diagnosis yourself instead of waiting or re-delegating. Route independent review of results to the high tier.`,
+  skills: `## Skill reuse
+
+Reuse a skill's full instructions while they remain in context. Reload only if they're missing, have changed, or the user asks for a refresh. A catalog summary isn't the full instructions.`,
+  models: "## DSH task model routing\n\nGPT models are available only through `klaude-openai`. Use `gpt-6.2-sol`, the best available GPT model, for these tiers:\n\n- Cheap (`low`): exploration, research, and simple implementation.\n- Mid (`medium`): complicated implementation and reasoning.\n- Expensive (`high`): broad, high-risk, or difficult cross-module work.\n\nSet `provider`, `model`, and `reasoning_effort` on `subagent`. Follow any model or reasoning effort the user explicitly requests.",
 };
 
 const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -75,6 +84,8 @@ export function apply(ctx, config) {
       selected.push(config.text.child);
       if (sdk) selected.push(config.text.sdkMessage);
     }
+    if (tool("subagent")) selected.push(config.text.delegation, config.text.models);
+    if (tool("skill")) selected.push(config.text.skills);
     const text = ["## Runtime tooling", ...selected].join("\n\n");
     return { ...assembled, sections: assembled.sections.flatMap(section => section.name !== SECTION
       ? [section] : selected.length ? [{ ...section, text }] : []) };

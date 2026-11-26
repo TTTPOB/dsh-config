@@ -11,7 +11,7 @@ Word 的 TypeScript 源码位于 [plugins-src/word](<../plugins-src/README.md>)�
 
 ## 运行时工具指引
 
-[runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`grep`、`output`、`background`、`child`、`sdkMessage`。工具 schema 和运行时权限仍决定实际可调用能力。
+[runtime-tooling-guidance.mjs](<runtime-tooling-guidance.mjs>) 根据当前工具模式、可见工具、PTC 语言和子代理身份注册适用章节，使用 `interpolate: false`。`config: {}` 使用模块内默认文案；`config.text` 对象可分别覆盖 `native`、`typescript`、`python`、`grep`、`output`、`background`、`child`、`sdkMessage`、`delegation`、`skills`、`models`。工具 schema 和运行时权限仍决定实际可调用能力。
 
 `grep` 提示仅在当前可见的工具含 `grep.pattern` 时加入：11 月 11–21 日的三机审计中，ripgrep 拒绝了 152 次调用，其中 132 次报分组未闭合，因此提示重点说明字面元字符的转义。
 
@@ -22,6 +22,9 @@ Word 的 TypeScript 源码位于 [plugins-src/word](<../plugins-src/README.md>)�
 | `background` | 可用后台 job，或可见 `subagent`，或可见 `send_message` | job、委派的 agent 和发给自己的消息都会开启下一轮；只剩等待时结束本轮，不轮询 |
 | `child` | 当前 Agent 是 continuable 子代理、父代理在线，且可见的 `send_message` 有 `agent` 和 `message` 参数 | 用 `send_message` 按身份段中的名字把报告发给父代理，再以极短确认结束 |
 | `sdkMessage` | PTC SDK 模式且已选中 `child` | `send_message` 是 SDK 绑定，须在程序内调用 |
+| `delegation` | 可见 `subagent` | 委派后继续独立工作，由自己诊断阻塞并整合结果 |
+| `models` | 可见 `subagent` | 按任务复杂度选择 DSH 子代理模型与推理档位，优先遵循用户指定 |
+| `skills` | 可见 `skill` | 完整指引仍在上下文中时直接复用 |
 
 **为什么先发消息再简短确认：** rc.5 本地子代理等 Agent 活动和待处理输入都结束后才关闭接纳，自动送达的是最后一轮普通轮次的输出。写报告时若收到消息并再开一轮，父代理收到的就是新一轮的输出，原报告可能没有送达。用 `send_message` 显式发送的报告不依赖最后一轮输出；当最后一个动作是给父代理发消息时，rc.5 会通过 `omitClosingText` 在完成通知中省略最终答复，因此发完只需简短确认，不必重述报告正文。
 

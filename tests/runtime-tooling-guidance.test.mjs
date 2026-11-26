@@ -80,6 +80,36 @@ test("grep wording follows scoped visibility in Native and PTC", async () => {
   assert.ok(!(await assemble(ordinary, "native")).includes(text.grep));
 });
 
+test("delegation, model routing, and skill overrides follow their own visible tools", async () => {
+  const text = { delegation: "Fixture delegation", models: "Fixture model routing", skills: "Fixture skills" };
+  let hook, section;
+  Plugin.apply({
+    effect: callback => callback(),
+    on: (_event, handler) => { hook = handler; },
+    systemPrompt: { getSectionOrder: () => 0, section: value => { section = value; } },
+    tools: { schemas: (_scope, visible) => visible.map(name => ({ name })) },
+    get: () => undefined,
+  }, Plugin.Config["~standard"].validate({ text }).value);
+  async function selected(mode, tools, expected) {
+    const sections = [section];
+    if (mode !== "native") sections.push({ name: "tools:ptc-only", text: "PTC" });
+    if (mode === "sdk") sections.push({ name: "tools:sdk", text: "SDK" });
+    const result = await hook({}, { toolSet: tools }, async () => ({ sections }));
+    const guidance = result.sections.find(row => row.name === Plugin.SECTION)?.text ?? "";
+    for (const [key, override] of Object.entries(text)) {
+      assert.equal(guidance.includes(override), expected.includes(key), `${key}: ${mode} / ${tools}`);
+      assert.ok(!guidance.includes(Plugin.DEFAULT_TEXT[key]), `${key} default must not leak into an override`);
+    }
+  }
+  for (const mode of ["native", "sdk"]) {
+    await selected(mode, ["subagent"], ["delegation", "models"]);
+    await selected(mode, ["skill"], ["skills"]);
+    await selected(mode, ["subagent", "skill"], ["delegation", "models", "skills"]);
+    await selected(mode, ["subagent_fork", "list_subagent_models"], []);
+  }
+  await selected("ptc-without-sdk", ["subagent", "skill"], []);
+});
+
 test("installed Loader selects fresh runtime capabilities without changing tools or SDK", {
   skip: !process.env.DSH_CLI_PACKAGE,
 }, async t => {
@@ -251,12 +281,18 @@ test("installed Loader selects fresh runtime capabilities without changing tools
   selected(await assemble(child), ["typescript", "output"]);
   await selectExecutor(NativeExecutor);
   register("subagent");
-  selected(await assemble(child), ["native", "background"]);
+  register("skill");
+  selected(await assemble(child), ["native", "background", "delegation", "models", "skills"]);
   await selectExecutor(PtcExecutor);
-  selected(await assemble(child), ["typescript", "output", "background"]);
+  selected(await assemble(child), ["typescript", "output", "background", "delegation", "models", "skills"]);
+  const hideSubagent = child.ctx.tools.restrict({ deny: ["subagent"] });
+  selected(await assemble(child), ["typescript", "output", "skills"]);
+  hideSubagent();
   await selectExecutor(NativeExecutor);
-  disposers.subagent();
-  delete disposers.subagent;
+  for (const name of ["subagent", "skill"]) {
+    disposers[name]();
+    delete disposers[name];
+  }
   restrict();
   const complete = child.ctx.systemPrompt.section({ name: "complete", order: 0, complete: true, interpolate: false, text: "authoritative" });
   assert.equal(renderPrompt(await assemble(child)), "authoritative");
