@@ -45,6 +45,21 @@ node scripts/dsh-config.mjs update --machine workstation --offline
 
 server、nas 使用各自机器名；check 和离线预览只消费本地输入，不连接这些机器。配置测试的 apply／回滚只操作自动清理的隔离 fixture。
 
+## Goal 创建与后台等待
+
+[goal-policy.mjs](<goal-policy.mjs>) 在 home 挂载一次，使用 `config: {}`。模板的 preset 同时恢复 `command-goal`（`/goal`）和 `tool-goal`。插件做两件事：
+
+- **只在明确要求时创建 goal。** 上游在 `create_goal` 描述和 `tool:goal` 段里让模型从长任务推断 goal。插件在 `system-prompt/assemble` 中把这两句替换为：只有用户明确要求创建、开始或设置 goal 才调用。用替换而不是追加，是为了不留下两条互相矛盾的指令。PTC 模式下 `create_goal` 描述属于 `tools:sdk` 段，可以替换；Native 模式的工具声明由 provider 持有，不经过这个 waterfall，只替换 `tool:goal` 段。日用 `standard-ptc` 两处都覆盖。这是提示词规则，不限制工具调用权限。
+- **自动轮次不空等后台 job。** goal driver 开始下一轮前会等子代理，但不等后台 job：模型为等 job 结束本轮，driver 会立刻开始下一轮，反复空耗直到轮数上限。插件在 `agent/pre-step` 检查：自动轮次进入时若本会话仍有 running 的 job，就追加一条提醒，列出 job ID 和标签，要求只剩等待时在本轮用 `job_output` 加 `wait: true` 阻塞等待。提醒挂在轮次入口而不是 goal 工具结果上，因为 `/goal` 不经过工具，而且创建时的一次性提醒离空耗发生的时刻太远，可能已被压缩。
+
+上游改了措辞时，替换会失效：集成测试会失败，运行时每次加载最多告警一次。
+
+```sh
+NODE_OPTIONS=--max-old-space-size=4096 node --test tests/goal-policy.test.mjs
+```
+
+设置 `DSH_CLI_PACKAGE` 为已安装 CLI 的 `package.json` 路径后，测试会用真实 Loader 加载已安装的 `tool-goal` 和 PTC executor，确认两处原句存在并被替换、卸载后恢复。测试不启动 Host，也不调用模型。
+
 ## 流式循环拦截
 
 [stream-loop-guard.mjs](<stream-loop-guard.mjs>) 在 Host 层挂载一次，覆盖所有 preset。它只检查带会话 ID 的模型流，分别累计每个文本块、推理块及工具调用的参数增量。默认使用 `cross2`：每个分支的得分须连续 `consecutive` 次达到阈值才算命中，任一分支命中即停止读取上游，并以 `STREAM_LOOP_DETECTED` 结束这次响应。已经收到但尚未转发的触发增量不会进入下游。失败响应只留在尝试日志中，不进入对话历史，不执行其中的工具。

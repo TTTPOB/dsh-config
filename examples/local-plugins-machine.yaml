@@ -23,6 +23,10 @@ homePrivate: |
 webPrivate: |
   - insert: []
 localPlugins:
+  - id: goal-policy
+    module: goal-policy.mjs
+    modulePath: /path/to/harness-home/plugins/goal-policy.mjs
+    config: {}
   - id: provider-prompt
     module: provider-prompt.mjs
     modulePath: /path/to/harness-home/plugins/provider-prompt.mjs

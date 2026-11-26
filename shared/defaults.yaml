@@ -7,6 +7,9 @@ localPlugins:
   - id: team-collaboration-notes
     module: team-collaboration-notes.mjs
     config: {}
+  - id: goal-policy
+    module: goal-policy.mjs
+    config: {}
   - id: stream-loop-guard
     module: stream-loop-guard.mjs
     config: {}
