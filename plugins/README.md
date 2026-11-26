@@ -72,9 +72,9 @@ NODE_OPTIONS=--max-old-space-size=4096 node --test tests/goal-policy.test.mjs
 
 ## 工作区指引已加载提醒
 
-[agent-instructions-reminder.mjs](<agent-instructions-reminder.mjs>) 在 `agent/pre-step` 中紧随本步新进入的工作区指引添加一条英文提醒，列出显示路径及绝对路径。首步加载和后续目录发现均适用；只含移除通知或没有新指引时不添加。提醒不改写原消息，也不拦截工具调用；用户要求重读或需核对自己刚做的修改时，可以重读。
+[agent-instructions-reminder.mjs](<agent-instructions-reminder.mjs>) 在 `agent/pre-step` 中紧随本步新进入的工作区指引添加一条英文提醒，列出本步加载的指引显示路径，并要求不要用相对或绝对路径重读。首步加载和后续目录发现均适用；只含移除通知或没有新指引时不添加。提醒不改写原消息，也不拦截工具调用；用户要求重读或需核对自己刚做的修改时，可以重读。
 
-项目路径以指引基线记录的项目根为准。首次注入只有子目录指引、还没有基线时，沿用受管 preset 的默认 `.git` 根标记。运行 `NODE_OPTIONS=--max-old-space-size=4096 node --test tests/agent-instructions-reminder.test.mjs` 验证。
+运行 `NODE_OPTIONS=--max-old-space-size=4096 node --test tests/agent-instructions-reminder.test.mjs` 验证。
 
 ## 流式循环拦截
 
