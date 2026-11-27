@@ -6,6 +6,7 @@ import { infoExpression, outlineExpression, deckSizeExpression, imageExpression,
 import { renderSlide } from './render.ts';
 import { startCatalog } from '../../shared/catalog.ts';
 import { catalogDefinitions } from './catalog-overrides.ts';
+import { catalogOutputSchemas } from './catalog-output-schemas.ts';
 import { officeTool } from './office-tool.ts';
 import { objectSchema, jsonSchema, textRender, slideParam, imageSchema } from './schemas.ts';
 import type { Tool, AddTool, Args, Context, Execution, Schema, Render, ObjectSchema } from '../../shared/types.ts';
@@ -94,7 +95,8 @@ export function apply(ctx: Context, config: Config) {
     signal => helperRequest(config, '/catalog', undefined, signal),
     tools => catalogDefinitions(tools.filter(tool => tool.clientName !== 'execute_office_js')).map(tool => {
       if (staticNames.has(tool.clientName)) throw new Error('PowerPoint catalog conflicts with a DSH-owned tool: ' + tool.clientName);
-      return makeTool<Schema, unknown>('powerpoint_' + tool.clientName, tool.description, tool.inputSchema, jsonSchema,
+      const outputSchema = Object.hasOwn(catalogOutputSchemas, tool.clientName) ? catalogOutputSchemas[tool.clientName]! : jsonSchema;
+      return makeTool<Schema, unknown>('powerpoint_' + tool.clientName, tool.description, tool.inputSchema, outputSchema,
         (args, exec) => evaluateNow(clientCallExpression(tool.clientName, args), exec));
     }));
   add('powerpoint_pane_visibility', 'Hide or show the Office taskpane. Hiding keeps the document runtime available.', { visible: { type: 'boolean' } }, ['visible'], objectSchema, async (a, e) => {

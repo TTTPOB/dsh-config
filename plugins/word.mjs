@@ -102,7 +102,11 @@ function startCatalog(ctx, host, policy, fetchCatalog, prepare) {
 					disposers = [];
 					revision = void 0;
 					try {
-						for (const definition of next) disposers.push(ctx.tools.register(definition));
+						for (const definition of next) try {
+							disposers.push(ctx.tools.register(definition));
+						} catch (error) {
+							throw new Error("Could not register " + definition.name + ": " + String(error), { cause: error });
+						}
 					} catch (error) {
 						for (const dispose of disposers) dispose();
 						disposers = [];
@@ -115,7 +119,7 @@ function startCatalog(ctx, host, policy, fetchCatalog, prepare) {
 				schedule(policy.catalogRefreshMs);
 			} catch (error) {
 				if (controller.signal.aborted) return;
-				ctx.logger?.warn(host + " helper catalog refresh failed; retrying: " + String(error));
+				(ctx.logger ?? console).warn(host + " helper catalog refresh failed; retrying: " + String(error));
 				schedule(retryMs);
 				retryMs = Math.min(retryMs * 2, policy.catalogRetryMaxMs);
 			}
@@ -209,6 +213,117 @@ function catalogDefinitions(tools) {
 		};
 	});
 }
+//#endregion
+//#region plugins-src/shared/catalog-output-schema.ts
+var string = { type: "string" };
+var integer = { type: "integer" };
+var number = { type: "number" };
+var boolean = { type: "boolean" };
+var trueValue = {
+	type: "boolean",
+	const: true
+};
+/** Closed records assembled by the add-in, with required and conditional fields separated. */
+function record(required, optional = {}) {
+	return {
+		type: "object",
+		properties: {
+			...required,
+			...optional
+		},
+		required: Object.keys(required),
+		additionalProperties: false
+	};
+}
+function array(items) {
+	return {
+		type: "array",
+		items
+	};
+}
+function nullable(schema) {
+	return { oneOf: [schema, { type: "null" }] };
+}
+function success(result, optional) {
+	return record({
+		success: trueValue,
+		result
+	}, optional);
+}
+//#endregion
+//#region plugins-src/word/src/catalog-output-schemas.ts
+var paragraphFormatting = record({}, {
+	style: string,
+	styleBuiltIn: string,
+	alignment: string,
+	lineSpacing: number,
+	leftIndent: number,
+	firstLineIndent: number,
+	font: record({}, {
+		name: string,
+		size: number,
+		bold: boolean,
+		italic: boolean,
+		color: string
+	}),
+	table: record({}, {
+		style: string,
+		headerRowCount: integer
+	})
+});
+/** Successful envelopes emitted by the Word client runtime. */
+var catalogOutputSchemas = {
+	verify_doc: success(record({
+		styles: {
+			type: "object",
+			additionalProperties: true,
+			description: "Maps paragraph style names to paragraph counts."
+		},
+		lists: array(record({
+			paraIndex: integer,
+			level: integer,
+			listString: string
+		})),
+		tables: array(record({
+			tableIndex: integer,
+			rowCount: integer,
+			cellsPerRow: array(integer),
+			uniform: boolean
+		}))
+	})),
+	read_doc_section: success(record({
+		paragraphStart: integer,
+		paragraphEnd: integer,
+		paragraphCount: integer,
+		text: string
+	}, {
+		formatting: array(paragraphFormatting),
+		truncated: string
+	})),
+	search_doc_text: success(record({
+		matches: array(record({ snippet: string }, { paragraph_index: integer })),
+		total_matches: integer
+	}, {
+		message: string,
+		truncated: string
+	})),
+	collapse_blank_paragraphs: success(record({
+		deleted: integer,
+		scanned: integer,
+		skipped_with_content: integer
+	}, {
+		tracked: trueValue,
+		not_removed: integer,
+		note: string
+	})),
+	edit_doc_text: success(record({ replaced: trueValue }, { paragraph: record({ text: string }, { styleBuiltIn: nullable(string) }) }), { tracked_change_warning: string }),
+	edit_doc_list: success(record({ items: array(record({
+		text: string,
+		isListItem: trueValue,
+		listString: string,
+		level: integer
+	})) }))
+};
 //#endregion
 //#region plugins-src/word/src/office-tool.ts
 /** DSH-owned execution tool, including local binary file inputs. */
@@ -798,10 +913,13 @@ function apply(ctx, config) {
 	]);
 	const catalog = startCatalog(ctx, "Word", config, (signal) => requestHelper(config, "/catalog", void 0, signal), (tools) => catalogDefinitions(tools.filter((tool) => tool.clientName !== "execute_office_js")).map((tool) => {
 		if (staticNames.has(tool.clientName)) throw new Error("Word catalog conflicts with a DSH-owned tool: " + tool.clientName);
-		return makeTool("word_" + tool.clientName, tool.description, tool.inputSchema, jsonSchema, async (input, exec) => {
+		const outputSchema = Object.hasOwn(catalogOutputSchemas, tool.clientName) ? catalogOutputSchemas[tool.clientName] : jsonSchema;
+		return makeTool("word_" + tool.clientName, tool.description, tool.inputSchema, outputSchema, async (input, exec) => {
 			const args = input;
 			const options = tool.clientName === "edit_doc_list" && args.action === "create_list" ? { listStyles: await requestHelper(config, "/word/list-styles" + (selected(exec) === void 0 ? "" : "?target=" + encodeURIComponent(selected(exec))), void 0, exec.signal) } : {};
-			return evaluateNow(clientCallExpression(tool.clientName, args, options), exec);
+			const value = await evaluateNow(clientCallExpression(tool.clientName, args, options), exec);
+			if (value?.success === false) throw new Error("Word helper " + tool.clientName + " failed: " + JSON.stringify(value));
+			return value;
 		});
 	}));
 	registerZoteroTools(add, config, evaluateNow, targetBody);

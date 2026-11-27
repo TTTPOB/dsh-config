@@ -76,7 +76,10 @@ export function startCatalog(
           disposers = [];
           revision = undefined;
           try {
-            for (const definition of next) disposers.push(ctx.tools.register(definition));
+            for (const definition of next) {
+              try { disposers.push(ctx.tools.register(definition)); }
+              catch (error) { throw new Error('Could not register ' + definition.name + ': ' + String(error), { cause: error }); }
+            }
           } catch (error) {
             for (const dispose of disposers) dispose();
             disposers = [];
@@ -89,7 +92,7 @@ export function startCatalog(
         schedule(policy.catalogRefreshMs);
       } catch (error) {
         if (controller.signal.aborted) return;
-        ctx.logger?.warn(host + ' helper catalog refresh failed; retrying: ' + String(error));
+        (ctx.logger ?? console).warn(host + ' helper catalog refresh failed; retrying: ' + String(error));
         schedule(retryMs);
         retryMs = Math.min(retryMs * 2, policy.catalogRetryMaxMs);
       }

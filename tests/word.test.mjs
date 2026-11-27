@@ -83,6 +83,25 @@ test('list creation discovers current host style names before dispatch, without 
   assert.equal(requests.filter(r=>r.options.method==='GET').length,2);
 });
 
+test('catalog Word failures reject with the runtime diagnostic and partial edit readback',async t=>{
+  const items=[{text:'Attempted item',isListItem:false,listString:'',level:0}];
+  const failed={success:false,error:'List attachment failed — check result.items and undo before retrying.',result:{items}};
+  const code='ItemNotFound';
+  const writeFailed={success:false,error:code+': partial write'};
+  const responses=[failed,writeFailed,{success:true,result:{replaced:true}}];
+  t.mock.method(globalThis,'fetch',async url=>new Response(JSON.stringify(new URL(url).pathname==='/catalog'
+    ? catalog('Word') : {value:responses.shift()})));
+  const f=register(t,config({autoHide:false}));
+  await assert.rejects(f.call('word_edit_doc_list',{action:'insert_item',new_item_text:items[0].text}),error=>{
+    assert.ok(error.message.includes(failed.error));
+    assert.ok(error.message.includes(JSON.stringify(failed.result)));
+    return true;
+  });
+  await assert.rejects(f.call('word_edit_doc_text',{old_text:'before',new_text:'after'}),/ItemNotFound.*partial write/);
+  const value=await f.call('word_edit_doc_text',{old_text:'before',new_text:'after'});
+  assert.deepEqual(value,{success:true,result:{replaced:true}});
+});
+
 test('one queue serializes operations and recovers after a rejected write',async t=>{
   let entered;const ready=new Promise(resolve=>{entered=resolve;});let release;const wait=new Promise(resolve=>{release=resolve;});
   const requests=transport(t,async request=>{if(request.body.code.includes('first')){entered();await wait;return {error:{code:'write-failed',message:'partial write'}};}return {success:true,result:'second'};});

@@ -1,5 +1,6 @@
 import { startCatalog } from '../../shared/catalog.ts';
 import { catalogDefinitions } from './catalog-overrides.ts';
+import { catalogOutputSchemas } from './catalog-output-schemas.ts';
 import { officeTool } from './office-tool.ts';
 import { clientCallExpression, evaluate, requestHelper, paneError } from './transport.ts';
 import { officeCode } from './files.ts';
@@ -124,14 +125,18 @@ export function apply(ctx: Context, config: Config) {
     signal => requestHelper(config, '/catalog', undefined, signal),
     tools => catalogDefinitions(tools.filter(tool => tool.clientName !== 'execute_office_js')).map(tool => {
       if (staticNames.has(tool.clientName)) throw new Error('Word catalog conflicts with a DSH-owned tool: ' + tool.clientName);
-      return makeTool<Schema, unknown>('word_' + tool.clientName, tool.description, tool.inputSchema, jsonSchema,
+      const outputSchema = Object.hasOwn(catalogOutputSchemas, tool.clientName) ? catalogOutputSchemas[tool.clientName]! : jsonSchema;
+      return makeTool<Schema, unknown>('word_' + tool.clientName, tool.description, tool.inputSchema, outputSchema,
         async (input, exec) => {
           const args = input as Record<string, unknown>;
           const options = tool.clientName === 'edit_doc_list' && args.action === 'create_list'
             ? { listStyles: await requestHelper(config, '/word/list-styles'
               + (selected(exec) === undefined ? '' : '?target=' + encodeURIComponent(selected(exec)!)), undefined, exec.signal) }
             : {};
-          return evaluateNow(clientCallExpression(tool.clientName, args, options), exec);
+          const value = await evaluateNow(clientCallExpression(tool.clientName, args, options), exec);
+          if ((value as { success?: boolean } | null)?.success === false)
+            throw new Error('Word helper ' + tool.clientName + ' failed: ' + JSON.stringify(value));
+          return value;
         });
     }));
   registerZoteroTools(add, config, evaluateNow, targetBody);

@@ -3,26 +3,53 @@ import assert from 'node:assert/strict';
 import * as PowerPoint from '../plugins/powerpoint.mjs';
 import * as Word from '../plugins/word.mjs';
 import { catalog, settled } from './office-catalog-fixtures.mjs';
+import { catalogOutputSchemas as powerPointOutputs } from '../plugins-src/powerpoint/src/catalog-output-schemas.ts';
+import { catalogOutputSchemas as wordOutputs } from '../plugins-src/word/src/catalog-output-schemas.ts';
+import { jsonSchema as powerPointJson } from '../plugins-src/powerpoint/src/schemas.ts';
+import { jsonSchema as wordJson } from '../plugins-src/word/src/schemas.ts';
 
-function registry(t, plugin, config) {
+function registry(t, plugin, config, { reject, logger = true } = {}) {
   const tools=new Map(), providers=new Map(), effects=[], events=[], warnings=[];
   plugin.apply({
     tools:{register(tool){
+      if (tool.name === reject) throw new Error('unsupported JSON schema');
       assert.ok(!tools.has(tool.name),'duplicate live registration');
       tools.set(tool.name,tool);events.push(['register',tool.name]);
       return()=>{tools.delete(tool.name);events.push(['dispose',tool.name]);};
     }},
     skills:{registerProvider:create=>{const p=create();providers.set(p.name,p);return()=>providers.delete(p.name);}}, attachments:{},
-    logger:{warn:message=>warnings.push(message)}, effect(fn){effects.push(fn());},
+    ...(logger ? {logger:{warn:message=>warnings.push(message)}} : {}), effect(fn){effects.push(fn());},
   },config);
   const dispose=()=>effects.splice(0).reverse().forEach(fn=>fn());
   t.after(dispose);
   return {tools,providers,events,warnings,dispose};
 }
 
-for (const [host, plugin] of [['PowerPoint',PowerPoint],['Word',Word]]) {
+for (const [host, plugin, outputs, generic] of [
+  ['PowerPoint', PowerPoint, powerPointOutputs, powerPointJson], ['Word', Word, wordOutputs, wordJson],
+]) {
   const prefix=host.toLowerCase()+'_';
   const config=()=>plugin.Config['~standard'].validate({autoHide:false,catalogRefreshMs:100,catalogRetryInitialMs:5,catalogRetryMaxMs:20,helperToken:'synthetic'}).value;
+  test(host+': attaches each known output to its tool and leaves new catalog tools generic',async t=>{
+    const future='new_helper_tool';
+    t.mock.method(globalThis,'fetch',async()=>new Response(JSON.stringify(catalog(host,[...Object.keys(outputs),future]))));
+    const {tools}=registry(t,plugin,config());await settled();
+    for(const [clientName,schema] of Object.entries(outputs))
+      assert.deepEqual(tools.get(prefix+clientName).output.schema,schema,clientName);
+    assert.deepEqual(tools.get(prefix+future).output.schema,generic);
+  });
+  test(host+': names rejected registrations in warnings even without a logger',async t=>{
+    const reject=prefix+'rejected', kept=prefix+'not_committed', consoleWarnings=[];
+    t.mock.method(console,'warn',message=>consoleWarnings.push(message));
+    t.mock.method(globalThis,'fetch',async()=>new Response(JSON.stringify(catalog(host,['not_committed','rejected']))));
+    const primary=registry(t,plugin,config(),{reject});
+    const fallback=registry(t,plugin,config(),{reject,logger:false});
+    await settled();
+    assert.equal(primary.tools.has(kept),false);
+    assert.equal(fallback.tools.has(kept),false);
+    for(const warnings of [primary.warnings,consoleWarnings])
+      assert.ok(warnings.some(message=>message.includes(reject)&&message.includes('unsupported JSON schema')),warnings.join('\n'));
+  });
   test(host+': startup online, revision stability, fetch-before-swap, and offline calls retain tools',async t=>{
     t.mock.timers.enable({apis:['setTimeout']});
     let response=catalog(host,['alpha','beta']), offline=false, invalid=false;
