@@ -4,7 +4,7 @@
 
 ## 背景
 
-PTC 模式下，Harness 把每个工具的输入和输出 JSON Schema 渲染成 SDK 里的 TypeScript 声明。Harness 只支持一个子集：`type`、`oneOf`、`properties`、`required`、`additionalProperties`（只能是布尔值）、`items`、`enum`、`const`，以及 `description`、`title`、`default`、`examples`。子集之外的 schema 不会报错，只会被渲染成 `unknown`；注册时也只校验输出 schema，不校验参数 schema（`packages/core/tools/src/index.ts` 的 `register()`）。
+PTC 模式下，Harness 把每个工具的输入和输出 JSON Schema 渲染成 SDK 里的 TypeScript 声明。Harness 只支持一个子集：`type`、`oneOf`、`properties`、`required`、`additionalProperties`（只能是布尔值）、`items`、`enum`、`const`，以及 `description`、`title`、`default`、`examples`。参数 schema 超出子集时不会报错，只会在 SDK 里渲染成 `unknown`；输出 schema 超出子集则在注册时抛错，因为 `register()`（`packages/core/tools/src/index.ts`）只校验输出 schema。
 
 一次 LLab3 上的 PowerPoint 会话暴露了两类问题：
 
@@ -15,12 +15,12 @@ PTC 模式下，Harness 把每个工具的输入和输出 JSON Schema 渲染成 
 
 ## 决定
 
-1. **参数 schema 留在子集内。** `files` 写成 `{ type: 'object', additionalProperties: true }`，值的类型（DSH 机器上的绝对路径）写在 description 里；运行时校验键名和路径。Word 的 `word_execute_office_js` 直接返回代码的返回值，不再套 `{ success, result }`，与 PowerPoint 一致。
-2. **为已知目录工具手写返回值 schema。** PowerPoint 15 个、Word 6 个，外层保持 helper 的 `{ success: true, result, slide_id_update? }`。helper 新增而插件不认识的工具仍用通用 JSON。只声明模型读回和判断时需要的字段，其余字段用开放对象放行。Word 目录工具报告 `success: false` 时，插件抛出工具错误。
-3. **控制 SDK 体积。** 与通用 JSON 相比，每次请求的 SDK 净增约 5.2K 字符（目标 4.5K）。再删就要删掉替换位置、跳过原因、图表样式等模型实际要读的字段，所以接受这个超出。
-4. **`duplicate_slide` 返回 `new_slide_id`。** 插件在同一个串行队列里比较复制前后的页 ID。恰好多出一个时返回它；多出零个或几个，或者复制成功后读回失败，就原样返回、不抛错，避免模型再复制一次。
+1. **参数 schema 留在子集内。** `files` 写成 `{ type: 'object', additionalProperties: true }`，值的类型（DSH 机器上的绝对路径）写在 description 里；运行时校验键名和路径。Word 的 `word_execute_office_js` 直接返回代码的返回值，不再套 `{ success, result }`，与 PowerPoint 一致；ops 仓库里 helper 下发的 Word skill 同步修改。两端在未传 `files` 时都绑定空对象。
+2. **为已知目录工具手写返回值 schema。** PowerPoint 15 个、Word 6 个，外层保持 helper 的 `{ success: true, ... }`：有数据的工具放在 `result` 下，`slide_id_update`、`new_slide_id` 等元数据与 `success` 同级，部分工具没有 `result`。helper 新增而插件不认识的工具仍用通用 JSON。只声明模型读回和判断时需要的字段，其余字段用开放对象放行。Word 目录工具报告 `success: false` 时，插件抛出工具错误。
+3. **控制 SDK 体积。** 21 个输出类型相对通用 JSON 净增约 5.2K 字符（目标 4.5K）；连同两个执行工具修正后的参数和描述，SDK 比改动前共增加约 6.4K 字符，而且每次请求都会带上。再删就要删掉替换位置、跳过原因、图表样式等模型实际要读的字段，所以接受这个超出。
+4. **`duplicate_slide` 返回 `new_slide_id`。** 插件在同一个串行队列里比较复制前后的页 ID。恰好多出一个时返回它；多出零个或几个，或者复制成功后读回失败，就原样返回、不抛错，避免模型再复制一次。读回有单独的短时限，不会让已完成的复制变成工具超时。
 5. **`describe_tools` 对直接声明的工具给出明确提示**（dsh-progressive-tools），告诉模型直接调用该工具，而不是报未知工具。
-6. **不在 Harness 侧改为 fail-loud。** 让 `register()` 拒绝子集外的参数 schema 需要改上游，这次不做；本仓库的测试在设置 `DSH_CLI_PACKAGE` 时用 Harness 的实际渲染器检查 Office schema。
+6. **不在 Harness 侧改为 fail-loud。** 让 `register()` 拒绝子集外的参数 schema 需要改上游，这次不做；本仓库的测试在设置 `DSH_CLI_PACKAGE` 时，用 Harness 的实际渲染器检查两个执行工具的参数类型和目录工具的输出 schema。
 
 ## 考虑过的替代方案
 
@@ -35,7 +35,6 @@ PTC 模式下，Harness 把每个工具的输入和输出 JSON Schema 渲染成 
 
 ## 未决事项
 
-- `powerpoint_render_slide` 和 `powerpoint_insert_image` 用页码，其他工具用页 ID；是否让它们也接受页 ID。
+- `powerpoint_render_slide`、`powerpoint_insert_image`、`powerpoint_slide_outline` 用一基页码，`powerpoint_verify_slides` 用零基范围，其他工具用页 ID；是否让前几个也接受页 ID。
 - 会话查询工具没有从尾部读取的方式，模型为读最近内容从头翻页了 99 次。
 - Word skill 中我们自己总结的内容目前只能写进私有文件；是否拆成公开和私有两份。
-- ops 仓库的 Word skill 仍写着 `word_execute_office_js` 返回 `{ success: true, result }`，需要同步。

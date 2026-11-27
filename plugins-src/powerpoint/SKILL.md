@@ -42,11 +42,12 @@ Shape names, layout names, and placeholder names follow the Office UI language. 
 
 Use the result fields described here and in each tool's output type; do not guess field paths.
 
-- Catalog tools (every tool except `powerpoint_execute_office_js`, `powerpoint_list_presentations`, `powerpoint_select_presentation`, `powerpoint_pane_visibility`, `powerpoint_deck_info`, `powerpoint_slide_outline`, `powerpoint_insert_image`, and `powerpoint_render_slide`) return `{ success: true, ... }`, with their data under `result`. For example, `powerpoint_list_slide_shapes` puts the shape array in `result`, and `powerpoint_verify_slides` puts the per-slide reports in `result.slides`.
+- Catalog tools (every tool except `powerpoint_execute_office_js`, `powerpoint_list_presentations`, `powerpoint_select_presentation`, `powerpoint_pane_visibility`, `powerpoint_deck_info`, `powerpoint_slide_outline`, `powerpoint_insert_image`, and `powerpoint_render_slide`) return `{ success: true, ... }`. Tools that return data put it under `result`; metadata such as `slide_id_update` and `new_slide_id` sits at the top level beside `success`. For example, `powerpoint_list_slide_shapes` puts the shape array in `result`, and `powerpoint_verify_slides` puts the per-slide reports in `result.slides`.
 - `slide_id_update` is an object that maps each old slide ID to its new ID, not a string or an array: `const id = res.slide_id_update?.[oldId] ?? oldId;`.
 - `powerpoint_duplicate_slide` returns the copy's ID as `new_slide_id`. When that field is absent, read `powerpoint_deck_info` to find the copy; do not duplicate again.
-- The OOXML callback tools return your callback's return value under `result`.
-- `powerpoint_execute_office_js` returns your code's return value as is, or `null` when the code returns nothing.
+- The OOXML callback tools return your callback's return value under `result` when it returns one.
+- `powerpoint_execute_office_js` returns your code's return value, or `null` when the code returns nothing.
+- The helper sanitizes text in results (for example, it removes tag-like markup). When the exact text matters, read it back from the deck instead of relying on a returned string.
 - `powerpoint_render_slide` and `powerpoint_insert_image` take an index. For a slide you hold by ID, the index is its position in the `slideIds` you last read, plus one. Read `powerpoint_deck_info` again after adding, deleting, or moving slides; after an OOXML write, apply `slide_id_update` to the IDs you hold. Do not re-read the deck before every render.
 
 ## 3. Choosing a mechanism
@@ -59,7 +60,7 @@ Prefer the narrowest tool. Moving a box is Office.js; changing one word in a sty
 
 ## 4. Office.js
 
-`powerpoint_execute_office_js` runs your code as an async function body. Available globals: `Office`, `PowerPoint`, `JSZip`, `DOMParser`, `XMLSerializer`, `insertImage`, and `files` when you pass the `files` argument. Supply `files: { image: "/absolute/path/image.png", deck: "/absolute/path/deck.pptx" }` alongside `code`; the plugin reads these DSH-machine paths and exposes raw base64 as `files.image` and `files.deck`. Never put base64 literals in `code`. There is no implicit `context`; open one with `PowerPoint.run`. Return a JSON-serializable value; the tool returns it as is, or `null` when your code returns nothing.
+`powerpoint_execute_office_js` runs your code as an async function body. Available globals: `Office`, `PowerPoint`, `JSZip`, `DOMParser`, `XMLSerializer`, `insertImage`, and `files` (an empty object when you pass no `files` argument). Supply `files: { image: "/absolute/path/image.png", deck: "/absolute/path/deck.pptx" }` alongside `code`; the plugin reads these DSH-machine paths and exposes raw base64 as `files.image` and `files.deck`. Never put base64 literals in `code`. There is no implicit `context`; open one with `PowerPoint.run`. Return a JSON-serializable value; the tool returns it, or `null` when your code returns nothing.
 
 Read shapes on a slide:
 
@@ -195,8 +196,8 @@ Mechanics:
 - XML child order is strict. Keep existing elements; modify them in place rather than appending duplicates.
 - Locate the target by its `cNvPr` id and by the runs actually present in the XML, not by shape name or by the text as it reads on the slide. Text that reads as one string is often split across several `<a:r>` elements (spelling marks, formatting changes, generated math), so read the paragraph's runs before matching.
 - Count what you matched. If the target is missing or a replacement matched nothing, throw or return without calling `markDirty()`. A `markDirty()` without a real change still re-imports the slide and changes its ID.
-- An empty table cell holds a paragraph with only `<a:endParaRPr>`, and no `<a:r>` or `<a:t>`. To fill it, create an `<a:r>` whose `<a:rPr>` copies the run properties of a filled cell in the same row or column (or the attributes of the cell's `<a:endParaRPr>`), add the `<a:t>`, and insert the run before `<a:endParaRPr>`.
-- Keep a base character and its combining marks in the same `<a:t>`, for example `L` followed by U+0302 for L̂. Split across runs, the mark renders as a stray glyph. When generating runs, split text only at grapheme boundaries (`Intl.Segmenter`). If the font cannot draw the combination, use a notation it can, such as a subscript or superscript form, and render the slide to check.
+- An empty table cell holds a paragraph with no `<a:r>` or `<a:t>`: usually only an `<a:endParaRPr>`, sometimes an empty `<a:p/>`. To fill it, create an `<a:r>` whose `<a:rPr>` copies the run properties of a filled cell in the same row or column (or the attributes of the cell's `<a:endParaRPr>`), add the `<a:t>`, and insert the run before `<a:endParaRPr>`, or append it to the paragraph when there is none.
+- Keep a base character and its combining marks in the same `<a:t>`, for example `L` followed by U+0302 for L̂. Split across runs, the mark can render as a stray glyph. When generating runs, split text only at grapheme boundaries (`Intl.Segmenter`). If the font cannot draw the combination, use a notation it can, such as a subscript or superscript form, and render the slide to check.
 - After a write, read the XML back, check the changed text and relationships, and render the slide.
 
 Read-only inspection:

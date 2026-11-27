@@ -69,7 +69,7 @@ helper 的部署与接口见 ops 仓库的 Office Helper 文档。旧配置中�
 
 超时、断线或失败后先读回文稿：修改可能已经生效，工具不会自动重试。
 
-powerpoint_execute_office_js 运行的是可信代码，能访问 Office 宿主的全部能力。代码需自行用 PowerPoint.run 打开上下文；工具原样返回代码的返回值，没有返回值时为 null。files 参数的键是 JavaScript 标识符，值是 DSH 机器上的绝对路径，代码通过 files.<标识符> 读取原始 base64；不传 files 时没有 files 全局。
+powerpoint_execute_office_js 运行的是可信代码，能访问 Office 宿主的全部能力。代码需自行用 PowerPoint.run 打开上下文；工具返回代码的返回值，没有返回值时为 null；helper 会清理结果中的文本，例如去掉类似标签的标记。files 参数的键是 JavaScript 标识符，值是 DSH 机器上的绝对路径，代码通过 files.<标识符> 读取原始 base64；不传 files 时 files 为空对象。
 
 默认用 Office.js 渲染所选文稿。`renderBackend: com` 渲染的是 PowerPoint 当前激活的文稿：页数不一致时会报 presentation-mismatch，但页数相同并不代表是同一份文稿，渲染前要确认目标文稿处于激活状态。
 
