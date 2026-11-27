@@ -37,9 +37,11 @@ export const Config = {
       } catch (error) {
         issues.push({ message: 'helperUrl must be an HTTP(S) URL', path: ['helperUrl'] });
       }
-      for (const key of ['timeoutMs', 'renderLongEdge'] as const)
-        if (!Number.isSafeInteger(value[key]) || value[key] <= 0)
-          issues.push({ message: key + ' must be a positive integer', path: [key] });
+      if (!Number.isSafeInteger(value.timeoutMs) || value.timeoutMs <= 0)
+        issues.push({ message: 'timeoutMs must be a positive integer', path: ['timeoutMs'] });
+      // The helper's wordRender() in office_cdp_helper.mjs accepts longEdge from 1 to 16384.
+      if (!Number.isInteger(value.renderLongEdge) || value.renderLongEdge < 1 || value.renderLongEdge > 16384)
+        issues.push({ message: 'renderLongEdge must be an integer from 1 to 16384', path: ['renderLongEdge'] });
       if (typeof value.helperToken !== 'string')
         issues.push({ message: 'helperToken must be a string', path: ['helperToken'] });
       if (typeof value.autoHide !== 'boolean')

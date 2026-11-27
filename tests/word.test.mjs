@@ -4,7 +4,7 @@ import { catalog, definitions, settled } from './office-catalog-fixtures.mjs';
 import * as Plugin from '../plugins/word.mjs';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 async function binaryFixture(t, bytes=Buffer.from([0,255,34,128,10,92])) {
   const directory=await mkdtemp(join(tmpdir(),'word-binary-'));
@@ -138,6 +138,7 @@ test('Office code receives binary files without changing logged path-only argume
   assert.equal(captured[0].name,'execute_office_js');
   assert.ok(!JSON.stringify(args).includes(fixture.bytes.toString('base64')));
   assert.deepEqual(await f.call('word_execute_office_js',{code:'return files;',files:{}}),{});
+  await assert.rejects(f.call('word_execute_office_js',{code:'return files;'}),/files is not defined/);
   assert.equal(await f.call('word_execute_office_js',{code:'return;'}),null);
 });
 
@@ -162,13 +163,15 @@ test('image tool reads local bytes, preserves arguments and rejects missing path
   const Word={run:fn=>fn({document:{getSelection:()=>({insertInlinePictureFromBase64(bytes,where){events.push({bytes,where});return image;}})},sync:async()=>{}})};
   const requests=transport(t,request=>Function('Word','return '+request.body.code)(Word));
   const f=register(t,config({autoHide:false}));
-  const args=Object.freeze({filePath:fixture.filePath,where:'selection',width:70});
+  const args=Object.freeze({filePath:relative(process.cwd(),fixture.filePath),where:'selection',width:70});
   assert.deepEqual(await f.call('word_insert_image',args),{inserted:true,width:args.width,height:30});
   assert.deepEqual(events,[{bytes:fixture.bytes.toString('base64'),where:'Replace'}]);
   const count=requests.length;
   await assert.rejects(f.call('word_insert_image',{}),/filePath is required/);
   await assert.rejects(f.call('word_insert_image',{base64:fixture.bytes.toString('base64')}),/filePath is required/);
-  await assert.rejects(f.call('word_insert_image',{filePath:join(fixture.directory,'missing.bin')}),/ENOENT/);
+  const missing=join(fixture.directory,'missing.bin');
+  await assert.rejects(f.call('word_insert_image',{filePath:missing}),/ENOENT/);
+  await assert.rejects(f.call('word_insert_image',{filePath:missing,height:0}),/height must be positive/);
   assert.equal(requests.length,count);
 });
 
@@ -253,6 +256,22 @@ test('Windows rendering forwards selected target and long edge, decodes PNG, and
   wire.panes=[b];
   await f.call('word_render_page',{page:1},undefined,'unselected');
   assert.equal(wire.requests.at(-1).body.target,undefined);
+});
+
+test('Windows rendering rejects non-PNG bytes before saving an attachment',async t=>{
+  const wire=paneHelper(t,[wordPane('render-invalid','Rendered document')]);
+  wire.png=Buffer.from('an HTML error presented as a PNG');
+  const saved=[];
+  const f=register(t,config({autoHide:false}),{saveImage:async input=>{saved.push(input);return {attachmentId:'bad'};}});
+  await assert.rejects(f.call('word_render_page',{page:1}),/helper did not return a PNG/);
+  assert.deepEqual(saved,[]);
+});
+
+test('Word configuration accepts the largest render size the helper supports and rejects larger requests',()=>{
+  const validate=Plugin.Config['~standard'].validate;
+  config({renderLongEdge:16384});
+  const rejected=validate({renderLongEdge:16385});
+  assert.ok(rejected.issues?.some(issue=>issue.path[0]==='renderLongEdge'));
 });
 
 test('Windows render errors preserve page count, helper code and pane selection guidance without saving images',async t=>{

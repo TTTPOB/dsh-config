@@ -1,10 +1,5 @@
 import type { Config } from './config.ts';
-
-interface HelperError {
-  code: string;
-  message?: string;
-  panes?: unknown;
-}
+import { readHelperError, type HelperError } from '../../shared/helper-error.ts';
 export function helperSignal(config: Config, signal?: AbortSignal) {
   const deadline = AbortSignal.timeout(config.timeoutMs);
   const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
@@ -22,11 +17,7 @@ export async function helperRequest(config: Config, route: string, body: unknown
     method: body === undefined ? 'GET' : 'POST', headers,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: helperSignal(config, signal),
   }).catch(error => { throw new Error('PowerPoint helper not connected: ' + String(error), { cause: error }); });
-  if (!response.ok) {
-    let detail: HelperError | null = null;
-    try { detail = (await response.json()).error; } catch { detail = null; }
-    throw paneError(detail ?? { code: 'HTTP ' + response.status, message: 'request failed' });
-  }
+  if (!response.ok) throw paneError(await readHelperError(response));
   return binary ? Buffer.from(await response.arrayBuffer()) : response.json();
 }
 

@@ -1,5 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import { officeArgs } from './files.ts';
+import { officeCode } from '../../shared/office-files.ts';
+import { readImageBase64 } from '../../shared/office-images.ts';
 import { name, type Config } from './config.ts';
 import { evaluate, helperRequest, paneError } from './transport.ts';
 import { infoExpression, outlineExpression, deckSizeExpression, imageExpression, clientCallExpression } from './expressions.ts';
@@ -86,7 +86,7 @@ export function apply(ctx: Context, config: Config) {
       return { ...data, selectedTarget: args.target };
     });
   register('powerpoint_execute_office_js', officeTool.description, officeTool.parameters, jsonSchema,
-    async (args, exec) => evaluateNow(clientCallExpression('execute_office_js', await officeArgs(args, exec.signal)), exec));
+    async (args, exec) => evaluateNow(clientCallExpression('execute_office_js', { code: await officeCode(args, exec.signal) }), exec));
   const staticNames = new Set([
     'execute_office_js', 'list_presentations', 'select_presentation', 'pane_visibility',
     'deck_info', 'slide_outline', 'insert_image', 'render_slide',
@@ -110,8 +110,7 @@ export function apply(ctx: Context, config: Config) {
   add('powerpoint_insert_image', 'Insert a PNG/JPEG/GIF/BMP file from the DSH machine onto a slide via Office.js. filePath is required; no Windows path or inline binary data. Coordinates are points; omitted height preserves aspect ratio. Changes the selected slide.', {
     slide: slideParam, filePath: { type: 'string' }, left: { type: 'number' }, top: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' },
   }, ['slide', 'filePath'], objectSchema, async (a, e) => {
-    const base64 = (await readFile(a.filePath, { signal: e.signal })).toString('base64');
-    for (const key of ['width', 'height'] as const) if (a[key] !== undefined && (!Number.isFinite(a[key]) || a[key] <= 0)) throw new Error(key + ' must be positive');
+    const base64 = await readImageBase64(a, e.signal);
     const placement: Record<string, number> = {}; for (const [key, target] of [['left', 'imageLeft'], ['top', 'imageTop'], ['width', 'imageWidth'], ['height', 'imageHeight']] as const) if (a[key] !== undefined) placement[target] = a[key];
     return evaluateNow(imageExpression(a.slide, base64, placement), e);
   });

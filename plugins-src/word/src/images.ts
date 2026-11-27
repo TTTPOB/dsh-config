@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { assertPng, readImageBase64 } from '../../shared/office-images.ts';
 import { imageExpression } from './files.ts';
 import { imageSchema, objectSchema } from './schemas.ts';
 import { requestHelper } from './transport.ts';
@@ -36,6 +36,7 @@ export function registerImageTools(
         exec.signal,
       );
       const data = Buffer.from(rendered.base64, 'base64');
+      assertPng(data, 'dsh-word helper did not return a PNG');
       const image = await ctx.attachments.saveImage({
         data,
         mediaType: rendered.mimeType,
@@ -72,12 +73,7 @@ export function registerImageTools(
     ['filePath'],
     objectSchema,
     async (args, exec) => {
-      if (typeof args.filePath !== 'string' || !args.filePath)
-        throw new Error('filePath is required on the DSH machine');
-      const base64 = (await readFile(args.filePath, { signal: exec.signal })).toString('base64');
-      for (const key of ['width', 'height'] as const)
-        if (args[key] !== undefined && (!Number.isFinite(args[key]) || args[key] <= 0))
-          throw new Error(key + ' must be positive');
+      const base64 = await readImageBase64(args, exec.signal);
       return evaluateNow(
         imageExpression(base64, args.where ?? 'documentEnd', { width: args.width, height: args.height }),
         exec,

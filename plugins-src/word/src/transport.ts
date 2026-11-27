@@ -1,11 +1,5 @@
 import type { Config } from './config.ts';
-
-interface HelperError {
-  code: string | number;
-  message?: string;
-  pageCount?: number;
-  panes?: unknown;
-}
+import { readHelperError, type HelperError } from '../../shared/helper-error.ts';
 export interface PaneList {
   panes: { sessionId: string; [key: string]: unknown }[];
   [key: string]: unknown;
@@ -29,21 +23,18 @@ export async function requestHelper<T = unknown>(
     ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
     signal: combined,
   }).catch(error => { throw new Error('Word helper not connected: ' + String(error), { cause: error }); });
-  const body = (await response.json()) as T & { error?: HelperError };
-  if (!response.ok) throw paneError(body.error ?? { code: response.status, message: 'request failed' });
-  return body;
+  if (!response.ok) throw paneError(await readHelperError(response));
+  return response.json();
 }
 
 /** Keep document-selection failures actionable without discarding the helper's pane list. */
 export function paneError(detail: HelperError) {
-  const selection = (
-    ['target-not-found', 'multiple-panes', 'taskpane-not-open'] as (string | number)[]
-  ).includes(detail.code);
+  const selection = ['target-not-found', 'multiple-panes', 'taskpane-not-open'].includes(detail.code);
   return new Error(
     'Word helper ' +
       detail.code +
       ': ' +
-      (detail.message ?? 'request failed') +
+      detail.message +
       (detail.pageCount === undefined ? '' : ' Page count: ' + detail.pageCount + '.') +
       (detail.panes ? ' Panes: ' + JSON.stringify(detail.panes) : '') +
       (selection ? ' Call word_list_documents, then word_select_document with a pane sessionId.' : ''),

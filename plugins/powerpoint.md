@@ -46,7 +46,7 @@ helper 的部署与接口见 ops 仓库的 Office Helper 文档。旧配置中�
 | powerpoint_edit_slide_xml | 读取或修改单页 OOXML；调用 markDirty 后才替换页面 |
 | powerpoint_edit_slide_master | 编辑首张页所属母版，只迁移该母版关联页，保留其他母版 |
 | powerpoint_copy_image_between_slides | 跨页复制图片及其媒体关系 |
-| powerpoint_insert_image | 插入 DSH 机器上的图片或图片字节 |
+| powerpoint_insert_image | 从 DSH 机器上的文件路径插入图片 |
 | powerpoint_execute_office_js | 执行可信异步 Office.js 代码 |
 | powerpoint_verify_slides | 检查布局、边界与文字对比度；仍需结合渲染检查 |
 | powerpoint_render_slide | 渲染页面并返回图片 |

@@ -30,6 +30,20 @@ for (const [host, plugin, outputs, generic] of [
 ]) {
   const prefix=host.toLowerCase()+'_';
   const config=()=>plugin.Config['~standard'].validate({autoHide:false,catalogRefreshMs:100,catalogRetryInitialMs:5,catalogRetryMaxMs:20,helperToken:'synthetic'}).value;
+  test(host+': non-2xx helper replies surface proxy text or structured errors without replay',async t=>{
+    const proxyText='<html>Bad gateway from proxy</html>';
+    const structured={error:{code:'helper-not-ready'}};
+    const responses=[new Response(proxyText,{status:502}),Response.json(structured,{status:503}),new Response(null,{status:504})];
+    const fetch=t.mock.method(globalThis,'fetch',async()=>responses.shift());
+    await assert.rejects(plugin.evaluate(config(),'return 1;'),error=>{
+      assert.match(error.message,/HTTP 502/);assert.ok(error.message.includes(proxyText));return true;
+    });
+    await assert.rejects(plugin.evaluate(config(),'return 1;'),error=>{
+      assert.ok(error.message.includes(structured.error.code));assert.ok(!error.message.includes('undefined'));return true;
+    });
+    await assert.rejects(plugin.evaluate(config(),'return 1;'),/HTTP 504: request failed/);
+    assert.equal(fetch.mock.callCount(),3);
+  });
   test(host+': attaches each known output to its tool and leaves new catalog tools generic',async t=>{
     const future='new_helper_tool';
     t.mock.method(globalThis,'fetch',async()=>new Response(JSON.stringify(catalog(host,[...Object.keys(outputs),future]))));

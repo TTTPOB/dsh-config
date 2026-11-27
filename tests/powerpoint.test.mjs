@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { catalog, definitions, settled } from './office-catalog-fixtures.mjs';
 import * as Plugin from '../plugins/powerpoint.mjs';
 
@@ -210,8 +210,8 @@ test('removed backend options fail configuration instead of being silently ignor
 });
 
 test('helper failures surface the helper code instead of a bare status', async t => {
-  t.mock.method(globalThis,'fetch',async()=>({ok:false,status:503,json:async()=>({error:{
-    code:'powerpoint-not-running',message:'PowerPoint is not running in the current session.'}})}));
+  t.mock.method(globalThis,'fetch',async()=>Response.json({error:{
+    code:'powerpoint-not-running',message:'PowerPoint is not running in the current session.'}}, {status:503}));
   await assert.rejects(Plugin.evaluate(config(),'return 1;'),/powerpoint-not-running: PowerPoint is not running/);
 });
 
@@ -226,13 +226,14 @@ test('Office.js file inputs arrive as raw base64 without changing the caller arg
   }}};
   transport(t,expression=>Function('globalThis','return '+expression)(runtime));
   const f=register(t,config({autoHide:false}));
-  const args={files:{image,deck},code:'return {image:files.image,deck:files.deck};'};
+  const args={files:{image,模板:deck},code:'return {image:files.image,deck:files.模板};'};
   const before=structuredClone(args);
   assert.deepEqual(await f.call('powerpoint_execute_office_js',args),{
     image:imageBytes.toString('base64'),deck:deckBytes.toString('base64'),
   });
   assert.deepEqual(args,before);
-  assert.equal(await f.call('powerpoint_execute_office_js',{code:'return Object.keys(files).length;'}),0);
+  await assert.rejects(f.call('powerpoint_execute_office_js',{code:'return files;'}),/files is not defined/);
+  assert.deepEqual(await f.call('powerpoint_execute_office_js',{code:'return files;',files:{}}),{});
 });
 
 test('invalid file maps fail before Office dispatch and do not poison subsequent calls', async t => {
@@ -260,10 +261,12 @@ test('image tool reads file bytes and fails missing inputs before Office dispatc
   const PowerPoint={run:fn=>fn({presentation:{slides:{items:[{id:'slide'}],load(){}}},sync:async()=>{}})};
   const wire=transport(t,expression=>Function('Office','PowerPoint','return '+expression)(Office,PowerPoint));
   const f=register(t,config({autoHide:false}));
-  await f.call('powerpoint_insert_image',{slide:1,filePath,width:123});
+  await f.call('powerpoint_insert_image',{slide:1,filePath:relative(process.cwd(),filePath),width:123});
   assert.equal(inserted.data,bytes.toString('base64'));
   assert.equal(inserted.placement.imageWidth,123);
   await assert.rejects(f.call('powerpoint_insert_image',{slide:1,base64:bytes.toString('base64')}));
-  await assert.rejects(f.call('powerpoint_insert_image',{slide:1,filePath:join(dir,'missing.png')}),/ENOENT/);
+  const missing=join(dir,'missing.png');
+  await assert.rejects(f.call('powerpoint_insert_image',{slide:1,filePath:missing}),/ENOENT/);
+  await assert.rejects(f.call('powerpoint_insert_image',{slide:1,filePath:missing,width:Infinity}),/width must be positive/);
   assert.equal(wire.sent.length,1);
 });

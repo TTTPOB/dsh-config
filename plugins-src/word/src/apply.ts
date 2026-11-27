@@ -3,7 +3,7 @@ import { catalogDefinitions } from './catalog-overrides.ts';
 import { catalogOutputSchemas } from './catalog-output-schemas.ts';
 import { officeTool } from './office-tool.ts';
 import { clientCallExpression, evaluate, requestHelper, paneError } from './transport.ts';
-import { officeCode } from './files.ts';
+import { officeCode } from '../../shared/office-files.ts';
 import { objectSchema, jsonSchema, textRender } from './schemas.ts';
 import { registerZoteroTools } from './zotero.ts';
 import { registerImageTools } from './images.ts';
