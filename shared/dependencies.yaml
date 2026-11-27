@@ -110,8 +110,8 @@ packages:
     scope: profile
     patchOnly: true
     policy: release
-    version: 0.6.1
-    url: https://github.com/TTTPOB/dsh-progressive-tools/releases/download/v0.6.1/dsh-progressive-tools-0.6.1.tgz
+    version: 0.6.2
+    url: https://github.com/TTTPOB/dsh-progressive-tools/releases/download/v0.6.2/dsh-progressive-tools-0.6.2.tgz
   - package: dsh-session-tools
     scope: profile
     policy: release
