@@ -25,7 +25,7 @@ helper 的部署与接口见 ops 仓库的 Office Helper 文档。旧配置中�
 
 1. 加载 powerpoint skill，按请求确定要读取、修改或检查的页面。
 2. 只连了一个文稿时直接操作。连了多个时，先用 powerpoint_list_presentations 查看，再用 powerpoint_select_presentation 选定；选择按 DSH 会话记住。选定的文稿关闭后工具会报错，不会换到别的文稿。
-3. 读取 powerpoint_deck_info 和所需页面信息。页与形状引用使用工具返回的当前值；写回替换页面后使用返回的新页 ID。
+3. 读取 powerpoint_deck_info 和所需页面信息。页与形状引用使用工具返回的当前值。渲染、插图、大纲和检查工具可用页 ID 或一基页码定位页面；OOXML 写回后页码不变、页 ID 改变，之后使用返回的新页 ID。
 4. 按需编辑；修改后读回，再用 powerpoint_render_slide 检查受影响页面。
 
 自有工具随插件注册；其余工具的参数来自 helper `/catalog` 提供的运行时 schema。目录尚未获取时只有自有工具可用；离线后保留上次成功获取的工具。已知目录工具的返回值类型由插件声明，helper 新增的工具返回通用 JSON。发现、重试与刷新配置见[源码说明](<../plugins-src/README.md#helper-目录与生命周期>)。

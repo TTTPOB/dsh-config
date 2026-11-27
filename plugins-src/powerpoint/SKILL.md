@@ -23,14 +23,15 @@ Re-read the deck after the user switches documents, reloads the add-in, or edits
 | Where | What it takes |
 |---|---|
 | Most slide tools (`slide_id` parameter) | An opaque current slide ID from `powerpoint_deck_info.slideIds` (presentation order) or `powerpoint_verify_slides`. Not a page number. |
-| `powerpoint_render_slide`, `powerpoint_insert_image`, `powerpoint_slide_outline` | A positive one-based `slide` index. |
-| `powerpoint_verify_slides` (`from_slide`, `to_slide`) | Zero-based, inclusive range. Slide 1 is `0`; this differs from the one-based `slide` parameters above. |
+| `powerpoint_render_slide`, `powerpoint_insert_image` | Exactly one of `slide_id` or a one-based `slide_index`. |
+| `powerpoint_slide_outline` | At most one of `slide_id` or `slide_index`; with neither, it reads the whole deck. |
+| `powerpoint_verify_slides` | One-based inclusive `from_slide`/`to_slide`, or `slide_ids`; not both. |
 | `powerpoint_read_slide_text`, `powerpoint_edit_slide_text` | The exact `ref` returned by `powerpoint_list_slide_shapes`. Refs encode slide and shape; never build one by hand. |
 | `powerpoint_copy_image_between_slides` | Slide IDs plus the `cNvPr` shape id from `powerpoint_list_slide_shapes`. |
 | `autosize_shape_ids` | An array of shape `cNvPr` IDs on the target slide. |
 | `chart_index` | A zero-based chart index on the target slide. |
 
-Raw shape ids are unique only within their slide. A slide's index changes when slides move; its ID is the stable handle. An OOXML write may replace the slide and return `slide_id_update`; use the new ID afterwards.
+Raw shape ids are unique only within their slide. A slide's index changes when slides are added, deleted, or moved; its ID survives those. An OOXML writeback does the opposite: it inserts the edited slide in the original's place and deletes the original, so the index stays and the ID changes (`slide_id_update` maps old to new). Use the ID to follow a slide across edits; use the index for a one-off look at a position, such as rendering slide 3.
 
 The `code` parameter means different things by tool. For `powerpoint_edit_slide_text` it is raw `<a:p>` paragraph XML, not JavaScript. For `powerpoint_execute_office_js`, `powerpoint_edit_slide_xml`, `powerpoint_edit_slide_chart`, and `powerpoint_edit_slide_master` it is the body of an async JavaScript function.
 
@@ -48,7 +49,7 @@ Use the result fields described here and in each tool's output type; do not gues
 - The OOXML callback tools return your callback's return value under `result` when it returns one.
 - `powerpoint_execute_office_js` returns your code's return value, or `null` when the code returns nothing.
 - The helper sanitizes text in results (for example, it removes tag-like markup). When the exact text matters, read it back from the deck instead of relying on a returned string.
-- `powerpoint_render_slide` and `powerpoint_insert_image` take an index. For a slide you hold by ID, the index is its position in the `slideIds` you last read, plus one. Read `powerpoint_deck_info` again after adding, deleting, or moving slides; after an OOXML write, apply `slide_id_update` to the IDs you hold. Do not re-read the deck before every render.
+- `powerpoint_render_slide`, `powerpoint_insert_image`, `powerpoint_slide_outline`, and `powerpoint_verify_slides` accept slide IDs as well as one-based positions; you do not need `powerpoint_deck_info` to convert between them. After an OOXML write, apply `slide_id_update` to the IDs you hold.
 
 ## 3. Choosing a mechanism
 
@@ -149,7 +150,7 @@ Then fill or delete each unused placeholder in a second step. Do not decide what
 
 ### Images and imported slides
 
-- Use `powerpoint_insert_image` for new pictures: provide required `filePath` (a PNG, JPEG, GIF, or BMP path on the machine running DSH), a `slide` index, and positions in points. Give width or height, not both, to keep the aspect ratio; to fit a box, compute the scaled size from the image's natural ratio and centre it (letterbox) rather than stretching. To crop to fill, crop with the picture's crop properties instead of distorting. Inserting changes the selected slide.
+- Use `powerpoint_insert_image` for new pictures: provide required `filePath` (a PNG, JPEG, GIF, or BMP path on the machine running DSH), the target slide (`slide_id` or `slide_index`), and positions in points. Give width or height, not both, to keep the aspect ratio; to fit a box, compute the scaled size from the image's natural ratio and centre it (letterbox) rather than stretching. To crop to fill, crop with the picture's crop properties instead of distorting. Inserting changes the selected slide.
 - Inside `powerpoint_execute_office_js`, `insertImage(files.image, { imageLeft, imageTop, imageWidth, imageHeight })` places an image on the currently selected slide. Navigate to the target first (for example `Office.context.document.goToByIdAsync(slideNumber, Office.GoToType.Index, cb)`, 1-based) and await completion before calling it.
 - Reuse an existing picture on another slide with `powerpoint_copy_image_between_slides`; it re-registers media and relationships and keeps crops, filters, and alt text.
 - `ctx.presentation.insertSlidesFromBase64(files.deck, { sourceSlideIds, targetSlideId })` must be awaited; pass only the slides you need. For an externally generated `.pptx`, import one slide first and verify it before importing more. On `InvalidArgument`, isolate the failing slide instead of replaying the whole package. Depending on the source and target, the source's master, layouts, and theme may be imported alongside the deck's own. After importing, list `slideMasters` and layouts and check which master the new slides use. To make an imported template primary, move the existing slides onto it or edit the first master's parts with `powerpoint_edit_slide_master`.
@@ -336,7 +337,7 @@ Practice:
 
 ## 11. Checking and runtime notes
 
-- `powerpoint_verify_slides` reports overlap, out-of-bounds shapes, and low text contrast, with a `slideId` per result. For large decks use `from_slide` and `to_slide` (0-based). Fix flagged items within the scope of the request; if the flagged shapes are outside what the user asked to change, report them.
+- `powerpoint_verify_slides` reports overlap, out-of-bounds shapes, and low text contrast, with a `slideId` per result. For large decks pass a one-based `from_slide`/`to_slide` range, or `slide_ids` for specific slides. Fix flagged items within the scope of the request; if the flagged shapes are outside what the user asked to change, report them.
 - `powerpoint_render_slide` renders a real slide image. The default backend uses Office.js image export. If the environment is configured for COM, it renders the active presentation, so confirm the intended deck is active.
 - `powerpoint_pane_visibility` hides or shows the task pane. Hiding keeps the runtime available; closing a borrowed pane may drop it.
 - `powerpoint_deck_info` reads the live document. If a tool fails because the runtime is unavailable, ask the user to open or restore the add-in rather than repeating write calls.
