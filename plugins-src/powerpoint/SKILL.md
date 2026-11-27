@@ -37,6 +37,8 @@ The `code` parameter means different things by tool. For `powerpoint_edit_slide_
 
 Units: Office.js positions, sizes, image placement, and icon sizes are points. Chart `spec.position` is EMU (1 pt = 12700 EMU). OOXML `a:off`/`a:ext` are EMU. Use the actual slide size from `powerpoint_deck_info`; do not assume 16:9.
 
+Counting: slide positions are one-based, matching the numbers PowerPoint shows (`slide_index`, `from_slide`, `to_slide`, and `slide` in results). Every other index is zero-based, as in JavaScript: positions in arrays you pass in the same call (chart `accent_index`, `forecast_from`, `growth_arrows`, `point_labels`), `chart_index`, and Office.js collections. Slide position n is `slides.items[n - 1]` in Office.js code.
+
 Shape names, layout names, and placeholder names follow the Office UI language. Identify objects by ID, ref, or layout ID, and by type or position when that is all you have.
 
 ### Results
