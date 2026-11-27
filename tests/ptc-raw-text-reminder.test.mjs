@@ -8,7 +8,8 @@ import { createRequire } from "node:module";
 import * as Plugin from "../plugins/ptc-raw-text-reminder.mjs";
 
 const defaults = Plugin.Config["~standard"].validate({}).value;
-const complex = 'const text = "a\\nb\\nc";';
+const complexValue = "first line of the report\nsecond line of the report\nthird line of the report";
+const complex = `const text = ${JSON.stringify(complexValue)};`;
 const detect = code => Plugin.detectComplexText(code);
 
 function listener(config = defaults) {
@@ -29,15 +30,36 @@ test("configuration defaults and validation", () => {
   assert.equal(Plugin.detectComplexText('"a\\\"b"', { ...defaults, escapedQuoteLengthThreshold: 3 }).length, 1);
 });
 
+test("rejects an invalid minimum newline text length", () => {
+  const validate = Plugin.Config["~standard"].validate;
+  assert.ok(validate({ minNewlineTextLength: 0 }).issues);
+});
+
+test("does not remind for short escaped newline separators", async () => {
+  const code = "['a', 'b'].join('\\n---\\n')";
+  const downstream = { kind: "accept" };
+  assert.equal(await listener()(exec(code), success, async () => downstream), downstream);
+  const syntaxError = await listener()(exec(code), failure("SyntaxError: Unexpected token"), async () => downstream);
+  assert.equal(syntaxError.additionalContexts[0].content[0].text, defaults.failureText);
+  assert.equal(Plugin.detectComplexText(code, { ...defaults, minNewlineTextLength: 3 }).length, 1);
+  assert.equal(Plugin.detectComplexText(code, { ...defaults, minNewlineTextLength: 4 }).length, 0);
+});
+
+test("does not flag short newline-joined separators", () => {
+  const code = '["", "=====", ""].join("\\n")';
+  assert.equal(detect(code).length, 0);
+  assert.equal(Plugin.detectComplexText(code, { ...defaults, minNewlineTextLength: 5 }).length, 1);
+  assert.equal(Plugin.detectComplexText(code, { ...defaults, minNewlineTextLength: 6 }).length, 0);
+});
+
 test("detects each escaped-text idiom with decoded values and source lines", () => {
-  assert.equal(detect("\n" + complex)[0].line, 2);
-  assert.equal(detect(complex)[0].value, "a\nb\nc");
+  assert.deepEqual(detect("\n" + complex).map(({ line, value }) => ({ line, value })), [{ line: 2, value: complexValue }]);
   assert.equal(detect('"' + "a".repeat(81) + '\\"b"').length, 1);
   assert.equal(detect("'" + "a".repeat(81) + "\\'b'").length, 1);
   assert.equal(detect('`a\\`b`')[0].value, "a`b");
   assert.equal(detect('`a\\${b}`')[0].value, "a${b}");
-  assert.equal(detect('["a", "b",].join("\\n")')[0].value, "a\nb");
-  assert.equal(detect("['a', 'b'].join('\\n')")[0].value, "a\nb");
+  assert.equal(detect('["first line of the report", "second line",].join("\\n")')[0].value, "first line of the report\nsecond line");
+  assert.equal(detect("['first line of the report', 'second line'].join('\\n')")[0].value, "first line of the report\nsecond line");
   assert.equal(detect('String.raw`a\\n`')[0].value, "a\\n");
   assert.equal(detect('String /* gap */ . raw`hi`').length, 1);
 });
@@ -45,12 +67,12 @@ test("detects each escaped-text idiom with decoded values and source lines", () 
 test("ignores ordinary literals, comments, regexes and existing raw literals", () => {
   for (const code of [
     '"short"', '"a\\nb"', '"a\\\\nb\\\\nc"', '"a\\\"b"',
-    '// "a\\nb\\nc"\nreturn 1;', '/* String.raw`hi` */',
+    '// ' + complex + '\nreturn 1;', '/* String.raw`hi` */',
     'const regex = /a\\nb\\nc/;', 'const regex = /@``/;',
     'const literal = "@``";', '// @``\n' + complex,
-    'const text = @``\n"a\\nb\\nc"\n``;',
+    'const text = @``\n' + complex + '\n``;',
     'const text = @```\n`` and ```` and String.raw`hi`\n```;',
-    '[value, "b"].join("\\n")', '["a", "b"].join(",")',
+    '[value, "second line of the report"].join("\\n")', '["first line of the report", "second line"].join(",")',
   ]) {
     const expected = code.startsWith('// @') ? 1 : 0;
     assert.equal(detect(code).length, expected, code);
@@ -65,7 +87,7 @@ test("ignores ordinary literals, comments, regexes and existing raw literals", (
 test("decodes common escapes without executing expressions", () => {
   assert.equal(Plugin.decodeLiteral('"\\n\\t\\r\\\\\\\"\\\'\\`\\x41\\u0042\\u{1f600}"'), "\n\t\r\\\"'`AB😀");
   for (const code of ['"\\q"', '"\\xGG"', '"\\u{110000}"', '`a${code}`', '"unterminated']) assert.equal(Plugin.decodeLiteral(code), undefined);
-  assert.equal(detect('["\\q", "b"].join("\\n")')[0].value, undefined);
+  assert.equal(detect('["\\q", "second line of the report"].join("\\n")')[0].value, undefined);
 });
 
 test("renders safe delimiters and bounded previews", () => {
@@ -76,7 +98,7 @@ test("renders safe delimiters and bounded previews", () => {
 });
 
 test("uncertain decoding skips the preview and failure snippets stay bounded", async () => {
-  const call = exec('"\\q\\n\\n"');
+  const call = exec('"\\qfirst line of the report\\n\\n"');
   const accepted = await listener()(call, success, async () => ({ kind: "accept" }));
   assert.equal(accepted.additionalContexts[0].content[0].text.includes("\n"), false);
   const preserved = { id: "downstream" };
@@ -122,7 +144,7 @@ test("success preserves accept/block decisions and contexts, adds valid fresh me
     assert.deepEqual(message.source, { kind: Plugin.name });
     assert.equal(message.content[0].type, "text");
     assert.ok(message.content[0].text.includes('succeeded; do not rerun it. Line 1'));
-    assert.ok(message.content[0].text.includes('@````\na\nb\nc````'));
+    assert.ok(message.content[0].text.includes('@````\n' + complexValue + '````'));
     assert.ok(message.content[0].text.includes('1 additional hits.'));
     assert.notEqual((await invoke()).additionalContexts.at(-1).id, message.id);
   }

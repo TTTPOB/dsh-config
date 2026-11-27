@@ -170,11 +170,11 @@ server、nas 使用各自的机器名；这些命令只检查本地输入，不�
 
 [ptc-raw-text-reminder.mjs](<ptc-raw-text-reminder.mjs>) 是无 npm 依赖的单文件 ESM，通过 `tools/post-execute` 监听 `exec.name === 'run_code' && exec.parent === undefined` 的根调用。它先调用 `next()`，保留下游 accept／block 决策及其 additionalContexts，再追加一条带 `source.kind: ptc-raw-text-reminder` 的 user 消息；不改工具返回值或正文。消息由核心写入日志并送往下一步 inbox。
 
-检测使用内嵌的 MIT js-tokens 9.0.1 原版源码，先以等长、保留换行的占位符屏蔽已有原始文本，再检查五类写法：引号字符串中至少两次换行转义；长度超过 80 的引号字符串含转义引号；模板中转义反引号或插值起始符；纯字符串数组接换行 join；String.raw。注释、正则和普通字符串中的原始文本起始序列不当作原始文本。检测是建议性的，误报／漏报只影响是否提醒。
+检测使用内嵌的 MIT js-tokens 9.0.1 原版源码，先以等长、保留换行的占位符屏蔽已有原始文本，再检查五类写法：引号字符串中至少两次换行转义；长度超过 80 的引号字符串含转义引号；模板中转义反引号或插值起始符；纯字符串数组接换行 join；String.raw。引号字符串的换行转义和换行 join 仅在解码结果去除所有行终止符后达到 `minNewlineTextLength` 时命中；无法解码时按对应源码长度判断。注释、正则和普通字符串中的原始文本起始序列不当作原始文本。检测是建议性的，误报／漏报只影响是否提醒。
 
 成功且命中时，提醒明确说“已经成功，不要重跑”，报告首个命中的行号；可可靠解码时，把实际值重排为原始文本，最多展示前三行／300 字符并标明省略，分隔符长于值中最长反引号段。其余命中只追加数量。失败若命中复杂文本，或错误是 SyntaxError、Unterminated raw string literal、包含 Location (JavaScript parse 的 strip 错误，则追加单行改写建议；有命中时附行号和最多 80 字符片段。其他失败不提醒。
 
-`config: {}` 可用。配置字段：`enabled`（默认 true）、`newlineEscapeThreshold`（默认 2）、`escapedQuoteLengthThreshold`（默认 80）；文本可分别覆盖 `successText`、`suggestionText`、`failureText`、`moreText`，均须非空。阈值须为正整数，未知配置键被拒绝。声明见[本地插件示例](<../examples/local-plugins-machine.yaml>)，只在 home 挂载一次。部署顺序：先发布并安装 lexer-aware 运行时，再沿现有 localPlugins 显式部署流程安装两个插件；本仓库示例不自动更新真实安装。
+`config: {}` 可用。配置字段：`enabled`（默认 true）、`newlineEscapeThreshold`（默认 2）、`minNewlineTextLength`（默认 24）、`escapedQuoteLengthThreshold`（默认 80）；文本可分别覆盖 `successText`、`suggestionText`、`failureText`、`moreText`，均须非空。阈值须为正的安全整数，未知配置键被拒绝。声明见[本地插件示例](<../examples/local-plugins-machine.yaml>)，只在 home 挂载一次。部署顺序：先发布并安装 lexer-aware 运行时，再沿现有 localPlugins 显式部署流程安装两个插件；本仓库示例不自动更新真实安装。
 
 插件没有冷却、限流或跨调用状态，每个符合条件的调用增加一条短 user 消息及对应输入 token；成功预览有长度限制，不把提醒写入固定系统提示词。重复命中会继续增加会话文本。卸载时 Cordis 清理监听器。
 

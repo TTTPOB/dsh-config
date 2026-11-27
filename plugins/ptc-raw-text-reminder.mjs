@@ -432,6 +432,7 @@ return module.exports;
 export const DEFAULTS = {
   enabled: true,
   newlineEscapeThreshold: 2,
+  minNewlineTextLength: 24,
   escapedQuoteLengthThreshold: 80,
   successText: "This run_code call succeeded; do not rerun it.",
   suggestionText: "builds text with escapes. Next time write it as a raw text literal:",
@@ -449,7 +450,7 @@ export const Config = {
       }
       const value = { ...DEFAULTS, ...input };
       if (typeof value.enabled !== "boolean"
-        || ["newlineEscapeThreshold", "escapedQuoteLengthThreshold"].some(key => !Number.isSafeInteger(value[key]) || value[key] < 1)
+        || ["newlineEscapeThreshold", "minNewlineTextLength", "escapedQuoteLengthThreshold"].some(key => !Number.isSafeInteger(value[key]) || value[key] < 1)
         || ["successText", "suggestionText", "failureText", "moreText"].some(key => typeof value[key] !== "string" || !value[key].trim())) {
         return { issues: [{ message: "Expected boolean enabled, positive integer thresholds and nonempty texts" }] };
       }
@@ -511,6 +512,10 @@ export function decodeLiteral(literal) {
   return value;
 }
 
+function nonNewlineLength(value) {
+  return value.replace(/[\n\r\u2028\u2029]/g, "").length;
+}
+
 export function detectComplexText(code, config = DEFAULTS) {
   const tokens = tokensWithOffsets(maskRawLiterals(code)).filter(token => !/^(?:WhiteSpace|LineTerminatorSequence|.*Comment)$/.test(token.type));
   const hits = new Map();
@@ -521,8 +526,11 @@ export function detectComplexText(code, config = DEFAULTS) {
     const token = tokens[i], text = token.value;
     if (token.type === "StringLiteral") {
       const escapes = text.match(/\\(?:\r\n|[\s\S])/g) ?? [];
-      if (escapes.filter(part => part === "\\n").length >= config.newlineEscapeThreshold
-        || (text.length > config.escapedQuoteLengthThreshold && escapes.some(part => part === '\\"' || part === "\\'"))) add(token);
+      if (text.length > config.escapedQuoteLengthThreshold && escapes.some(part => part === '\\"' || part === "\\'")) add(token);
+      else if (escapes.filter(part => part === "\\n").length >= config.newlineEscapeThreshold) {
+        const value = decodeLiteral(text);
+        if ((value === undefined ? text.length : nonNewlineLength(value)) >= config.minNewlineTextLength) add(token, value);
+      }
     }
     if (token.type.includes("Template") && /\\(?:`|\$\{)/.test(text)) add(token);
     if (text === "String" && tokens[i + 1]?.value === "." && tokens[i + 2]?.value === "raw") {
@@ -542,7 +550,9 @@ export function detectComplexText(code, config = DEFAULTS) {
     if (!values.length || tokens[j]?.value !== "]") continue;
     if (tokens[j + 1]?.value === "." && tokens[j + 2]?.value === "join" && tokens[j + 3]?.value === "("
       && tokens[j + 4]?.type === "StringLiteral" && decodeLiteral(tokens[j + 4].value) === "\n" && tokens[j + 5]?.value === ")") {
-      add(token, values.every(value => value !== undefined) ? values.join("\n") : undefined, tokens[j + 5].start + 1);
+      const value = values.every(value => value !== undefined) ? values.join("\n") : undefined;
+      const end = tokens[j + 5].start + 1;
+      if ((value === undefined ? end - token.start : nonNewlineLength(value)) >= config.minNewlineTextLength) add(token, value, end);
     }
   }
   return [...hits.values()].sort((a, b) => a.start - b.start);
