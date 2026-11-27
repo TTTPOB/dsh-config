@@ -326,7 +326,7 @@ var catalogOutputSchemas = {
 //#region plugins-src/word/src/office-tool.ts
 /** DSH-owned execution tool, including local binary file inputs. */
 var officeTool = {
-	description: "Run a trusted asynchronous function against the chosen Word document. Its body executes within Word.run and receives context; call context.sync() to flush edits. Available globals: Word, Office, JSZip, console, DOMParser, XMLSerializer. The tool returns your code's return value directly. For binary inputs, set files to a map of JavaScript identifiers and absolute DSH-side filenames; files.<identifier> then contains base64 bytes, not a data URL. Never paste encoded binary content into code. This execution environment has no Claude application services, uploaded-file storage, model orchestration, attachImage, Conductor, or SES isolation.",
+	description: "Run trusted asynchronous JavaScript against the selected Word document. The body runs inside Word.run with context in scope; call await context.sync() after edits and before reading loaded values. The tool returns your code's JSON-compatible return value as is, or null when the code returns nothing. Globals: Word, Office, JSZip, DOMParser, XMLSerializer, console. For binary inputs, pass files as a map from JavaScript identifiers to absolute file paths on the DSH machine; files.<identifier> then holds the file's raw base64 bytes, not a data URL. The files global exists only when you pass files. Never paste encoded binary content into code or other arguments. This environment has no Claude application services, uploaded-file storage, model orchestration, attachImage, Conductor, or SES isolation.",
 	parameters: {
 		type: "object",
 		properties: {

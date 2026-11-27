@@ -38,6 +38,17 @@ Units: Office.js positions, sizes, image placement, and icon sizes are points. C
 
 Shape names, layout names, and placeholder names follow the Office UI language. Identify objects by ID, ref, or layout ID, and by type or position when that is all you have.
 
+### Results
+
+Use the result fields described here and in each tool's output type; do not guess field paths.
+
+- Catalog tools (every tool except `powerpoint_execute_office_js`, `powerpoint_list_presentations`, `powerpoint_select_presentation`, `powerpoint_pane_visibility`, `powerpoint_deck_info`, `powerpoint_slide_outline`, `powerpoint_insert_image`, and `powerpoint_render_slide`) return `{ success: true, ... }`, with their data under `result`. For example, `powerpoint_list_slide_shapes` puts the shape array in `result`, and `powerpoint_verify_slides` puts the per-slide reports in `result.slides`.
+- `slide_id_update` is an object that maps each old slide ID to its new ID, not a string or an array: `const id = res.slide_id_update?.[oldId] ?? oldId;`.
+- `powerpoint_duplicate_slide` returns the copy's ID as `new_slide_id`. When that field is absent, read `powerpoint_deck_info` to find the copy; do not duplicate again.
+- The OOXML callback tools return your callback's return value under `result`.
+- `powerpoint_execute_office_js` returns your code's return value as is, or `null` when the code returns nothing.
+- `powerpoint_render_slide` and `powerpoint_insert_image` take an index. For a slide you hold by ID, the index is its position in the `slideIds` you last read, plus one. Read `powerpoint_deck_info` again after adding, deleting, or moving slides; after an OOXML write, apply `slide_id_update` to the IDs you hold. Do not re-read the deck before every render.
+
 ## 3. Choosing a mechanism
 
 - **Office.js (`powerpoint_execute_office_js`)**: slides (add, move, apply layout, delete), shapes (text boxes, geometric shapes, lines), z-order, geometry, tables, fills, fonts, selection, masters and layouts listing. Default choice for ordinary edits.
@@ -48,7 +59,7 @@ Prefer the narrowest tool. Moving a box is Office.js; changing one word in a sty
 
 ## 4. Office.js
 
-`powerpoint_execute_office_js` runs your code as an async function body. Available globals: `Office`, `PowerPoint`, `JSZip`, `DOMParser`, `XMLSerializer`, `insertImage`, and `files`. Supply `files: { image: "/absolute/path/image.png", deck: "/absolute/path/deck.pptx" }` alongside `code`; the plugin reads these DSH-machine paths and exposes raw base64 as `files.image` and `files.deck`. Never put base64 literals in `code`. There is no implicit `context`; open one with `PowerPoint.run`. Return a JSON-serializable value.
+`powerpoint_execute_office_js` runs your code as an async function body. Available globals: `Office`, `PowerPoint`, `JSZip`, `DOMParser`, `XMLSerializer`, `insertImage`, and `files` when you pass the `files` argument. Supply `files: { image: "/absolute/path/image.png", deck: "/absolute/path/deck.pptx" }` alongside `code`; the plugin reads these DSH-machine paths and exposes raw base64 as `files.image` and `files.deck`. Never put base64 literals in `code`. There is no implicit `context`; open one with `PowerPoint.run`. Return a JSON-serializable value; the tool returns it as is, or `null` when your code returns nothing.
 
 Read shapes on a slide:
 
@@ -182,6 +193,10 @@ Mechanics:
 - A writeback may replace the slide and return `slide_id_update`; use it afterwards.
 - Pass `autosize_shape_ids` with the `cNvPr` ids of shapes whose text you changed or tables whose content changed. For shapes already set to shape-to-fit-text, the tool re-applies that setting so the layout recalculates; other auto-size modes are left alone. For tables it rewrites each row height to trigger frame re-layout, since font-only edits don't reflow the frame. Omit it when you changed no text.
 - XML child order is strict. Keep existing elements; modify them in place rather than appending duplicates.
+- Locate the target by its `cNvPr` id and by the runs actually present in the XML, not by shape name or by the text as it reads on the slide. Text that reads as one string is often split across several `<a:r>` elements (spelling marks, formatting changes, generated math), so read the paragraph's runs before matching.
+- Count what you matched. If the target is missing or a replacement matched nothing, throw or return without calling `markDirty()`. A `markDirty()` without a real change still re-imports the slide and changes its ID.
+- An empty table cell holds a paragraph with only `<a:endParaRPr>`, and no `<a:r>` or `<a:t>`. To fill it, create an `<a:r>` whose `<a:rPr>` copies the run properties of a filled cell in the same row or column (or the attributes of the cell's `<a:endParaRPr>`), add the `<a:t>`, and insert the run before `<a:endParaRPr>`.
+- Keep a base character and its combining marks in the same `<a:t>`, for example `L` followed by U+0302 for L̂. Split across runs, the mark renders as a stray glyph. When generating runs, split text only at grapheme boundaries (`Intl.Segmenter`). If the font cannot draw the combination, use a notation it can, such as a subscript or superscript form, and render the slide to check.
 - After a write, read the XML back, check the changed text and relationships, and render the slide.
 
 Read-only inspection:
@@ -326,5 +341,6 @@ Practice:
 - `powerpoint_deck_info` reads the live document. If a tool fails because the runtime is unavailable, ask the user to open or restore the add-in rather than repeating write calls.
 - A clean verify result covers geometry and contrast only. It does not show whether a legend, label, or diagram is readable; render the slide and look.
 - `powerpoint_find_and_replace` and the OOXML tools can replace slides, which changes their IDs. Before the next call that takes a slide ID, use the returned `slide_id_update` or call `powerpoint_deck_info` again; a stale ID surfaces as `GeneralException` or a failed `getItem`.
+- When a rendered colour looks wrong, read the shape's actual colour before changing anything: the fill or run colour in its XML, the theme colour it references, and any value it inherits from the layout or master. Change the source you found, then render again. Do not change colours on a guess about the cause.
 - A failed call is not rolled back. Writes earlier in the same program, or earlier pairs in a batch, may already be in the deck. Re-read the affected slides before retrying, and retry only what is missing.
 - If importing an edited slide package fails with `InvalidArgument` (`insertSlidesFromBase64`), bisect: retry one slide, then remove elements until it passes. Hand-written math (OMML) and table XML are the usual culprits; fix that element rather than abandoning the whole edit.

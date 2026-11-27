@@ -1,6 +1,6 @@
 # Word 原生工具
 
-[word.mjs](<word.mjs>) 提供读写 Word 文档、页面检查和 Zotero 原生引文工具，并从 helper 目录加载英文 word skill；公开模块不内嵌技能正文。
+[word.mjs](<word.mjs>) 提供读写 Word 文档、页面检查和 Zotero 原生引文工具，并从 helper 目录加载英文 word skill；公开模块不内嵌技能正文。模块由 [TypeScript 源码](<../plugins-src/word/src/index.ts>) 生成；修改与构建见[本地插件源码](<../plugins-src/README.md>)，不要直接编辑生成模块。
 
 使用前提：Windows 上运行 Office helper，并在目标文档中打开 Word Helper 加载项。
 
@@ -8,7 +8,7 @@
 
 通过 [localPlugins 安装流程](<../docs/install.md#本地-esm-插件>) 部署 word.mjs。需要独立 tarball 时，运行 [pack-word.mjs](<../scripts/pack-word.mjs>)，按包内 README 安装。
 
-插件项的 config 设置 helperUrl，指向 DSH 能访问的 Windows helper 地址；机器专用地址保存在私有参数中。配置字段与默认值以 [Config 源码](<../plugins-src/word/src/config.ts>) 为准；源码和 skill 的编辑、构建及检查见[开发说明](<../plugins-src/README.md>)：
+插件项的 config 设置 helperUrl，指向 DSH 能访问的 Windows helper 地址；机器专用地址保存在私有参数中。配置字段与默认值以 [Config 源码](<../plugins-src/word/src/config.ts>) 为准：
 
 | 配置 | 用途 |
 |---|---|
@@ -16,7 +16,7 @@
 | helperToken | 非空时发送 Authorization: Bearer 请求头；当前 helper 不校验此头，只有前置代理实现校验时才提供 token 访问控制 |
 | timeoutMs | 工具请求超时 |
 | autoHide | 每个任务窗格首次文档操作前自动隐藏；显式显示后保持显示 |
-| renderLongEdge | 页面 PNG 的最长边像素 |
+| renderLongEdge | 页面 PNG 的最长边像素，1–16384 |
 
 helper 的部署与接口见 ops 仓库的 Office Helper 文档。页面在 Windows 侧渲染，DSH 所在机器不需要安装 PDF 工具。
 
@@ -27,7 +27,7 @@ helper 的部署与接口见 ops 仓库的 Office Helper 文档。页面在 Wind
 3. 用 word_search_doc_text 定位，再用 word_read_doc_section 读取目标段落或章节。大文档优先按范围读取，避免一次枚举全文。
 4. 修改最小必要范围，读回文字与格式；排版变化用 word_render_page 查看。
 
-工具参数以 helper `/catalog` 提供的运行时 schema 为准。目录尚未获取时仅自有工具可用、word skill 暂不列出；离线后保留上次成功获取的工具与 skill。发现、重试与刷新配置见[源码说明](<../plugins-src/README.md#helper-目录与生命周期>)。
+自有工具随插件注册；其余工具的参数来自 helper `/catalog` 提供的运行时 schema。目录尚未获取时只有自有工具可用，word skill 暂不列出；离线后保留上次成功获取的工具与 skill。已知目录工具的返回值类型由插件声明，helper 新增的工具返回通用 JSON。发现、重试与刷新配置见[源码说明](<../plugins-src/README.md#helper-目录与生命周期>)。
 
 ## 文档工具
 
@@ -65,4 +65,8 @@ refreshTriggered 只表示官方宏已触发，不代表刷新完成；pendingFo
 
 ## 写入与检查
 
-超时、断线或失败后先读回文档：修改可能已经生效，工具不会自动重试。word_execute_office_js 运行的是可信代码，能访问 Office 宿主的全部能力。页面图片来自 Word 的 PDF 导出，修订标记是否显示取决于 Word 当前的导出设置。
+超时、断线或失败后先读回文档：修改可能已经生效，工具不会自动重试。
+
+word_execute_office_js 运行的是可信代码，能访问 Office 宿主的全部能力。代码在 Word.run 内执行，可直接使用 context；工具原样返回代码的返回值，没有返回值时为 null。目录工具报告 success:false 时，插件把它作为工具错误抛出。files 参数的键是 JavaScript 标识符，值是 DSH 机器上的绝对路径，代码通过 files.<标识符> 读取原始 base64；不传 files 时没有 files 全局。
+
+页面图片来自 Word 的 PDF 导出，修订标记是否显示取决于 Word 当前的导出设置。

@@ -8,7 +8,7 @@
 
 通过 [localPlugins 安装流程](<../docs/install.md#本地-esm-插件>) 部署 powerpoint.mjs。需要独立 tarball 时，运行 [pack-powerpoint.mjs](<../scripts/pack-powerpoint.mjs>)，按包内 README 安装。
 
-插件只连接 helper；将 config.helperUrl 指向 DSH 能访问的 Windows helper 地址。机器专用地址保存在私有参数中。配置字段与默认值以 [Config](<powerpoint.mjs>) 为准：
+插件只连接 helper；将 config.helperUrl 指向 DSH 能访问的 Windows helper 地址。机器专用地址保存在私有参数中。配置字段与默认值以 [Config 源码](<../plugins-src/powerpoint/src/config.ts>) 为准：
 
 | 配置 | 用途 |
 |---|---|
@@ -19,7 +19,7 @@
 | renderBackend | officejs 从所选文稿渲染；com 使用活动文稿 |
 | renderWidth / renderHeight | 渲染尺寸；Office.js 按宽度保持比例，COM 使用两项尺寸 |
 
-helper 的部署与接口见 ops 仓库的 Office Helper 文档。旧配置中的 backend、endpoint、targetUrl、powershell 均会报不再支持，需删除；COM 渲染也由 helper 完成，不需要本机 PowerShell。目录发现和重试配置见[源码说明](<../plugins-src/README.md#helper-目录与生命周期>)。
+helper 的部署与接口见 ops 仓库的 Office Helper 文档。旧配置中的 backend、endpoint、targetUrl、powershell 均会报不再支持，需删除；COM 渲染也由 helper 完成，不需要本机 PowerShell。
 
 ## 操作流程
 
@@ -28,7 +28,7 @@ helper 的部署与接口见 ops 仓库的 Office Helper 文档。旧配置中�
 3. 读取 powerpoint_deck_info 和所需页面信息。页与形状引用使用工具返回的当前值；写回替换页面后使用返回的新页 ID。
 4. 按需编辑；修改后读回，再用 powerpoint_render_slide 检查受影响页面。
 
-工具参数以运行时 schema 为准。
+自有工具随插件注册；其余工具的参数来自 helper `/catalog` 提供的运行时 schema。目录尚未获取时只有自有工具可用；离线后保留上次成功获取的工具。已知目录工具的返回值类型由插件声明，helper 新增的工具返回通用 JSON。发现、重试与刷新配置见[源码说明](<../plugins-src/README.md#helper-目录与生命周期>)。
 
 ## 文稿与页面工具
 
@@ -42,7 +42,7 @@ helper 的部署与接口见 ops 仓库的 Office Helper 文档。旧配置中�
 | powerpoint_read_slide_text | 读取形状的文本及段落格式 |
 | powerpoint_edit_slide_text | 修改形状内的段落 |
 | powerpoint_find_and_replace | 批量替换文字，覆盖支持的备注范围 |
-| powerpoint_duplicate_slide | 复制页面 |
+| powerpoint_duplicate_slide | 复制页面；能确定副本时在 new_slide_id 返回新页 ID |
 | powerpoint_edit_slide_xml | 读取或修改单页 OOXML；调用 markDirty 后才替换页面 |
 | powerpoint_edit_slide_master | 编辑首张页所属母版，只迁移该母版关联页，保留其他母版 |
 | powerpoint_copy_image_between_slides | 跨页复制图片及其媒体关系 |
@@ -67,7 +67,9 @@ helper 的部署与接口见 ops 仓库的 Office Helper 文档。旧配置中�
 
 ## 写入与渲染
 
-超时、断线或失败后先读回文稿：修改可能已经生效，工具不会自动重试。powerpoint_execute_office_js 运行的是可信代码，能访问 Office 宿主的全部能力。
+超时、断线或失败后先读回文稿：修改可能已经生效，工具不会自动重试。
+
+powerpoint_execute_office_js 运行的是可信代码，能访问 Office 宿主的全部能力。代码需自行用 PowerPoint.run 打开上下文；工具原样返回代码的返回值，没有返回值时为 null。files 参数的键是 JavaScript 标识符，值是 DSH 机器上的绝对路径，代码通过 files.<标识符> 读取原始 base64；不传 files 时没有 files 全局。
 
 默认用 Office.js 渲染所选文稿。`renderBackend: com` 渲染的是 PowerPoint 当前激活的文稿：页数不一致时会报 presentation-mismatch，但页数相同并不代表是同一份文稿，渲染前要确认目标文稿处于激活状态。
 

@@ -7,7 +7,7 @@
 
 Office 插件可沿本仓库的 `localPlugins` 流程部署，也可用 `scripts/pack-word.mjs` 或 `scripts/pack-powerpoint.mjs` 生成独立 tarball。包内 README 说明独立安装步骤；两种方式选一种。
 
-Word 的 TypeScript 源码位于 [plugins-src/word](<../plugins-src/README.md>)；修改后运行 `pnpm build:word`，部署和打包仍读取已提交的 [word.mjs](<word.mjs>)。Word skill 由私有 helper 目录提供，公开模块不含正文；PowerPoint skill 继续本地内嵌。
+两个 Office 插件的 TypeScript 源码都在 [plugins-src](<../plugins-src/README.md>)；修改后运行 `pnpm build:word` 或 `pnpm build:powerpoint`，部署和打包读取已提交的 [word.mjs](<word.mjs>) 与 [powerpoint.mjs](<powerpoint.mjs>)。Word skill 由私有 helper 目录提供，公开模块不含正文；PowerPoint skill 在构建时嵌入 powerpoint.mjs。
 
 ## 运行时工具指引
 
