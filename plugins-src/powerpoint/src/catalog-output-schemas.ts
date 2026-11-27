@@ -1,57 +1,46 @@
-import { array, boolean, integer, nullable, number, record, string, success, trueValue } from '../../shared/catalog-output-schema.ts';
+import { array, boolean, integer, nullable, number, openRecord, record, string, success, trueValue } from '../../shared/catalog-output-schema.ts';
 import type { Schema } from '../../shared/types.ts';
 
 const slideIdUpdate = {
   type: 'object', additionalProperties: true,
-  description: 'Maps old slide IDs to new slide ID strings after writeback; look up the old ID as a key.',
+  description: 'Old slide ID → new slide ID string.',
 } as const;
 const writeback = { slide_id_update: slideIdUpdate };
 const callbackOutput = {
   ...writeback,
   no_changes_warning: string,
-  result: { description: 'JSON returned by the callback; omitted if it returns undefined.' },
+  result: {},
 };
 
 const placement = { ref: string, id: string, left: integer, top: integer, width: integer, height: integer };
 const box = record({ id: string, name: string, left: number, top: number, w: number, h: number }, {
   isTable: trueValue, sizeEstimated: trueValue,
 });
+const shapeRef = { ...openRecord({ id: string, name: string }), description: 'Geometry is in shapes.' };
 const verifiedSlide = record({
   slideId: string,
   shapes: array(box),
-  overflows: array(record({ shape: box, overflowBy: number }, {
-    bottom: number, slideH: number, right: number, slideW: number,
-  })),
-  overlaps: array(record({ shapeA: box, shapeB: box, overlapX: number, overlapY: number }, {
+  overflows: array(openRecord({ shape: shapeRef, overflowBy: number })),
+  overlaps: array(openRecord({ shapeA: shapeRef, shapeB: shapeRef, overlapX: number, overlapY: number }, {
     bothHaveText: trueValue, isContainment: trueValue,
   })),
-  coverage: nullable(record({
-    bbox_width: number, bbox_height: number, coverage_ratio: nullable(number), top_start: number, bottom_gap: number,
-  }, { low_coverage: trueValue, top_heavy: trueValue })),
+  coverage: nullable(openRecord({ coverage_ratio: nullable(number) })),
 }, {
-  inherited_overlaps: array(record({
-    shape_id: string, shape_name: string, inherited_id: string, inherited_name: string,
-    inherited_kind: { type: 'string', enum: ['text', 'image'] }, layer: { type: 'string', enum: ['layout', 'master'] },
-    inherited_box: record({ left: number, top: number, width: number, height: number }), msg: string,
+  inherited_overlaps: array(openRecord({ shape_id: string, msg: string })),
+  contrast_warnings: array(openRecord({ shape_id: string, ratio: number, msg: string }, {
+    bg_shape_id: string, bg_source: string,
   })),
-  contrast_warnings: array(record({
-    shape_id: string, shape_name: string, font_color: string, bg_color: string, ratio: number, msg: string,
-  }, { bg_shape_id: string, bg_shape_name: string, bg_source: string })),
-  text_overflow_warnings: array(record({
-    shape: string, estTextHeight: number, boxHeight: number, innerHeight: number, estLines: integer, overflowBy: number, message: string,
-  }, { runsInto: string })),
-  small_shape_warnings: array(record({ shape: string, width: number, height: number, message: string })),
+  text_overflow_warnings: array(openRecord({ shape: string, overflowBy: number, message: string })),
+  small_shape_warnings: array(openRecord({ shape: string, message: string })),
 });
 
-const chartStyle = record({
-  form: string, series_count: integer, fonts: array(string), font_inherits_theme: boolean, fills: array(string),
-  series_fills: array(string), scheme_colors: array(string), legend: string, value_axis: string, gridlines: boolean,
-  has_native_title: boolean, data_label_position: nullable(string), series_color_pattern: string, gap_width: nullable(number),
+const chartStyle = openRecord({
+  form: string, fonts: array(string), fills: array(string), legend: string, value_axis: string, gridlines: boolean,
   unsupported: array(string),
 });
 const replacementReport = record({
   dry_run: boolean, total_replacements: integer, slides_modified: integer,
-  pairs: array(record({ find: string, replace: string, replacements: integer })),
+  pairs: array(openRecord({ replacements: integer })),
   slides: array(record({
     slide_id: string, position: integer, replacements: integer,
     locations: array(record({ container: { type: 'string', enum: ['body', 'table', 'notes'] }, replacements: integer }, {
@@ -71,7 +60,7 @@ export const catalogOutputSchemas: Readonly<Partial<Record<string, Schema>>> = {
     ...callbackOutput,
     slide_master_id_update: {
       type: 'object', additionalProperties: true,
-      description: 'Maps old slide master IDs to new slide master ID strings.',
+      description: 'Old master ID → new master ID string.',
     },
     slide_master_layouts: array(record({ id: string, name: string })),
   }),
@@ -83,13 +72,11 @@ export const catalogOutputSchemas: Readonly<Partial<Record<string, Schema>>> = {
   read_slide_text: success(string),
   edit_slide_text: record({ success: trueValue }, writeback),
   find_and_replace: success(replacementReport, writeback),
-  search_icons: success(array(record({}, {
-    id: { description: 'Icon ID copied from the remote search response; insert_icon accepts string IDs.' },
-    description: { description: 'Description copied from the remote search response.' },
-    isMono: { description: 'Monochrome metadata copied from the remote search response.' },
-    contentTier: { description: 'Content tier copied from the remote search response.' },
-    searchScore: { description: 'Search score copied from the remote search response.' },
+  search_icons: success(array(openRecord({}, {
+    id: { description: 'Use string IDs with insert_icon.' }, description: {},
   }))),
-  insert_icon: success(record({ inserted: trueValue, icon_id: string }, { placed_shape: record(placement) }), writeback),
+  insert_icon: success(record({ inserted: trueValue, icon_id: string }, {
+    placed_shape: openRecord({ ref: string, id: string }),
+  }), writeback),
   copy_image_between_slides: success(record({ shape_id: string }), writeback),
 };

@@ -11,6 +11,10 @@ export function record(required: Properties, optional: Properties = {}): Schema 
   return { type: 'object', properties: { ...required, ...optional }, required: Object.keys(required), additionalProperties: false };
 }
 
+export function openRecord(required: Properties, optional?: Properties): Schema {
+  return { ...record(required, optional), additionalProperties: true };
+}
+
 export function array(items: Schema): Schema {
   return { type: 'array', items };
 }

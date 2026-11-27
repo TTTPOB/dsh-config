@@ -1,10 +1,8 @@
-import { array, boolean, integer, nullable, number, record, string, success, trueValue } from '../../shared/catalog-output-schema.ts';
+import { array, boolean, integer, nullable, number, openRecord, record, string, success, trueValue } from '../../shared/catalog-output-schema.ts';
 import type { Schema } from '../../shared/types.ts';
 
-const paragraphFormatting = record({}, {
-  style: string, styleBuiltIn: string, alignment: string, lineSpacing: number, leftIndent: number, firstLineIndent: number,
-  font: record({}, { name: string, size: number, bold: boolean, italic: boolean, color: string }),
-  table: record({}, { style: string, headerRowCount: integer }),
+const paragraphFormatting = openRecord({}, {
+  style: string, styleBuiltIn: string, font: { type: 'object', additionalProperties: true },
 });
 
 /** Successful envelopes emitted by the Word client runtime. */

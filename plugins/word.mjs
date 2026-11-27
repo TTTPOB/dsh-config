@@ -217,7 +217,6 @@ function catalogDefinitions(tools) {
 //#region plugins-src/shared/catalog-output-schema.ts
 var string = { type: "string" };
 var integer = { type: "integer" };
-var number = { type: "number" };
 var boolean = { type: "boolean" };
 var trueValue = {
 	type: "boolean",
@@ -233,6 +232,12 @@ function record(required, optional = {}) {
 		},
 		required: Object.keys(required),
 		additionalProperties: false
+	};
+}
+function openRecord(required, optional) {
+	return {
+		...record(required, optional),
+		additionalProperties: true
 	};
 }
 function array(items) {
@@ -252,24 +257,13 @@ function success(result, optional) {
 }
 //#endregion
 //#region plugins-src/word/src/catalog-output-schemas.ts
-var paragraphFormatting = record({}, {
+var paragraphFormatting = openRecord({}, {
 	style: string,
 	styleBuiltIn: string,
-	alignment: string,
-	lineSpacing: number,
-	leftIndent: number,
-	firstLineIndent: number,
-	font: record({}, {
-		name: string,
-		size: number,
-		bold: boolean,
-		italic: boolean,
-		color: string
-	}),
-	table: record({}, {
-		style: string,
-		headerRowCount: integer
-	})
+	font: {
+		type: "object",
+		additionalProperties: true
+	}
 });
 /** Successful envelopes emitted by the Word client runtime. */
 var catalogOutputSchemas = {
