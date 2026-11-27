@@ -4,6 +4,7 @@ import { catalogOutputSchemas } from './catalog-output-schemas.ts';
 import { officeTool } from './office-tool.ts';
 import { clientCallExpression, evaluate, requestHelper, paneError } from './transport.ts';
 import { officeCode } from '../../shared/office-files.ts';
+import { rejectUnknownArguments } from '../../shared/office-arguments.ts';
 import { objectSchema, jsonSchema, textRender } from './schemas.ts';
 import { registerZoteroTools } from './zotero.ts';
 import { registerImageTools } from './images.ts';
@@ -69,6 +70,7 @@ export function apply(ctx: Context, config: Config) {
       execute: (args, exec) =>
         serial(() => {
           exec.signal?.throwIfAborted();
+          rejectUnknownArguments(args, parameters);
           return execute(args, exec);
         }),
     };

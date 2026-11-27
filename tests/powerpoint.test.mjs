@@ -260,6 +260,20 @@ function locatorDeck(t, initialIds=['301','901','407','555','620']) {
   return {ids,requests,verifies,renders,imageIndices,call:(name,args)=>f.call('powerpoint_'+name,args)};
 }
 
+test('closed PowerPoint selectors reject obsolete argument names before any helper call',async t=>{
+  const deck=locatorDeck(t);
+  await assert.rejects(deck.call('slide_outline',{slide:2}),/Unknown argument "slide".*Accepted keys:.*slide_id.*slide_index/);
+  await assert.rejects(deck.call('verify_slides',{slide_id:'901'}),/Unknown argument "slide_id".*Accepted keys:.*from_slide.*to_slide.*slide_ids/);
+  assert.deepEqual(deck.requests,[]);
+  assert.deepEqual(deck.verifies,[]);
+});
+
+test('verify_slides rejects an in-range fractional index before helper verify dispatch',async t=>{
+  const deck=locatorDeck(t,['301','901','407']);
+  await assert.rejects(deck.call('verify_slides',{to_slide:2.5}),/Slide index 2\.5/);
+  assert.deepEqual(deck.verifies,[]);
+});
+
 test('single-slide tools resolve ID or one-based position and require a valid selector',async t=>{
   const deck=locatorDeck(t);
   const filePath=join(directory(t),'local-only.png');writeFileSync(filePath,helperPng);
@@ -341,7 +355,10 @@ test('selected pane is forwarded through all native handlers, images and both re
     const saved=[],image={attachmentId:renderBackend,mediaType:'image/png',bytes:helperPng.length,width:20,height:10};
     const f=register(t,settings,{saveImage:async value=>{saved.push(value);return image;}});
     await f.call('powerpoint_select_presentation',{target:pane.sessionId});
-    for(const definition of definitions('PowerPoint')) await f.call(definition.name,{probe:definition.clientName});
+    for(const definition of definitions('PowerPoint')){
+      const args=definition.clientName==='execute_office_js'?{code:'return null;'}:definition.clientName==='verify_slides'?{}:{probe:definition.clientName};
+      await f.call(definition.name,args);
+    }
     await f.call('powerpoint_insert_image',{slide_index:1,filePath});
     await f.call('powerpoint_slide_outline',{slide_index:1});
     await f.call('powerpoint_render_slide',{slide_index:2});
@@ -419,7 +436,8 @@ test('Office.js file inputs arrive as raw base64 without changing the caller arg
     image:imageBytes.toString('base64'),deck:deckBytes.toString('base64'),
   });
   assert.deepEqual(args,before);
-  assert.equal(await f.call('powerpoint_execute_office_js',{code:'return Object.keys(files).length;'}),0);
+  assert.equal(await f.call('powerpoint_execute_office_js',{code:'return Object.keys(files).length;'}),0);  const shadowing='"use strict"; const files = ["local"]; return {local: files[0], strict: this === undefined};';
+  assert.deepEqual(await f.call('powerpoint_execute_office_js',{code:shadowing,files:args.files}),{local:'local',strict:true});
   assert.deepEqual(await f.call('powerpoint_execute_office_js',{code:'return files;',files:{}}),{});
 });
 

@@ -138,7 +138,8 @@ test('Office code receives binary files without changing logged path-only argume
   assert.equal(captured[0].name,'execute_office_js');
   assert.ok(!JSON.stringify(args).includes(fixture.bytes.toString('base64')));
   assert.deepEqual(await f.call('word_execute_office_js',{code:'return files;',files:{}}),{});
-  assert.equal(await f.call('word_execute_office_js',{code:'return Object.keys(files).length;'}),0);
+  assert.equal(await f.call('word_execute_office_js',{code:'return Object.keys(files).length;'}),0);  const shadowing='"use strict"; const files = ["local"]; return {local: files[0], strict: this === undefined};';
+  assert.deepEqual(await f.call('word_execute_office_js',{code:shadowing,files:args.files}),{local:'local',strict:true});
   assert.equal(await f.call('word_execute_office_js',{code:'return;'}),null);
 });
 
@@ -157,6 +158,12 @@ test('Office binary inputs reject invalid identifiers, relative paths and missin
   assert.equal(requests.length,0);
 });
 
+test('closed Word tools reject unknown arguments before dispatch',async t=>{
+  const requests=transport(t,()=>null),f=register(t,config({autoHide:false}));
+  await assert.rejects(f.call('word_pane_visibility',{visibility:true}),/Unknown argument "visibility".*Accepted keys: visible/);
+  assert.deepEqual(requests,[]);
+});
+
 test('image tool reads local bytes, preserves arguments and rejects missing paths without transport',async t=>{
   const fixture=await binaryFixture(t),events=[];
   const image={width:20,height:30,load(){}};
@@ -168,7 +175,7 @@ test('image tool reads local bytes, preserves arguments and rejects missing path
   assert.deepEqual(events,[{bytes:fixture.bytes.toString('base64'),where:'Replace'}]);
   const count=requests.length;
   await assert.rejects(f.call('word_insert_image',{}),/filePath is required/);
-  await assert.rejects(f.call('word_insert_image',{base64:fixture.bytes.toString('base64')}),/filePath is required/);
+  await assert.rejects(f.call('word_insert_image',{base64:fixture.bytes.toString('base64')}),/Unknown argument "base64".*filePath/);
   const missing=join(fixture.directory,'missing.bin');
   await assert.rejects(f.call('word_insert_image',{filePath:missing}),/ENOENT/);
   await assert.rejects(f.call('word_insert_image',{filePath:missing,height:0}),/height must be positive/);
@@ -359,14 +366,20 @@ test('selected target reaches client handlers, encoded style lookup, images and 
   const pane=wordPane('pane /+?&','Bound document'),other=wordPane('other','Other document');
   const wire=paneHelper(t,[other,pane]),f=register(t,config({autoHide:false}));
   await f.call('word_select_document',{target:pane.sessionId});
-  for(const definition of definitions('Word')) await f.call(definition.name,{probe:definition.clientName});
+  for(const definition of definitions('Word')){
+    const args=definition.clientName==='execute_office_js'?{code:'return null;'}:{probe:definition.clientName};
+    await f.call(definition.name,args);
+  }
   await f.call('word_edit_doc_list',{action:'create_list',items:['item'],list_style:'bullet'});
   const styles=wire.requests.find(r=>r.route.pathname === '/word/list-styles');
   assert.equal(styles.options.method,'GET');assert.equal(styles.route.searchParams.get('target'),pane.sessionId);
   const fixture=await binaryFixture(t);
   await f.call('word_insert_image',{filePath:fixture.filePath});
-  for(const action of ['inspect','refresh','set_style','insert_citation','insert_bibliography']){
-    const result=await f.call('word_zotero_'+action,{style_id:'fixture',items:[]});
+  for(const [action,args] of [
+    ['inspect',{}],['refresh',{}],['set_style',{style_id:'fixture'}],
+    ['insert_citation',{style_id:'fixture',items:[]}],['insert_bibliography',{}],
+  ]){
+    const result=await f.call('word_zotero_'+action,args);
     assert.equal(result.document.url,pane.documentUrl);
     assert.equal(wire.requests.at(-1).body.target,pane.sessionId);
     assert.equal(wire.requests.at(-2).body.target,pane.sessionId);

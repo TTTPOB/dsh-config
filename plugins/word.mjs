@@ -418,7 +418,19 @@ async function officeCode(args, signal) {
 		}
 		entries.push([identifier, data.toString("base64")]);
 	}
-	return "const files = Object.fromEntries(" + JSON.stringify(entries) + ");\n" + args.code;
+	return "const files = Object.fromEntries(" + JSON.stringify(entries) + ");\nreturn await (async function () {\n" + args.code + "\n})();";
+}
+//#endregion
+//#region plugins-src/shared/office-arguments.ts
+/** Reject unknown keys before a closed Office tool can act on unintended defaults. */
+function rejectUnknownArguments(args, schema) {
+	if (schema.type !== "object" || schema.additionalProperties !== false || !args || typeof args !== "object") return;
+	const properties = schema.properties ?? {};
+	const unknown = Object.keys(args).find((key) => !Object.hasOwn(properties, key));
+	if (unknown !== void 0) {
+		const accepted = Object.keys(properties);
+		throw new Error("Unknown argument " + JSON.stringify(unknown) + ". Accepted keys: " + (accepted.join(", ") || "(none)") + ".");
+	}
 }
 //#endregion
 //#region plugins-src/word/src/schemas.ts
@@ -888,6 +900,7 @@ function apply(ctx, config) {
 			},
 			execute: (args, exec) => serial(() => {
 				exec.signal?.throwIfAborted();
+				rejectUnknownArguments(args, parameters);
 				return execute(args, exec);
 			})
 		};

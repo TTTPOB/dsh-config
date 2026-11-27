@@ -1,4 +1,5 @@
 import { officeCode } from '../../shared/office-files.ts';
+import { rejectUnknownArguments } from '../../shared/office-arguments.ts';
 import { readImageBase64 } from '../../shared/office-images.ts';
 import { name, type Config } from './config.ts';
 import { evaluate, helperRequest, paneError } from './transport.ts';
@@ -66,6 +67,7 @@ export function apply(ctx: Context, config: Config) {
         const deadline = performance.now() + config.timeoutMs;
         return serial(() => {
           exec.signal?.throwIfAborted();
+          rejectUnknownArguments(args, parameters);
           return execute(args, exec, deadline);
         });
       },

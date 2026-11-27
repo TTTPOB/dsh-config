@@ -23,5 +23,6 @@ export async function officeCode(args: OfficeArgs, signal?: AbortSignal) {
     }
     entries.push([identifier, data.toString('base64')]);
   }
-  return 'const files = Object.fromEntries(' + JSON.stringify(entries) + ');\n' + args.code;
+  return 'const files = Object.fromEntries(' + JSON.stringify(entries) + ');\n'
+    + 'return await (async function () {\n' + args.code + '\n})();';
 }
