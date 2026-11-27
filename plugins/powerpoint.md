@@ -28,7 +28,7 @@ helper 的部署与接口见 ops 仓库的 Office Helper 文档。旧配置中�
 3. 读取 powerpoint_deck_info 和所需页面信息。页与形状引用使用工具返回的当前值。渲染、插图、大纲和检查工具可用页 ID 或一基页码定位页面；OOXML 写回后页码不变、页 ID 改变，之后使用返回的新页 ID。
 4. 按需编辑；修改后读回，再用 powerpoint_render_slide 检查受影响页面。
 
-自有工具随插件注册；其余工具的参数来自 helper `/catalog` 提供的运行时 schema。目录尚未获取时只有自有工具可用；离线后保留上次成功获取的工具。已知目录工具的返回值类型由插件声明，helper 新增的工具返回通用 JSON。发现、重试与刷新配置见[源码说明](<../plugins-src/README.md#helper-目录与生命周期>)。
+自有工具随插件注册，powerpoint_verify_slides 的参数也由插件定义；其余工具的参数来自 helper `/catalog` 提供的运行时 schema。插件定义的参数会拒绝未声明的参数名。目录尚未获取时只有自有工具可用；离线后保留上次成功获取的工具。已知目录工具的返回值类型由插件声明，helper 新增的工具返回通用 JSON。发现、重试与刷新配置见[源码说明](<../plugins-src/README.md#helper-目录与生命周期>)。
 
 ## 文稿与页面工具
 
@@ -67,9 +67,9 @@ helper 的部署与接口见 ops 仓库的 Office Helper 文档。旧配置中�
 
 ## 写入与渲染
 
-超时、断线或失败后先读回文稿：修改可能已经生效，工具不会自动重试。
+超时、断线或失败后先读回文稿：修改可能已经生效，工具不会自动重试。部分目录工具（包括 OOXML 回调工具）会清理返回结果中的文本，例如去掉类似标签的标记。
 
-powerpoint_execute_office_js 运行的是可信代码，能访问 Office 宿主的全部能力。代码需自行用 PowerPoint.run 打开上下文；工具返回代码的返回值，没有返回值时为 null；helper 会清理结果中的文本，例如去掉类似标签的标记。files 参数的键是 JavaScript 标识符，值是 DSH 机器上的绝对路径，代码通过 files.<标识符> 读取原始 base64；不传 files 时 files 为空对象。
+powerpoint_execute_office_js 运行的是可信代码，能访问 Office 宿主的全部能力。代码需自行用 PowerPoint.run 打开上下文；工具返回代码的返回值，没有返回值时为 null，字符串不做清理。files 参数的键是 JavaScript 标识符，值是 DSH 机器上的绝对路径，代码通过 files.<标识符> 读取原始 base64；不传 files 时 files 为空对象。
 
 默认用 Office.js 渲染所选文稿。`renderBackend: com` 渲染的是 PowerPoint 当前激活的文稿：页数不一致时会报 presentation-mismatch，但页数相同并不代表是同一份文稿，渲染前要确认目标文稿处于激活状态。
 

@@ -67,6 +67,6 @@ refreshTriggered 只表示官方宏已触发，不代表刷新完成；pendingFo
 
 超时、断线或失败后先读回文档：修改可能已经生效，工具不会自动重试。
 
-word_execute_office_js 运行的是可信代码，能访问 Office 宿主的全部能力。代码在 Word.run 内执行，可直接使用 context；工具返回代码的返回值，没有返回值时为 null；helper 会清理结果中的文本，例如去掉类似标签的标记。目录工具报告 success:false 时，插件把它作为工具错误抛出。files 参数的键是 JavaScript 标识符，值是 DSH 机器上的绝对路径，代码通过 files.<标识符> 读取原始 base64；不传 files 时 files 为空对象。
+word_execute_office_js 运行的是可信代码，能访问 Office 宿主的全部能力。代码在 Word.run 内执行，可直接使用 context；工具返回代码的返回值，没有返回值时为 null，字符串不做清理；部分目录工具会清理返回结果中的文本，例如去掉类似标签的标记。目录工具报告 success:false 时，插件把它作为工具错误抛出。files 参数的键是 JavaScript 标识符，值是 DSH 机器上的绝对路径，代码通过 files.<标识符> 读取原始 base64；不传 files 时 files 为空对象。
 
 页面图片来自 Word 的 PDF 导出，修订标记是否显示取决于 Word 当前的导出设置。

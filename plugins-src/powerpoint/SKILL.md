@@ -50,7 +50,7 @@ Use the result fields described here and in each tool's output type; do not gues
 - `powerpoint_duplicate_slide` returns the copy's ID as `new_slide_id`. When that field is absent, read `powerpoint_deck_info` to find the copy; do not duplicate again.
 - The OOXML callback tools return your callback's return value under `result` when it returns one.
 - `powerpoint_execute_office_js` returns your code's return value, or `null` when the code returns nothing.
-- The helper sanitizes text in results (for example, it removes tag-like markup). When the exact text matters, read it back from the deck instead of relying on a returned string.
+- Some catalog tools, including the OOXML callback tools, sanitize text in their results (for example, removing tag-like markup); `powerpoint_execute_office_js` returns strings unchanged. When the exact text matters, do not rely on a string returned by a catalog tool; read it with `powerpoint_execute_office_js`.
 - `powerpoint_render_slide`, `powerpoint_insert_image`, `powerpoint_slide_outline`, and `powerpoint_verify_slides` accept slide IDs as well as one-based positions; you do not need `powerpoint_deck_info` to convert between them. After an OOXML write, apply `slide_id_update` to the IDs you hold.
 
 ## 3. Choosing a mechanism
@@ -339,7 +339,7 @@ Practice:
 
 ## 11. Checking and runtime notes
 
-- `powerpoint_verify_slides` reports overlap, out-of-bounds shapes, and low text contrast, with a `slideId` per result. For large decks pass a one-based `from_slide`/`to_slide` range, or `slide_ids` for specific slides. Fix flagged items within the scope of the request; if the flagged shapes are outside what the user asked to change, report them.
+- `powerpoint_verify_slides` reports overlap, out-of-bounds shapes, and low text contrast, with a `slideId` per result. For large decks pass a one-based `from_slide`/`to_slide` range, or `slide_ids` for specific slides. With `slide_ids`, `result.slides` holds only the requested slides in deck order, `from_slide`/`to_slide` give the range that was scanned, and `total_slides` is the deck size. Slides inside that range that you did not request are left out, so their absence says nothing about their warnings. Fix flagged items within the scope of the request; if the flagged shapes are outside what the user asked to change, report them.
 - `powerpoint_render_slide` renders a real slide image. The default backend uses Office.js image export. If the environment is configured for COM, it renders the active presentation, so confirm the intended deck is active.
 - `powerpoint_pane_visibility` hides or shows the task pane. Hiding keeps the runtime available; closing a borrowed pane may drop it.
 - `powerpoint_deck_info` reads the live document. If a tool fails because the runtime is unavailable, ask the user to open or restore the add-in rather than repeating write calls.

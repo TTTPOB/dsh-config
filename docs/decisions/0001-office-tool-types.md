@@ -17,11 +17,11 @@ PTC 模式下，Harness 把每个工具的输入和输出 JSON Schema 渲染成 
 
 1. **参数 schema 留在子集内。** `files` 写成 `{ type: 'object', additionalProperties: true }`，值的类型（DSH 机器上的绝对路径）写在 description 里；运行时校验键名和路径。Word 的 `word_execute_office_js` 直接返回代码的返回值，不再套 `{ success, result }`，与 PowerPoint 一致；ops 仓库里 helper 下发的 Word skill 同步修改。两端在未传 `files` 时都绑定空对象。
 2. **为已知目录工具手写返回值 schema。** PowerPoint 15 个、Word 6 个，外层保持 helper 的 `{ success: true, ... }`：有数据的工具放在 `result` 下，`slide_id_update`、`new_slide_id` 等元数据与 `success` 同级，部分工具没有 `result`。helper 新增而插件不认识的工具仍用通用 JSON。只声明模型读回和判断时需要的字段，其余字段用开放对象放行。Word 目录工具报告 `success: false` 时，插件抛出工具错误。
-3. **控制 SDK 体积。** 21 个输出类型相对通用 JSON 净增约 5.2K 字符（目标 4.5K）；连同两个执行工具修正后的参数和描述，SDK 比改动前共增加约 6.4K 字符，而且每次请求都会带上。再删就要删掉替换位置、跳过原因、图表样式等模型实际要读的字段，所以接受这个超出。
+3. **控制 SDK 体积。** 按 e2db647 实测（43 个工具全部直接声明），SDK 比改动前（4f1b55c）多约 4.9K 字符，每次请求都会带上。其中 21 个输出类型相对通用 JSON 多约 5.4K（目标 4.5K），缩短描述等改动抵掉了一部分。这些数字会随后续修改变化。再删就要删掉替换位置、跳过原因、图表样式等模型实际要读的字段，所以接受这个超出。
 4. **`duplicate_slide` 返回 `new_slide_id`。** 插件在同一个串行队列里比较复制前后的页 ID。恰好多出一个时返回它；多出零个或几个，或者复制成功后读回失败，就原样返回、不抛错，避免模型再复制一次。读回有单独的短时限，不会让已完成的复制变成工具超时。
 5. **`describe_tools` 对直接声明的工具给出明确提示**（dsh-progressive-tools），告诉模型直接调用该工具，而不是报未知工具。
-6. **定位页面的工具同时接受页 ID 和一基页码。** `powerpoint_render_slide`、`powerpoint_insert_image`、`powerpoint_slide_outline` 接受 `slide_id` 或 `slide_index`；`powerpoint_verify_slides` 接受一基闭区间或 `slide_ids`，插件把它换算成 helper 的零基区间，只调用一次，再按 ID 过滤结果。两种定位方式出错的情况不同：OOXML 写回会把编辑后的页插到原页位置并删除原页，页码不变、ID 改变；增删或移动页面则相反。按 ID 定位时，旧 ID 会直接报错；按页码定位时，页码错了会悄悄指到另一页。所以两种都保留，由模型按场景选择。计数规则只有一条：界面上显示编号的东西（幻灯片、Word 页面）从 1 开始，其他序号（模型自己传入的数组下标、`chart_index`、Word 段落序号、Office.js 集合）和 JavaScript 一样从 0 开始。Office.js 本身从 0 开始，无法做到全部一基；全部一基反而会让数组下标和传给 Office.js 的段落序号差一位。其余目录工具仍只接受 ID。插件不维护旧 ID 到新 ID 的自动映射，模型使用写回结果里的 `slide_id_update`。
-7. **不在 Harness 侧改为 fail-loud。** 让 `register()` 拒绝子集外的参数 schema 需要改上游，这次不做；本仓库的测试在设置 `DSH_CLI_PACKAGE` 时，用 Harness 的实际渲染器检查两个执行工具的参数类型和目录工具的输出 schema。
+6. **定位页面的工具同时接受页 ID 和一基页码。** `powerpoint_render_slide`、`powerpoint_insert_image`、`powerpoint_slide_outline` 接受 `slide_id` 或 `slide_index`；`powerpoint_verify_slides` 接受一基闭区间或 `slide_ids`，插件把它换算成 helper 的零基区间，只调用一次，再按 ID 过滤结果。两种定位方式出错的情况不同：OOXML 写回会把编辑后的页插到原页位置并删除原页，页码不变、ID 改变；增删或移动页面则相反。在这四个工具里按 ID 定位时，旧 ID 会直接报错（其余目录工具收到旧 ID 时，由 helper 按它记录的旧→新映射处理）；按页码定位时，页码错了会悄悄指到另一页。所以两种都保留，由模型按场景选择。计数规则只有一条：界面上显示编号的东西（幻灯片、Word 页面）从 1 开始，其他序号（模型自己传入的数组下标、`chart_index`、Word 段落序号、Office.js 集合）和 JavaScript 一样从 0 开始。Office.js 本身从 0 开始，无法做到全部一基；全部一基反而会让数组下标和传给 Office.js 的段落序号差一位。其余目录工具仍只接受 ID。插件自有工具和插件定义参数的工具会拒绝未声明的参数名，避免写错参数名时悄悄扩大到整份文稿。插件不维护旧 ID 到新 ID 的自动映射，模型使用写回结果里的 `slide_id_update`。
+7. **不在 Harness 侧改为 fail-loud。** 让 `register()` 拒绝子集外的参数 schema 需要改上游，这次不做；本仓库的测试在设置 `DSH_CLI_PACKAGE` 时，用 Harness 的实际渲染器检查两个执行工具和四个定位工具的参数类型，并用 Harness 的输出校验器检查目录工具的返回样本。
 
 ## 考虑过的替代方案
 
