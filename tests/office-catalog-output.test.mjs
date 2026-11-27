@@ -27,9 +27,8 @@ const pptExamples = {
   edit_slide_xml:[ok(['ppt/slides/slide1.xml']),ok(null),{success:true,no_changes_warning:'markDirty() was not called'},
     {success:true,...renamed},ok({count:4},renamed)],
   duplicate_slide:[{success:true},{success:true,new_slide_id:'270'}],
-  verify_slides:[ok({total_slides:0,from_slide:0,to_slide:-1,slides:[],dimensions_assumed_warning:warning}),
-    ok({total_slides:2,from_slide:0,to_slide:0.5,slides:[{slideId:'255',shapes:[],overflows:[],overlaps:[],coverage:null}]}),ok({
-    total_slides:2,from_slide:0,to_slide:1,slides:[
+  verify_slides:[ok({total_slides:0,from_slide:1,to_slide:0,slides:[],dimensions_assumed_warning:warning}),ok({
+    total_slides:2,from_slide:1,to_slide:2,slides:[
       {slideId:'255',shapes:[box,overlappingBox],overflows:[{shape:overlappingBox,bottom:545,slideH:540,overflowBy:5}],
         overlaps:[{shapeA:box,shapeB:overlappingBox,overlapX:166.5,overlapY:7.1}],
         coverage:{bbox_width:210.5,bbox_height:142.9,coverage_ratio:0.1,top_start:402.1,bottom_gap:-5,low_coverage:true},

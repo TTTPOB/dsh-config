@@ -2,13 +2,13 @@ import { officeCode } from '../../shared/office-files.ts';
 import { readImageBase64 } from '../../shared/office-images.ts';
 import { name, type Config } from './config.ts';
 import { evaluate, helperRequest, paneError } from './transport.ts';
-import { infoExpression, slideIdsExpression, outlineExpression, deckSizeExpression, imageExpression, clientCallExpression } from './expressions.ts';
+import { infoExpression, slideIdsExpression, outlineExpression, deckSizeExpression, imageExpression, clientCallExpression, checkSlideLocator, verifySlidesExpression, type VerifySelection } from './expressions.ts';
 import { renderSlide } from './render.ts';
 import { startCatalog } from '../../shared/catalog.ts';
 import { catalogDefinitions } from './catalog-overrides.ts';
 import { catalogOutputSchemas } from './catalog-output-schemas.ts';
 import { officeTool } from './office-tool.ts';
-import { objectSchema, jsonSchema, textRender, slideParam, imageSchema } from './schemas.ts';
+import { objectSchema, jsonSchema, textRender, slideParam, slideLocatorProperties, imageSchema } from './schemas.ts';
 import type { Tool, AddTool, Args, Context, Execution, Schema, Render, ObjectSchema } from '../../shared/types.ts';
 import skillContent from '../SKILL.md?raw';
 export const inject = ['tools', 'skills', 'attachments'];
@@ -66,9 +66,6 @@ export function apply(ctx: Context, config: Config) {
         const deadline = performance.now() + config.timeoutMs;
         return serial(() => {
           exec.signal?.throwIfAborted();
-          const slide = (args as { slide?: number }).slide;
-          if (slide !== undefined && (!Number.isSafeInteger(slide) || slide < 1))
-            throw new Error('slide must be a positive integer');
           return execute(args, exec, deadline);
         });
       },
@@ -105,6 +102,7 @@ export function apply(ctx: Context, config: Config) {
       const outputSchema = Object.hasOwn(catalogOutputSchemas, tool.clientName) ? catalogOutputSchemas[tool.clientName]! : jsonSchema;
       return makeTool<Schema, unknown>('powerpoint_' + tool.clientName, tool.description, tool.inputSchema, outputSchema,
         async (args, exec, deadline) => {
+          if (tool.clientName === 'verify_slides') return evaluateNow(verifySlidesExpression(args as VerifySelection), exec);
           const call = clientCallExpression(tool.clientName, args);
           if (tool.clientName !== 'duplicate_slide') return evaluateNow(call, exec);
           const readIds = (execution: Execution) => evaluateNow(slideIdsExpression(), execution) as Promise<string[]>;
@@ -127,19 +125,24 @@ export function apply(ctx: Context, config: Config) {
     return result;
   });
   add('powerpoint_deck_info', 'Read the live PowerPoint deck slide IDs, dimensions, masters and layouts. Use before editing; the document runtime must be loaded.', {}, [], objectSchema, (_a, e) => evaluateNow(infoExpression(), e));
-  add('powerpoint_slide_outline', 'Read compact shape geometry and text (first 200 characters per shape). Omit slide for whole deck.', { slide: slideParam }, [], { type: 'array', items: objectSchema }, (a, e) => evaluateNow(outlineExpression(a.slide, true), e));
-  add('powerpoint_insert_image', 'Insert a PNG/JPEG/GIF/BMP file from the DSH machine onto a slide via Office.js. filePath is required; no Windows path or inline binary data. Coordinates are points; omitted height preserves aspect ratio. Changes the selected slide.', {
-    slide: slideParam, filePath: { type: 'string' }, left: { type: 'number' }, top: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' },
-  }, ['slide', 'filePath'], objectSchema, async (a, e) => {
+  add('powerpoint_slide_outline', 'Read shape geometry and up to 200 text characters per shape. Pass at most one of slide_id or slide_index; omit both for the whole deck.', slideLocatorProperties, [], { type: 'array', items: objectSchema }, async (a, e) => {
+    checkSlideLocator(a, true);
+    return evaluateNow(outlineExpression(a, true), e);
+  });
+  add('powerpoint_insert_image', 'Insert a PNG/JPEG/GIF/BMP file from the DSH machine. Pass exactly one of slide_id or slide_index. Coordinates are in points; omitting height preserves aspect ratio. Changes the selected slide.', {
+    ...slideLocatorProperties, filePath: { type: 'string' }, left: { type: 'number' }, top: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' },
+  }, ['filePath'], objectSchema, async (a, e) => {
+    checkSlideLocator(a);
     const base64 = await readImageBase64(a, e.signal);
     const placement: Record<string, number> = {}; for (const [key, target] of [['left', 'imageLeft'], ['top', 'imageTop'], ['width', 'imageWidth'], ['height', 'imageHeight']] as const) if (a[key] !== undefined) placement[target] = a[key];
-    return evaluateNow(imageExpression(a.slide, base64, placement), e);
+    return evaluateNow(imageExpression(a, base64, placement), e);
   });
-  add('powerpoint_render_slide', 'Render the taskpane-bound slide through Office.js and return PNG directly for visual inspection. When explicitly configured renderBackend: com, render through the Windows helper; that mode uses ActivePresentation and requires the intended deck to stay active.', { slide: slideParam }, ['slide'], { type: 'object', properties: { slide: slideParam, image: imageSchema }, required: ['slide', 'image'], additionalProperties: false }, async (a, e) => {
-    const guard = await evaluateNow(deckSizeExpression(a.slide), e) as { slideCount?: number } | null;
-    const data = await renderSlide(config, a.slide, { signal: e.signal, expectSlides: guard?.slideCount, target: selected(e) });
-    const image = await ctx.attachments.saveImage({ data, mediaType: 'image/png', name: 'slide-' + a.slide + '.png' });
-    return { slide: a.slide, image: { ...image, attachmentId: String(image.attachmentId) } };
+  add('powerpoint_render_slide', 'Render a slide as a PNG. Pass exactly one of slide_id or slide_index. If configured to use COM, keep the intended presentation active.', slideLocatorProperties, [], { type: 'object', properties: { slide: slideParam, image: imageSchema }, required: ['slide', 'image'], additionalProperties: false }, async (a, e) => {
+    checkSlideLocator(a);
+    const { slideCount, slideIndex } = await evaluateNow(deckSizeExpression(a), e) as { slideCount: number; slideIndex: number };
+    const data = await renderSlide(config, slideIndex, { signal: e.signal, expectSlides: slideCount, target: selected(e) });
+    const image = await ctx.attachments.saveImage({ data, mediaType: 'image/png', name: 'slide-' + slideIndex + '.png' });
+    return { slide: slideIndex, image: { ...image, attachmentId: String(image.attachmentId) } };
   }, (_a, v) => [{ type: 'text', text: JSON.stringify({ slide: v.slide, width: v.image.width, height: v.image.height }) }, { type: 'image', attachment: v.image }]);
   const summary = { name: 'powerpoint', description: 'Create, edit, and inspect the current PowerPoint presentation using native powerpoint_* tools. Covers Office.js, OOXML, text formatting, charts, masters, notes, images, and rendered slide review.', provider: name, source: 'bundled', invocation: { modelInvocable: true, userInvocable: true } };
   ctx.effect(() => ctx.skills.registerProvider(() => ({ name, list: async () => [{ ...summary, rank: 600, locator: 'embedded' }], get: async () => ({ ...summary, content: skillContent }) })));

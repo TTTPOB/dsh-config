@@ -170,14 +170,30 @@ async function evaluate(config, expression, signal, target) {
 }
 //#endregion
 //#region plugins-src/powerpoint/src/expressions.ts
+/** Enforce selector exclusivity before using Office or the filesystem. */
+function checkSlideLocator({ slide_id, slide_index }, optional = false) {
+	const count = Number(slide_id !== void 0) + Number(slide_index !== void 0);
+	if (count > 1 || !optional && count === 0) throw new Error("Pass " + (optional ? "at most" : "exactly") + " one of slide_id or slide_index.");
+}
 var helpers = `
 async function slides(ctx) {
   const collection = ctx.presentation.slides;
   collection.load('items/id'); await ctx.sync(); return collection.items;
 }
-function at(items, index) {
-  if (!Number.isInteger(index) || index < 1 || index > items.length) throw new Error('Slide index outside 1..' + items.length);
-  return items[index - 1];
+function checkIndex(items, index) {
+  if (!Number.isInteger(index) || index < 1 || index > items.length)
+    throw new Error('Slide index ' + index + ' is outside the current slide count (' + items.length + ').');
+  return index;
+}
+function at(items, index) { return items[checkIndex(items, index) - 1]; }
+function byId(items, id) {
+  const index = items.findIndex(slide => slide.id === id);
+  if (index === -1)
+    throw new Error('Slide ID not found: ' + id + '. IDs change after OOXML writebacks; use slide_id_update or read powerpoint_deck_info.');
+  return index + 1;
+}
+function slideIndex(items, locator) {
+  return locator.slide_id !== undefined ? byId(items, locator.slide_id) : checkIndex(items, locator.slide_index);
 }
 async function rows(ctx, slide) {
   slide.shapes.load('items/id,items/name,items/type,items/left,items/top,items/width,items/height');
@@ -205,30 +221,66 @@ function infoExpression() {
       masters: masters.items.map(m=>({id:m.id,layouts:m.layouts.items.map(l=>({id:l.id,name:l.name}))})) };`);
 }
 /** Build one-slide or whole-deck summaries. Indices are one-based. */
-function outlineExpression(slide, compact = false) {
-	return office(`const items = await slides(ctx); const index = ${JSON.stringify(slide ?? null)};
-    const selected = index === null ? items.map((s,i)=>({s,i:i+1})) : [{s:at(items,index),i:index}];
+function outlineExpression({ slide_id, slide_index } = {}, compact = false) {
+	return office(`const items = await slides(ctx); ${slide_id === void 0 && slide_index === void 0 ? "const selected = items.map((s,i)=>({s,i:i+1}));" : `const index = slideIndex(items,${JSON.stringify({
+		slide_id,
+		slide_index
+	})}); const selected = [{s:items[index-1],i:index}];`}
     const result=[]; for (const {s,i} of selected) { const shapes=await rows(ctx,s);
       result.push({slide:i,id:s.id,shapes:${compact ? "shapes.map(s=>({...s,text:s.text.slice(0,200)}))" : "shapes"}}); } return result;`);
 }
-/** Deck size, used to refuse rendering a different PowerPoint window. */
-function deckSizeExpression(slide) {
-	return office(`const items = await slides(ctx); at(items, ${JSON.stringify(slide)}); return {slideCount: items.length};`);
+/** Read the deck size and resolve the render target in the same slide list. */
+function deckSizeExpression({ slide_id, slide_index }) {
+	return office(`const items = await slides(ctx); return {slideCount: items.length, slideIndex: slideIndex(items,${JSON.stringify({
+		slide_id,
+		slide_index
+	})})};`);
 }
 /** Encode the public Office image insertion API; send bytes through the selected backend. */
-function imageExpression(slide, base64, placement) {
+function imageExpression({ slide_id, slide_index }, base64, placement) {
 	return "(async () => {" + helpers + `
-    await PowerPoint.run(async ctx=>at(await slides(ctx),${slide}));
-    await new Promise((resolve,reject)=>Office.context.document.goToByIdAsync(${slide},Office.GoToType.Index,r=>r.error?reject(new Error(r.error.message)):resolve()));
+    const slide = await PowerPoint.run(async ctx=>slideIndex(await slides(ctx),${JSON.stringify({
+		slide_id,
+		slide_index
+	})}));
+    await new Promise((resolve,reject)=>Office.context.document.goToByIdAsync(slide,Office.GoToType.Index,r=>r.error?reject(new Error(r.error.message)):resolve()));
     await new Promise((resolve,reject)=>Office.context.document.setSelectedDataAsync(${JSON.stringify(base64)},${JSON.stringify({
 		coercionType: "image",
 		...placement
 	})},r=>r.error?reject(new Error(r.error.message)):resolve()));
-    return {slide:${slide},inserted:true}; })()`;
+    return {slide,inserted:true}; })()`;
 }
+var runtimeRequired = "if(!globalThis.OfficeClientRuntime) throw new Error(\"Client execution runtime is not loaded. Open the independent Office Helper add-in.\");";
 /** Build a dispatch request without interpreting model-supplied argument strings as code. */
 function clientCallExpression(name, args = {}) {
-	return "(async()=>{if(!globalThis.OfficeClientRuntime) throw new Error(\"Client execution runtime is not loaded. Open the independent Office Helper add-in.\");return await globalThis.OfficeClientRuntime.execute(" + JSON.stringify(name) + "," + JSON.stringify(args) + ");})()";
+	return "(async()=>{" + runtimeRequired + "return await globalThis.OfficeClientRuntime.execute(" + JSON.stringify(name) + "," + JSON.stringify(args) + ");})()";
+}
+/** Verify one covering range, then retain only requested slides for ID selections. */
+function verifySlidesExpression({ from_slide, to_slide, slide_ids }) {
+	if (slide_ids !== void 0 && (from_slide !== void 0 || to_slide !== void 0)) throw new Error("Pass slide_ids or from_slide/to_slide, not both.");
+	if (slide_ids?.length === 0) throw new Error("slide_ids must contain at least one slide ID.");
+	return "(async()=>{" + runtimeRequired + helpers + `
+    const {from_slide, to_slide, slide_ids} = ${JSON.stringify({
+		from_slide,
+		to_slide,
+		slide_ids
+	})};
+    const range = (from_slide === undefined && to_slide === undefined && slide_ids === undefined) ? {} : await PowerPoint.run(async ctx => {
+      const items = await slides(ctx);
+      if (slide_ids !== undefined) {
+        const indices = slide_ids.map(id => byId(items,id));
+        return {from_slide: Math.min(...indices) - 1, to_slide: Math.max(...indices) - 1};
+      }
+      if (from_slide !== undefined) checkIndex(items,from_slide);
+      if (to_slide !== undefined) checkIndex(items,to_slide);
+      if (from_slide > to_slide) throw new Error('from_slide must not be after to_slide.');
+      return {...(from_slide === undefined ? {} : {from_slide: from_slide - 1}), ...(to_slide === undefined ? {} : {to_slide: to_slide - 1})};
+    });
+    const response = await globalThis.OfficeClientRuntime.execute('verify_slides',range);
+    const result = response.result;
+    return {...response,result:{...result,from_slide:result.from_slide + 1,to_slide:result.to_slide + 1,
+      slides:slide_ids === undefined ? result.slides : result.slides.filter(slide=>slide_ids.includes(slide.slideId))}};
+  })()`;
 }
 //#endregion
 //#region plugins-src/powerpoint/src/render.ts
@@ -380,15 +432,108 @@ function qualifyDescriptions(prefix, clientNames) {
 	return (text) => text.replace(/\b[A-Za-z][A-Za-z0-9_]*\b/g, (name) => names.has(name) ? prefix + name : name);
 }
 //#endregion
+//#region plugins-src/powerpoint/src/schemas.ts
+var objectSchema = {
+	type: "object",
+	additionalProperties: true
+};
+var jsonSchema = { oneOf: [
+	{
+		type: "object",
+		additionalProperties: true
+	},
+	{
+		type: "array",
+		items: {}
+	},
+	{ type: "string" },
+	{ type: "number" },
+	{ type: "boolean" },
+	{ type: "null" }
+] };
+var textRender = (_args, value) => [{
+	type: "text",
+	text: JSON.stringify(value)
+}];
+var slideParam = {
+	type: "integer",
+	description: "One-based slide index in the current deck."
+};
+var slideIdDescription = "Current slide ID. OOXML writebacks can change it; use slide_id_update or read powerpoint_deck_info.";
+var slideLocatorProperties = {
+	slide_id: {
+		type: "string",
+		description: slideIdDescription
+	},
+	slide_index: {
+		type: "integer",
+		description: "One-based position; can shift when slides are added, deleted, or moved."
+	}
+};
+var imageSchema = {
+	type: "object",
+	properties: {
+		attachmentId: { type: "string" },
+		mediaType: { type: "string" },
+		bytes: { type: "integer" },
+		width: { type: "integer" },
+		height: { type: "integer" },
+		name: { type: "string" },
+		originalDimensions: {
+			type: "object",
+			properties: {
+				width: { type: "integer" },
+				height: { type: "integer" }
+			},
+			required: ["width", "height"],
+			additionalProperties: false
+		}
+	},
+	required: [
+		"attachmentId",
+		"mediaType",
+		"bytes",
+		"width",
+		"height"
+	],
+	additionalProperties: false
+};
+//#endregion
 //#region plugins-src/powerpoint/src/catalog-overrides.ts
-var slideIdDescription = "Current slide ID from powerpoint_deck_info.slideIds, in presentation order, or powerpoint_verify_slides. Do not use a page number as an ID. After a writeback, use the returned slide_id_update before editing again.";
-var descriptions = { edit_slide_master: "Edit the master and layouts associated with the FIRST slide via OOXML. Applies layout migration only to pages using that original master; preserves other masters. The callback receives the first slide's exported package and its master/layout/theme dependencies, not an arbitrary master ID or the complete deck. Call markDirty() only after changing files; use returned ID mappings after replacement." };
+var verifyParameters = {
+	type: "object",
+	properties: {
+		from_slide: {
+			type: "integer",
+			description: "First slide index, inclusive and one-based. Defaults to the first slide."
+		},
+		to_slide: {
+			type: "integer",
+			description: "Last slide index, inclusive and one-based. Defaults to the last slide."
+		},
+		slide_ids: {
+			type: "array",
+			items: { type: "string" },
+			description: "Current slide IDs. Cannot be combined with from_slide or to_slide."
+		}
+	},
+	additionalProperties: false
+};
+var descriptions = {
+	verify_slides: "Check overlap, bounds, and text contrast. Use an inclusive one-based range or slide_ids, not both. Omit all selectors to check the whole deck.",
+	edit_slide_master: "Edit the master and layouts associated with the FIRST slide via OOXML. Applies layout migration only to pages using that original master; preserves other masters. The callback receives the first slide's exported package and its master/layout/theme dependencies, not an arbitrary master ID or the complete deck. Call markDirty() only after changing files; use returned ID mappings after replacement."
+};
 var suffixes = { edit_slide_xml: " Read-only callbacks that do not call markDirty() never import a replacement. DOMParser and XMLSerializer are available. Modified writebacks return slide_id_update; use the new ID in subsequent calls." };
 var fieldDescriptions = { edit_slide_master: { code: "The JSZip archive includes the first slide and its associated master/layout/theme parts. DOMParser, XMLSerializer and escapeXml(text) are available. Call markDirty() after changing files." } };
 /** DSH-owned references and writeback guidance; runtime prose comes from the catalog. */
 function catalogDefinitions(tools) {
 	const describe = qualifyDescriptions("powerpoint_", [...tools.map((tool) => tool.clientName), "execute_office_js"]);
 	return tools.map((tool) => {
+		if (tool.clientName === "verify_slides") return {
+			...tool,
+			description: descriptions.verify_slides,
+			inputSchema: verifyParameters
+		};
 		const parameters = normalizeSchema(tool.inputSchema, describe);
 		for (const [key, field] of Object.entries(parameters.properties ?? {})) {
 			if ([
@@ -612,8 +757,14 @@ var catalogOutputSchemas = {
 	verify_slides: success(record({
 		slides: array(verifiedSlide),
 		total_slides: integer,
-		from_slide: number,
-		to_slide: number
+		from_slide: {
+			...integer,
+			description: "First index in the checked range, inclusive and one-based."
+		},
+		to_slide: {
+			...integer,
+			description: "Last index in the checked range, inclusive and one-based; 0 for an empty deck."
+		}
 	}, { dimensions_assumed_warning: string })),
 	read_slide_text: success(string),
 	edit_slide_text: record({ success: trueValue }, writeback),
@@ -652,62 +803,6 @@ var officeTool = {
 		required: ["code"],
 		additionalProperties: false
 	}
-};
-//#endregion
-//#region plugins-src/powerpoint/src/schemas.ts
-var objectSchema = {
-	type: "object",
-	additionalProperties: true
-};
-var jsonSchema = { oneOf: [
-	{
-		type: "object",
-		additionalProperties: true
-	},
-	{
-		type: "array",
-		items: {}
-	},
-	{ type: "string" },
-	{ type: "number" },
-	{ type: "boolean" },
-	{ type: "null" }
-] };
-var textRender = (_args, value) => [{
-	type: "text",
-	text: JSON.stringify(value)
-}];
-var slideParam = {
-	type: "integer",
-	description: "One-based slide index in the current deck."
-};
-var imageSchema = {
-	type: "object",
-	properties: {
-		attachmentId: { type: "string" },
-		mediaType: { type: "string" },
-		bytes: { type: "integer" },
-		width: { type: "integer" },
-		height: { type: "integer" },
-		name: { type: "string" },
-		originalDimensions: {
-			type: "object",
-			properties: {
-				width: { type: "integer" },
-				height: { type: "integer" }
-			},
-			required: ["width", "height"],
-			additionalProperties: false
-		}
-	},
-	required: [
-		"attachmentId",
-		"mediaType",
-		"bytes",
-		"width",
-		"height"
-	],
-	additionalProperties: false
 };
 //#endregion
 //#region plugins-src/powerpoint/SKILL.md?raw
@@ -766,8 +861,6 @@ function apply(ctx, config) {
 				const deadline = performance.now() + config.timeoutMs;
 				return serial(() => {
 					exec.signal?.throwIfAborted();
-					const slide = args.slide;
-					if (slide !== void 0 && (!Number.isSafeInteger(slide) || slide < 1)) throw new Error("slide must be a positive integer");
 					return execute(args, exec, deadline);
 				});
 			}
@@ -819,6 +912,7 @@ function apply(ctx, config) {
 		if (staticNames.has(tool.clientName)) throw new Error("PowerPoint catalog conflicts with a DSH-owned tool: " + tool.clientName);
 		const outputSchema = Object.hasOwn(catalogOutputSchemas, tool.clientName) ? catalogOutputSchemas[tool.clientName] : jsonSchema;
 		return makeTool("powerpoint_" + tool.clientName, tool.description, tool.inputSchema, outputSchema, async (args, exec, deadline) => {
+			if (tool.clientName === "verify_slides") return evaluateNow(verifySlidesExpression(args), exec);
 			const call = clientCallExpression(tool.clientName, args);
 			if (tool.clientName !== "duplicate_slide") return evaluateNow(call, exec);
 			const readIds = (execution) => evaluateNow(slideIdsExpression(), execution);
@@ -845,18 +939,22 @@ function apply(ctx, config) {
 		return result;
 	});
 	add("powerpoint_deck_info", "Read the live PowerPoint deck slide IDs, dimensions, masters and layouts. Use before editing; the document runtime must be loaded.", {}, [], objectSchema, (_a, e) => evaluateNow(infoExpression(), e));
-	add("powerpoint_slide_outline", "Read compact shape geometry and text (first 200 characters per shape). Omit slide for whole deck.", { slide: slideParam }, [], {
+	add("powerpoint_slide_outline", "Read shape geometry and up to 200 text characters per shape. Pass at most one of slide_id or slide_index; omit both for the whole deck.", slideLocatorProperties, [], {
 		type: "array",
 		items: objectSchema
-	}, (a, e) => evaluateNow(outlineExpression(a.slide, true), e));
-	add("powerpoint_insert_image", "Insert a PNG/JPEG/GIF/BMP file from the DSH machine onto a slide via Office.js. filePath is required; no Windows path or inline binary data. Coordinates are points; omitted height preserves aspect ratio. Changes the selected slide.", {
-		slide: slideParam,
+	}, async (a, e) => {
+		checkSlideLocator(a, true);
+		return evaluateNow(outlineExpression(a, true), e);
+	});
+	add("powerpoint_insert_image", "Insert a PNG/JPEG/GIF/BMP file from the DSH machine. Pass exactly one of slide_id or slide_index. Coordinates are in points; omitting height preserves aspect ratio. Changes the selected slide.", {
+		...slideLocatorProperties,
 		filePath: { type: "string" },
 		left: { type: "number" },
 		top: { type: "number" },
 		width: { type: "number" },
 		height: { type: "number" }
-	}, ["slide", "filePath"], objectSchema, async (a, e) => {
+	}, ["filePath"], objectSchema, async (a, e) => {
+		checkSlideLocator(a);
 		const base64 = await readImageBase64(a, e.signal);
 		const placement = {};
 		for (const [key, target] of [
@@ -865,9 +963,9 @@ function apply(ctx, config) {
 			["width", "imageWidth"],
 			["height", "imageHeight"]
 		]) if (a[key] !== void 0) placement[target] = a[key];
-		return evaluateNow(imageExpression(a.slide, base64, placement), e);
+		return evaluateNow(imageExpression(a, base64, placement), e);
 	});
-	add("powerpoint_render_slide", "Render the taskpane-bound slide through Office.js and return PNG directly for visual inspection. When explicitly configured renderBackend: com, render through the Windows helper; that mode uses ActivePresentation and requires the intended deck to stay active.", { slide: slideParam }, ["slide"], {
+	add("powerpoint_render_slide", "Render a slide as a PNG. Pass exactly one of slide_id or slide_index. If configured to use COM, keep the intended presentation active.", slideLocatorProperties, [], {
 		type: "object",
 		properties: {
 			slide: slideParam,
@@ -876,19 +974,20 @@ function apply(ctx, config) {
 		required: ["slide", "image"],
 		additionalProperties: false
 	}, async (a, e) => {
-		const guard = await evaluateNow(deckSizeExpression(a.slide), e);
-		const data = await renderSlide(config, a.slide, {
+		checkSlideLocator(a);
+		const { slideCount, slideIndex } = await evaluateNow(deckSizeExpression(a), e);
+		const data = await renderSlide(config, slideIndex, {
 			signal: e.signal,
-			expectSlides: guard?.slideCount,
+			expectSlides: slideCount,
 			target: selected(e)
 		});
 		const image = await ctx.attachments.saveImage({
 			data,
 			mediaType: "image/png",
-			name: "slide-" + a.slide + ".png"
+			name: "slide-" + slideIndex + ".png"
 		});
 		return {
-			slide: a.slide,
+			slide: slideIndex,
 			image: {
 				...image,
 				attachmentId: String(image.attachmentId)

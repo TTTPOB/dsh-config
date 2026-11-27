@@ -33,17 +33,32 @@ for (const [host, plugin, outputs, generic] of [
 ]) {
   const prefix=host.toLowerCase()+'_';
   const config=()=>plugin.Config['~standard'].validate({autoHide:false,catalogRefreshMs:100,catalogRetryInitialMs:5,catalogRetryMaxMs:20,helperToken:'synthetic'}).value;
-  test(host+': the registered Office.js arguments render code and files in the real PTC SDK', {skip:!process.env.DSH_CLI_PACKAGE}, async t=>{
+  test(host+': registered Office arguments render usable types in the real PTC SDK', {skip:!process.env.DSH_CLI_PACKAGE}, async t=>{
     const runtime=createRequire(realpathSync(process.env.DSH_CLI_PACKAGE));
     const renderer=runtime.resolve('@deepseek-ai/dsh-tool-executor-ptc/src/ts-types.ts');
     const {jsonSchemaToTs}=await import(pathToFileURL(renderer).href);
-    t.mock.method(globalThis,'fetch',async()=>Response.json(catalog(host,[])));
+    t.mock.method(globalThis,'fetch',async()=>Response.json(catalog(host,host==='PowerPoint'?['verify_slides']:[])));
     const {tools}=registry(t,plugin,config());
     await settled();
-    const ts=jsonSchemaToTs(tools.get(prefix+'execute_office_js').parameters,1);
+    const render=name=>jsonSchemaToTs(tools.get(prefix+name).parameters,1);
+    const ts=render('execute_office_js');
     assert.match(ts,/\bcode: string;/);
     assert.match(ts,/\bfiles\?: (?:Record<string, JsonValue>|\{)/);
     assert.doesNotMatch(ts,/\bfiles\?: unknown\b/);
+    if(host==='PowerPoint'){
+      for(const name of ['render_slide','insert_image','slide_outline']){
+        const args=render(name);
+        assert.doesNotMatch(args,/\bunknown\b|\bslide\??:/,name);
+        assert.match(args,/\bslide_id\?: string;/,name);
+        assert.match(args,/\bslide_index\?: number;/,name);
+        if(name==='insert_image') assert.match(args,/\bfilePath: string;/,name);
+      }
+      const verify=render('verify_slides');
+      assert.doesNotMatch(verify,/\bunknown\b|\bslide_id\??:/);
+      assert.match(verify,/\bfrom_slide\?: number;/);
+      assert.match(verify,/\bto_slide\?: number;/);
+      assert.match(verify,/\bslide_ids\?: string\[\];/);
+    }
   });
   test(host+': non-2xx helper replies surface proxy text or structured errors without replay',async t=>{
     const proxyText='<html>Bad gateway from proxy</html>';

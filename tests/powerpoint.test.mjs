@@ -52,7 +52,7 @@ test('image bytes and placement use Office API after slide selection outside its
     setSelectedDataAsync(base64,opts,cb){calls.push({kind:'image',base64,opts});cb({});},
   }}};
   const PowerPoint={run:fn=>fn({presentation:{slides:{items:[{id:'s1'}],load(){}}},sync:async()=>{}})};
-  const evaluate=Function('Office','PowerPoint','return '+Plugin.imageExpression(1,'YWJj',{imageWidth:300,imageLeft:12}));
+  const evaluate=Function('Office','PowerPoint','return '+Plugin.imageExpression({slide_index:1},'YWJj',{imageWidth:300,imageLeft:12}));
   assert.deepEqual(await evaluate(Office,PowerPoint),{slide:1,inserted:true});
   assert.deepEqual(calls.map(c=>c.kind),['select','callback-returned','image']);
   assert.equal(calls[2].base64,'YWJj');assert.equal(calls[2].opts.imageWidth,300);assert.equal(calls[2].opts.imageHeight,undefined);
@@ -64,17 +64,17 @@ test('shape reads load null status before text and compact only the outline text
   const shape={id:'a',name:'text',type:'TextBox',left:0,top:0,width:10,height:10,getTextFrameOrNullObject:()=>frame};
   const PowerPoint={run:fn=>fn({presentation:{slides:{load(){},items:[{id:'one',shapes:{load(){},items:[shape]}}]}},sync:async()=>{}})};
   const run=code=>Function('PowerPoint','return '+code)(PowerPoint);
-  assert.equal((await run(Plugin.outlineExpression(1,true)))[0].shapes[0].text.length,200);
-  assert.equal((await run(Plugin.outlineExpression(1)))[0].shapes[0].text.length,400);
-  await assert.rejects(run(Plugin.outlineExpression(2)),/outside/);
+  assert.equal((await run(Plugin.outlineExpression({slide_index:1},true)))[0].shapes[0].text.length,200);
+  assert.equal((await run(Plugin.outlineExpression({slide_index:1})))[0].shapes[0].text.length,400);
+  await assert.rejects(run(Plugin.outlineExpression({slide_index:2})),/outside/);
 });
 
 test('render returns attachment content and tools are removed on disposal',async t=>{
   const png=Buffer.from([137,80,78,71,13,10,26,10,0,1,2,3]);
-  transport(t,code=>code.includes('getImageAsBase64')?png.toString('base64'):[]);
+  transport(t,code=>code.includes('getImageAsBase64')?png.toString('base64'):{slideCount:1,slideIndex:1});
   const saved=[];const ref={attachmentId:'image-one',mediaType:'image/png',bytes:png.length,width:100,height:50};
   const f=register(t,config({autoHide:false}),{saveImage:async value=>{saved.push(value);return ref;}});
-  const value=await f.call('powerpoint_render_slide',{slide:1});
+  const value=await f.call('powerpoint_render_slide',{slide_index:1});
   assert.deepEqual(saved[0].data,png);
   const rendered=f.tools.get('powerpoint_render_slide').output.render({},value);
   assert.deepEqual(rendered[1],{type:'image',attachment:ref});
@@ -86,7 +86,7 @@ test('native client tools forward arguments untouched and preserve replacement I
   const runtime={execute:async(name,value)=>{calls.push({name,value});return {result:'readback',slide_id_update:{[value.slide_id]:'257#replacement'}};}};
   transport(t,code=>Function('globalThis','return '+code)({OfficeClientRuntime:runtime}));
   const f=register(t,config({autoHide:false}));
-  const passthrough=definitions('PowerPoint').filter(d=>d.clientName !== 'execute_office_js');
+  const passthrough=definitions('PowerPoint').filter(d=>!['execute_office_js','verify_slides'].includes(d.clientName));
   for(const definition of passthrough){
     const value=await f.call(definition.name,args);
     assert.deepEqual(calls.at(-1),{name:definition.clientName,value:args});
@@ -223,11 +223,95 @@ function paneHelper(t,initialPanes){
     }
     state.resolved.push(pane.sessionId);
     if(route.pathname === '/render')return new Response(helperPng);
-    const value=body.code.includes('getImageAsBase64') ? helperPng.toString('base64') : body.code.includes('slideCount: items.length') ? {slideCount:4,target:pane.sessionId} : {target:pane.sessionId};
+    const value=body.code.includes('getImageAsBase64') ? helperPng.toString('base64') : body.code.includes('slideCount: items.length') ? {slideCount:4,slideIndex:2,target:pane.sessionId} : {target:pane.sessionId};
     return reply({value});
   });
   return state;
 }
+
+function locatorDeck(t, initialIds=['301','901','407','555','620']) {
+  const ids=[...initialIds], requests=[], verifies=[], imageIndices=[], renders=[];
+  const Office={GoToType:{Index:'Index'},context:{document:{
+    goToByIdAsync(index,type,cb){assert.equal(type,'Index');imageIndices.push(index);cb({});},
+    setSelectedDataAsync(_bytes,_placement,cb){cb({});},
+  }}};
+  const PowerPoint={run:fn=>fn({presentation:{slides:{
+    load(fields){assert.equal(fields,'items/id');},
+    get items(){return ids.map(id=>({id,shapes:{load(){},items:[]}}));},
+  }},sync:async()=>{}})};
+  const OfficeClientRuntime={execute(name,args){
+    assert.equal(name,'verify_slides');
+    verifies.push(args);
+    const from=args.from_slide??0,to=args.to_slide??ids.length-1;
+    const slides=ids.slice(from,to+1).map(slideId=>({slideId,shapes:[],overflows:[],overlaps:[],coverage:null}));
+    return {success:true,result:{from_slide:from,to_slide:to,total_slides:ids.length,slides}};
+  }};
+  t.mock.method(globalThis,'fetch',async(url,{body}={})=>{
+    const path=new URL(url).pathname;
+    if(path==='/catalog')return Response.json(catalog('PowerPoint',['verify_slides']));
+    const input=JSON.parse(body);requests.push({path,input});
+    if(path==='/render'){renders.push(input);return new Response(helperPng);}
+    assert.equal(path,'/eval');
+    return Response.json({value:await Function('Office','PowerPoint','globalThis','return '+input.code)(Office,PowerPoint,{OfficeClientRuntime})});
+  });
+  const f=register(t,config({autoHide:false,renderBackend:'com'}),{
+    saveImage:async input=>({attachmentId:input.name,mediaType:input.mediaType,width:20,height:10,bytes:input.data.length}),
+  });
+  return {ids,requests,verifies,renders,imageIndices,call:(name,args)=>f.call('powerpoint_'+name,args)};
+}
+
+test('single-slide tools resolve ID or one-based position and require a valid selector',async t=>{
+  const deck=locatorDeck(t);
+  const filePath=join(directory(t),'local-only.png');writeFileSync(filePath,helperPng);
+  const cases=[['render_slide',{}],['insert_image',{filePath}],['slide_outline',{}]];
+  for(const [tool,extra] of cases){
+    const byId=await deck.call(tool,{...extra,slide_id:deck.ids[3]});
+    const byIndex=await deck.call(tool,{...extra,slide_index:2});
+    if(tool==='slide_outline'){
+      assert.deepEqual(byId,[{slide:4,id:deck.ids[3],shapes:[]}]);
+      assert.deepEqual(byIndex,[{slide:2,id:deck.ids[1],shapes:[]}]);
+      assert.deepEqual((await deck.call(tool,{})).map(({slide,id})=>[slide,id]),deck.ids.map((id,i)=>[i+1,id]));
+    }else{
+      assert.equal(byId.slide,4);assert.equal(byIndex.slide,2);
+      await assert.rejects(deck.call(tool,extra),/exactly one of slide_id or slide_index/);
+    }
+    await assert.rejects(deck.call(tool,{...extra,slide_id:deck.ids[0],slide_index:2}),/one of slide_id or slide_index/);
+    await assert.rejects(deck.call(tool,{...extra,slide_id:'stale-id'}),/Slide ID not found: stale-id\. IDs change after OOXML writebacks; use slide_id_update or read powerpoint_deck_info\./);
+    await assert.rejects(deck.call(tool,{...extra,slide_index:deck.ids.length+1}),new RegExp('current slide count \\('+deck.ids.length+'\\)'));
+  }
+  assert.deepEqual(deck.renders.map(({slide,expectSlides})=>[slide,expectSlides]),[[4,deck.ids.length],[2,deck.ids.length]]);
+  assert.deepEqual(deck.imageIndices,[4,2]);
+  assert.ok(deck.requests.every(({input})=>!input.code?.includes(filePath)));
+});
+
+test('verify_slides translates indices and filters one covering helper call by slide IDs',async t=>{
+  const deck=locatorDeck(t);
+  const verify=async(args,request,expectedIds,from,to)=>{
+    const requestCount=deck.requests.length,verifyCount=deck.verifies.length;
+    const {result}=await deck.call('verify_slides',args);
+    assert.equal(deck.requests.length,requestCount+1);
+    assert.deepEqual(deck.verifies.slice(verifyCount),[request]);
+    assert.equal(result.from_slide,from);assert.equal(result.to_slide,to);
+    assert.equal(result.total_slides,deck.ids.length);
+    assert.deepEqual(result.slides.map(slide=>slide.slideId),expectedIds);
+  };
+  await verify({from_slide:2,to_slide:3},{from_slide:1,to_slide:2},deck.ids.slice(1,3),2,3);
+  await verify({slide_ids:[deck.ids[3],deck.ids[1]]},{from_slide:1,to_slide:3},[deck.ids[1],deck.ids[3]],2,4);
+  await verify({to_slide:2},{to_slide:1},deck.ids.slice(0,2),1,2);
+  await verify({from_slide:4},{from_slide:3},deck.ids.slice(3),4,deck.ids.length);
+  await verify({}, {}, deck.ids,1,deck.ids.length);
+  const verifies=deck.verifies.length;
+  await assert.rejects(deck.call('verify_slides',{slide_ids:[deck.ids[0]],from_slide:1}),/not both/);
+  await assert.rejects(deck.call('verify_slides',{slide_ids:[deck.ids[0]],to_slide:1}),/not both/);
+  await assert.rejects(deck.call('verify_slides',{slide_ids:[]}),/at least one slide ID/);
+  await assert.rejects(deck.call('verify_slides',{slide_ids:[deck.ids[0],'stale-id']}),/Slide ID not found: stale-id/);
+  await assert.rejects(deck.call('verify_slides',{from_slide:deck.ids.length+1}),/current slide count/);
+  await assert.rejects(deck.call('verify_slides',{to_slide:0}),/current slide count/);
+  await assert.rejects(deck.call('verify_slides',{from_slide:3,to_slide:2}),/must not be after/);
+  assert.equal(deck.verifies.length,verifies);
+  deck.ids.length=0;
+  await verify({}, {}, [],1,0);
+});
 
 test('presentation selection validates panes and isolates DSH sessions and no-agent calls',async t=>{
   const a=presentationPane('pane-a','Research'),b=presentationPane('pane-b','Teaching');
@@ -258,9 +342,9 @@ test('selected pane is forwarded through all native handlers, images and both re
     const f=register(t,settings,{saveImage:async value=>{saved.push(value);return image;}});
     await f.call('powerpoint_select_presentation',{target:pane.sessionId});
     for(const definition of definitions('PowerPoint')) await f.call(definition.name,{probe:definition.clientName});
-    await f.call('powerpoint_insert_image',{slide:1,filePath});
-    await f.call('powerpoint_slide_outline',{slide:1});
-    await f.call('powerpoint_render_slide',{slide:2});
+    await f.call('powerpoint_insert_image',{slide_index:1,filePath});
+    await f.call('powerpoint_slide_outline',{slide_index:1});
+    await f.call('powerpoint_render_slide',{slide_index:2});
     assert.deepEqual(saved[0].data,helperPng);
     assert.equal(wire.requests.at(-1).body.target,pane.sessionId);
     if(renderBackend === 'com')assert.equal(wire.requests.at(-1).body.expectSlides,4);
@@ -280,7 +364,7 @@ test('pane failures expose the pane list and select tool without dropping a stal
   assert.equal(wire.requests.at(-1).body.target,undefined);
   await f.call('powerpoint_select_presentation',{target:a.sessionId});wire.panes=[b];
   const before=wire.requests.length;
-  await assert.rejects(f.call('powerpoint_render_slide',{slide:1}),/target-not-found.*powerpoint_list_presentations.*powerpoint_select_presentation/);
+  await assert.rejects(f.call('powerpoint_render_slide',{slide_index:1}),/target-not-found.*powerpoint_list_presentations.*powerpoint_select_presentation/);
   assert.equal(wire.requests.length,before+1);assert.equal(wire.requests.at(-1).body.target,a.sessionId);
   assert.equal((await f.call('powerpoint_list_presentations')).selectedTarget,a.sessionId);
   wire.panes=[];
@@ -364,12 +448,12 @@ test('image tool reads file bytes and fails missing inputs before Office dispatc
   const PowerPoint={run:fn=>fn({presentation:{slides:{items:[{id:'slide'}],load(){}}},sync:async()=>{}})};
   const wire=transport(t,expression=>Function('Office','PowerPoint','return '+expression)(Office,PowerPoint));
   const f=register(t,config({autoHide:false}));
-  await f.call('powerpoint_insert_image',{slide:1,filePath:relative(process.cwd(),filePath),width:123});
+  await f.call('powerpoint_insert_image',{slide_index:1,filePath:relative(process.cwd(),filePath),width:123});
   assert.equal(inserted.data,bytes.toString('base64'));
   assert.equal(inserted.placement.imageWidth,123);
-  await assert.rejects(f.call('powerpoint_insert_image',{slide:1,base64:bytes.toString('base64')}));
+  await assert.rejects(f.call('powerpoint_insert_image',{slide_index:1,base64:bytes.toString('base64')}));
   const missing=join(dir,'missing.png');
-  await assert.rejects(f.call('powerpoint_insert_image',{slide:1,filePath:missing}),/ENOENT/);
-  await assert.rejects(f.call('powerpoint_insert_image',{slide:1,filePath:missing,width:Infinity}),/width must be positive/);
+  await assert.rejects(f.call('powerpoint_insert_image',{slide_index:1,filePath:missing}),/ENOENT/);
+  await assert.rejects(f.call('powerpoint_insert_image',{slide_index:1,filePath:missing,width:Infinity}),/width must be positive/);
   assert.equal(wire.sent.length,1);
 });

@@ -1,9 +1,19 @@
 import type { CatalogTool } from '../../shared/catalog.ts';
 import { normalizeSchema, qualifyDescriptions } from '../../shared/catalog-schema.ts';
 import type { Schema } from '../../shared/types.ts';
+import { slideIdDescription } from './schemas.ts';
 
-const slideIdDescription = 'Current slide ID from powerpoint_deck_info.slideIds, in presentation order, or powerpoint_verify_slides. Do not use a page number as an ID. After a writeback, use the returned slide_id_update before editing again.';
+const verifyParameters = {
+  type: 'object',
+  properties: {
+    from_slide: { type: 'integer', description: 'First slide index, inclusive and one-based. Defaults to the first slide.' },
+    to_slide: { type: 'integer', description: 'Last slide index, inclusive and one-based. Defaults to the last slide.' },
+    slide_ids: { type: 'array', items: { type: 'string' }, description: 'Current slide IDs. Cannot be combined with from_slide or to_slide.' },
+  },
+  additionalProperties: false,
+} as const satisfies Schema;
 const descriptions: Record<string, string> = {
+  verify_slides: 'Check overlap, bounds, and text contrast. Use an inclusive one-based range or slide_ids, not both. Omit all selectors to check the whole deck.',
   edit_slide_master: 'Edit the master and layouts associated with the FIRST slide via OOXML. Applies layout migration only to pages using that original master; preserves other masters. The callback receives the first slide\'s exported package and its master/layout/theme dependencies, not an arbitrary master ID or the complete deck. Call markDirty() only after changing files; use returned ID mappings after replacement.',
 };
 const suffixes: Record<string, string> = {
@@ -19,6 +29,7 @@ const fieldDescriptions: Record<string, Record<string, string>> = {
 export function catalogDefinitions(tools: CatalogTool[]) {
   const describe = qualifyDescriptions('powerpoint_', [...tools.map(tool => tool.clientName), 'execute_office_js']);
   return tools.map(tool => {
+    if (tool.clientName === 'verify_slides') return { ...tool, description: descriptions.verify_slides, inputSchema: verifyParameters };
     const parameters = normalizeSchema(tool.inputSchema, describe);
     for (const [key, field] of Object.entries(parameters.properties ?? {})) {
       if (['slide_id', 'from_slide_id', 'to_slide_id'].includes(key)) field.description = slideIdDescription;
