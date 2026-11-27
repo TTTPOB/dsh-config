@@ -50,7 +50,7 @@ test('client dispatch quotes user strings and preserves original handler result 
 test('native definitions forward their arguments and authentication without implicit retries',async t=>{
   const settings=config({helperUrl:'http://word.example.invalid:9999',helperToken:'test-only',autoHide:false});
   const requests=transport(t,request=>({code:request.body.code}));const f=register(t,settings);
-  for(const definition of definitions('Word')){
+  for(const definition of definitions('Word').filter(tool=>tool.clientName!=='execute_office_js')){
     const args={probe:definition.clientName};await f.call(definition.name,args);
     assert.equal(requests.at(-1).body.code,Plugin.clientCallExpression(definition.clientName,args));
   }
@@ -138,7 +138,7 @@ test('Office code receives binary files without changing logged path-only argume
   assert.equal(captured[0].name,'execute_office_js');
   assert.ok(!JSON.stringify(args).includes(fixture.bytes.toString('base64')));
   assert.deepEqual(await f.call('word_execute_office_js',{code:'return files;',files:{}}),{});
-  await assert.rejects(f.call('word_execute_office_js',{code:'return files;'}),/files is not defined/);
+  assert.equal(await f.call('word_execute_office_js',{code:'return Object.keys(files).length;'}),0);
   assert.equal(await f.call('word_execute_office_js',{code:'return;'}),null);
 });
 

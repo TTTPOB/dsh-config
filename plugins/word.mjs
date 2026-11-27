@@ -405,10 +405,9 @@ function clientCallExpression(clientName, args = {}, options = {}) {
 //#region plugins-src/shared/office-files.ts
 /** Load binary inputs privately; caller arguments retain only DSH file paths. */
 async function officeCode(args, signal) {
-	if (args.files === void 0) return args.code;
-	if (args.files === null || typeof args.files !== "object" || Array.isArray(args.files)) throw new Error("files must map JavaScript identifiers to absolute file paths on the DSH machine");
+	if (args.files !== void 0 && (args.files === null || typeof args.files !== "object" || Array.isArray(args.files))) throw new Error("files must map JavaScript identifiers to absolute file paths on the DSH machine");
 	const entries = [];
-	for (const [identifier, filePath] of Object.entries(args.files)) {
+	for (const [identifier, filePath] of Object.entries(args.files ?? {})) {
 		if (!/^[\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*$/u.test(identifier)) throw new Error("Invalid files identifier: " + identifier + "; expected JavaScript identifier syntax");
 		if (typeof filePath !== "string" || !isAbsolute(filePath)) throw new Error("files." + identifier + " must be an absolute file path on the DSH machine");
 		let data;
@@ -925,7 +924,7 @@ function apply(ctx, config) {
 		};
 	});
 	register("word_execute_office_js", officeTool.description, officeTool.parameters, jsonSchema, async (args, exec) => {
-		return (await evaluateNow(clientCallExpression("execute_office_js", args.files === void 0 ? args : { code: await officeCode(args, exec.signal) }), exec)).result ?? null;
+		return (await evaluateNow(clientCallExpression("execute_office_js", { code: await officeCode(args, exec.signal) }), exec)).result ?? null;
 	});
 	const staticNames = new Set([
 		"execute_office_js",

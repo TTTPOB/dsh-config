@@ -13,6 +13,10 @@ import type { Tool, AddTool, Args, Context, Execution, Schema, Render, ObjectSch
 import skillContent from '../SKILL.md?raw';
 export const inject = ['tools', 'skills', 'attachments'];
 
+// Leave time for the successful write to reach Harness before its outer timeout.
+const READBACK_BUDGET_MS = 750;
+const READBACK_MARGIN_MS = 50;
+
 /** Register tools and the embedded provider; serialize operations across agents sharing the deck. */
 export function apply(ctx: Context, config: Config) {
   let tail: Promise<unknown> = Promise.resolve();
@@ -48,7 +52,7 @@ export function apply(ctx: Context, config: Config) {
     description: string,
     parameters: S,
     schema: Schema,
-    execute: (args: Args<S>, exec: Execution) => Promise<V>,
+    execute: (args: Args<S>, exec: Execution, deadline: number) => Promise<V>,
     render: Render<V> = textRender,
   ): Tool<S, V> => {
     return {
@@ -58,13 +62,16 @@ export function apply(ctx: Context, config: Config) {
       timeoutMs: config.timeoutMs,
       parameters,
       output: { schema, render },
-      execute: (args, exec) => serial(() => {
-        exec.signal?.throwIfAborted();
-        const slide = (args as { slide?: number }).slide;
-        if (slide !== undefined && (!Number.isSafeInteger(slide) || slide < 1))
-          throw new Error('slide must be a positive integer');
-        return execute(args, exec);
-      }),
+      execute: (args, exec) => {
+        const deadline = performance.now() + config.timeoutMs;
+        return serial(() => {
+          exec.signal?.throwIfAborted();
+          const slide = (args as { slide?: number }).slide;
+          if (slide !== undefined && (!Number.isSafeInteger(slide) || slide < 1))
+            throw new Error('slide must be a positive integer');
+          return execute(args, exec, deadline);
+        });
+      },
     };
   };
   const register = <const S extends Schema, V>(
@@ -97,14 +104,18 @@ export function apply(ctx: Context, config: Config) {
       if (staticNames.has(tool.clientName)) throw new Error('PowerPoint catalog conflicts with a DSH-owned tool: ' + tool.clientName);
       const outputSchema = Object.hasOwn(catalogOutputSchemas, tool.clientName) ? catalogOutputSchemas[tool.clientName]! : jsonSchema;
       return makeTool<Schema, unknown>('powerpoint_' + tool.clientName, tool.description, tool.inputSchema, outputSchema,
-        async (args, exec) => {
+        async (args, exec, deadline) => {
           const call = clientCallExpression(tool.clientName, args);
           if (tool.clientName !== 'duplicate_slide') return evaluateNow(call, exec);
-          const readIds = () => evaluateNow(slideIdsExpression(), exec) as Promise<string[]>;
-          const before = new Set(await readIds());
+          const readIds = (execution: Execution) => evaluateNow(slideIdsExpression(), execution) as Promise<string[]>;
+          const before = new Set(await readIds(exec));
           const result = await evaluateNow(call, exec) as { success: true };
+          const budget = Math.min(READBACK_BUDGET_MS, Math.floor(deadline - performance.now() - READBACK_MARGIN_MS));
+          if (budget < 1) return result;
+          const timeout = AbortSignal.timeout(budget);
+          const signal = exec.signal ? AbortSignal.any([exec.signal, timeout]) : timeout;
           // A failed readback does not undo the duplicate; keep the successful result.
-          const after = await readIds().catch(() => undefined);
+          const after = await readIds({ ...exec, signal }).catch(() => undefined);
           const added = after?.filter(id => !before.has(id));
           return added?.length === 1 ? { ...result, new_slide_id: added[0] } : result;
         });

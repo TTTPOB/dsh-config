@@ -77,10 +77,9 @@ var Config = { "~standard": {
 //#region plugins-src/shared/office-files.ts
 /** Load binary inputs privately; caller arguments retain only DSH file paths. */
 async function officeCode(args, signal) {
-	if (args.files === void 0) return args.code;
-	if (args.files === null || typeof args.files !== "object" || Array.isArray(args.files)) throw new Error("files must map JavaScript identifiers to absolute file paths on the DSH machine");
+	if (args.files !== void 0 && (args.files === null || typeof args.files !== "object" || Array.isArray(args.files))) throw new Error("files must map JavaScript identifiers to absolute file paths on the DSH machine");
 	const entries = [];
-	for (const [identifier, filePath] of Object.entries(args.files)) {
+	for (const [identifier, filePath] of Object.entries(args.files ?? {})) {
 		if (!/^[\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*$/u.test(identifier)) throw new Error("Invalid files identifier: " + identifier + "; expected JavaScript identifier syntax");
 		if (typeof filePath !== "string" || !isAbsolute(filePath)) throw new Error("files." + identifier + " must be an absolute file path on the DSH machine");
 		let data;
@@ -613,8 +612,8 @@ var catalogOutputSchemas = {
 	verify_slides: success(record({
 		slides: array(verifiedSlide),
 		total_slides: integer,
-		from_slide: integer,
-		to_slide: integer
+		from_slide: number,
+		to_slide: number
 	}, { dimensions_assumed_warning: string })),
 	read_slide_text: success(string),
 	edit_slide_text: record({ success: trueValue }, writeback),
@@ -720,6 +719,8 @@ var inject = [
 	"skills",
 	"attachments"
 ];
+var READBACK_BUDGET_MS = 750;
+var READBACK_MARGIN_MS = 50;
 /** Register tools and the embedded provider; serialize operations across agents sharing the deck. */
 function apply(ctx, config) {
 	let tail = Promise.resolve();
@@ -761,12 +762,15 @@ function apply(ctx, config) {
 				schema,
 				render
 			},
-			execute: (args, exec) => serial(() => {
-				exec.signal?.throwIfAborted();
-				const slide = args.slide;
-				if (slide !== void 0 && (!Number.isSafeInteger(slide) || slide < 1)) throw new Error("slide must be a positive integer");
-				return execute(args, exec);
-			})
+			execute: (args, exec) => {
+				const deadline = performance.now() + config.timeoutMs;
+				return serial(() => {
+					exec.signal?.throwIfAborted();
+					const slide = args.slide;
+					if (slide !== void 0 && (!Number.isSafeInteger(slide) || slide < 1)) throw new Error("slide must be a positive integer");
+					return execute(args, exec, deadline);
+				});
+			}
 		};
 	};
 	const register = (...args) => {
@@ -814,13 +818,20 @@ function apply(ctx, config) {
 	startCatalog(ctx, "PowerPoint", config, (signal) => helperRequest(config, "/catalog", void 0, signal), (tools) => catalogDefinitions(tools.filter((tool) => tool.clientName !== "execute_office_js")).map((tool) => {
 		if (staticNames.has(tool.clientName)) throw new Error("PowerPoint catalog conflicts with a DSH-owned tool: " + tool.clientName);
 		const outputSchema = Object.hasOwn(catalogOutputSchemas, tool.clientName) ? catalogOutputSchemas[tool.clientName] : jsonSchema;
-		return makeTool("powerpoint_" + tool.clientName, tool.description, tool.inputSchema, outputSchema, async (args, exec) => {
+		return makeTool("powerpoint_" + tool.clientName, tool.description, tool.inputSchema, outputSchema, async (args, exec, deadline) => {
 			const call = clientCallExpression(tool.clientName, args);
 			if (tool.clientName !== "duplicate_slide") return evaluateNow(call, exec);
-			const readIds = () => evaluateNow(slideIdsExpression(), exec);
-			const before = new Set(await readIds());
+			const readIds = (execution) => evaluateNow(slideIdsExpression(), execution);
+			const before = new Set(await readIds(exec));
 			const result = await evaluateNow(call, exec);
-			const added = (await readIds().catch(() => void 0))?.filter((id) => !before.has(id));
+			const budget = Math.min(READBACK_BUDGET_MS, Math.floor(deadline - performance.now() - READBACK_MARGIN_MS));
+			if (budget < 1) return result;
+			const timeout = AbortSignal.timeout(budget);
+			const signal = exec.signal ? AbortSignal.any([exec.signal, timeout]) : timeout;
+			const added = (await readIds({
+				...exec,
+				signal
+			}).catch(() => void 0))?.filter((id) => !before.has(id));
 			return added?.length === 1 ? {
 				...result,
 				new_slide_id: added[0]

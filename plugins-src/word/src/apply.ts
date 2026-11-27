@@ -114,7 +114,7 @@ export function apply(ctx: Context, config: Config) {
   register('word_execute_office_js', officeTool.description, officeTool.parameters, jsonSchema,
     async (args, exec) => {
       const response = await evaluateNow(clientCallExpression('execute_office_js',
-        args.files === undefined ? args : { code: await officeCode(args, exec.signal) }), exec) as { result?: unknown };
+        { code: await officeCode(args, exec.signal) }), exec) as { result?: unknown };
       return response.result ?? null;
     });
   const staticNames = new Set([

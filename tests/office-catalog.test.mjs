@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import * as PowerPoint from '../plugins/powerpoint.mjs';
 import * as Word from '../plugins/word.mjs';
 import { catalog, settled } from './office-catalog-fixtures.mjs';
@@ -30,6 +33,18 @@ for (const [host, plugin, outputs, generic] of [
 ]) {
   const prefix=host.toLowerCase()+'_';
   const config=()=>plugin.Config['~standard'].validate({autoHide:false,catalogRefreshMs:100,catalogRetryInitialMs:5,catalogRetryMaxMs:20,helperToken:'synthetic'}).value;
+  test(host+': the registered Office.js arguments render code and files in the real PTC SDK', {skip:!process.env.DSH_CLI_PACKAGE}, async t=>{
+    const runtime=createRequire(realpathSync(process.env.DSH_CLI_PACKAGE));
+    const renderer=runtime.resolve('@deepseek-ai/dsh-tool-executor-ptc/src/ts-types.ts');
+    const {jsonSchemaToTs}=await import(pathToFileURL(renderer).href);
+    t.mock.method(globalThis,'fetch',async()=>Response.json(catalog(host,[])));
+    const {tools}=registry(t,plugin,config());
+    await settled();
+    const ts=jsonSchemaToTs(tools.get(prefix+'execute_office_js').parameters,1);
+    assert.match(ts,/\bcode: string;/);
+    assert.match(ts,/\bfiles\?: (?:Record<string, JsonValue>|\{)/);
+    assert.doesNotMatch(ts,/\bfiles\?: unknown\b/);
+  });
   test(host+': non-2xx helper replies surface proxy text or structured errors without replay',async t=>{
     const proxyText='<html>Bad gateway from proxy</html>';
     const structured={error:{code:'helper-not-ready'}};

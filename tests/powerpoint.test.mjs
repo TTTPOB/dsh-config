@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -153,6 +156,45 @@ test('duplicate_slide does not turn a successful copy into an error if readback 
   assert.deepEqual(deck.events,['read IDs','duplicate','read IDs']);
 });
 
+test('duplicate_slide aborts a stalled readback before the real Harness deadline, including queue wait', {skip:!process.env.DSH_CLI_PACKAGE}, async t=>{
+  const cli=createRequire(realpathSync(process.env.DSH_CLI_PACKAGE));
+  const base=createRequire(cli.resolve('@deepseek-ai/dsh-base'));
+  const policy=await import(pathToFileURL(base.resolve('@deepseek-ai/dsh-tool-call-timeout-policy')).href);
+  const timeoutMs=360;
+  let enterQueue, releaseQueue;
+  const queueEntered=new Promise(resolve=>{enterQueue=resolve;});
+  const queued=new Promise(resolve=>{releaseQueue=resolve;});
+  let reads=0, writes=0, readbackSignal;
+  t.mock.method(globalThis,'fetch',async(url,{body,signal}={})=>{
+    if(new URL(url).pathname==='/catalog') return Response.json(catalog('PowerPoint',['duplicate_slide']));
+    const {code}=JSON.parse(body);
+    if(code.includes('execute_office_js')) {enterQueue();await queued;return Response.json({value:null});}
+    if(code.includes('duplicate_slide')) {writes++;return Response.json({value:{success:true}});}
+    if(++reads===1) return Response.json({value:['255']});
+    readbackSignal=signal;
+    return new Promise((_resolve,reject)=>{
+      const watchdog=setTimeout(()=>reject(new Error('read did not abort')),2*timeoutMs);
+      signal.addEventListener('abort',()=>{clearTimeout(watchdog);reject(signal.reason);},{once:true});
+    });
+  });
+  const f=register(t,config({autoHide:false,timeoutMs}));
+  const blocking=f.call('powerpoint_execute_office_js',{code:'return null;'});
+  await queueEntered;
+  const definition=f.tools.get('powerpoint_duplicate_slide');
+  let guard;
+  policy.apply({on(event,listener){assert.equal(event,'tools/execute');guard=listener;},tools:{get:()=>definition}});
+  const exec={name:definition.name,signal:new AbortController().signal};
+  const pending=guard(exec,async()=>({isError:false,value:await definition.execute({slide_id:'255'},exec)}));
+  const release=setTimeout(releaseQueue,120);
+  t.after(()=>clearTimeout(release));
+  assert.deepEqual(await pending,{isError:false,value:{success:true}});
+  await blocking;
+  assert.equal(readbackSignal?.aborted,true);
+  assert.equal(exec.signal.aborted,false);
+  assert.equal(reads,2);
+  assert.equal(writes,1);
+});
+
 test('Office.js rendering reads the bound slide and preserves returned image bytes',async t=>{
   const png=Buffer.from([137,80,78,71,13,10,26,10,4,3,2,1]);const requests=[];
   const shapes=[{id:'first'},{id:'second',getImageAsBase64(options){requests.push(options);return {value:png.toString('base64')};}}];
@@ -293,7 +335,7 @@ test('Office.js file inputs arrive as raw base64 without changing the caller arg
     image:imageBytes.toString('base64'),deck:deckBytes.toString('base64'),
   });
   assert.deepEqual(args,before);
-  await assert.rejects(f.call('powerpoint_execute_office_js',{code:'return files;'}),/files is not defined/);
+  assert.equal(await f.call('powerpoint_execute_office_js',{code:'return Object.keys(files).length;'}),0);
   assert.deepEqual(await f.call('powerpoint_execute_office_js',{code:'return files;',files:{}}),{});
 });
 

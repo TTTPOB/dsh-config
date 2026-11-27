@@ -69,7 +69,7 @@ export const catalogOutputSchemas: Readonly<Partial<Record<string, Schema>>> = {
     new_slide_id: { type: 'string', description: 'ID of the new copy; absent when it could not be determined, in which case read powerpoint_deck_info.' },
   }),
   verify_slides: success(record({
-    slides: array(verifiedSlide), total_slides: integer, from_slide: integer, to_slide: integer,
+    slides: array(verifiedSlide), total_slides: integer, from_slide: number, to_slide: number,
   }, { dimensions_assumed_warning: string })),
   read_slide_text: success(string),
   edit_slide_text: record({ success: trueValue }, writeback),

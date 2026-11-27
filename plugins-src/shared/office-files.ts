@@ -4,11 +4,10 @@ export interface OfficeArgs { code: string; files?: unknown }
 
 /** Load binary inputs privately; caller arguments retain only DSH file paths. */
 export async function officeCode(args: OfficeArgs, signal?: AbortSignal) {
-  if (args.files === undefined) return args.code;
-  if (args.files === null || typeof args.files !== 'object' || Array.isArray(args.files))
+  if (args.files !== undefined && (args.files === null || typeof args.files !== 'object' || Array.isArray(args.files)))
     throw new Error('files must map JavaScript identifiers to absolute file paths on the DSH machine');
   const entries = [];
-  for (const [identifier, filePath] of Object.entries(args.files)) {
+  for (const [identifier, filePath] of Object.entries(args.files ?? {})) {
     if (!/^[\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*$/u.test(identifier))
       throw new Error('Invalid files identifier: ' + identifier + '; expected JavaScript identifier syntax');
     if (typeof filePath !== 'string' || !isAbsolute(filePath))
