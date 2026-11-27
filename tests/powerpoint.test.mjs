@@ -17,10 +17,10 @@ function register(t, settings, attachments = {}) {
   const dispose=()=>effects.splice(0).reverse().forEach(fn=>fn()); t.after(dispose);
   return {tools,providers,dispose,call:(name,args={},signal=new AbortController().signal,sessionId)=>ready.then(()=>tools.get(name).execute(args,{signal,...(sessionId === undefined ? {} : {agent:{session:{id:sessionId}}})}))};
 }
-function transport(t, respond) {
+function transport(t, respond, names) {
   const sent=[];
   t.mock.method(globalThis,'fetch',async(url, options)=>{
-    if (new URL(url).pathname === '/catalog') return new Response(JSON.stringify(catalog('PowerPoint')));
+    if (new URL(url).pathname === '/catalog') return new Response(JSON.stringify(catalog('PowerPoint',names)));
     if (new URL(url).pathname === '/panes') return new Response(JSON.stringify({panes:[{sessionId:'test'}]}));
     const body=JSON.parse(options.body);
     sent.push({params:{expression:body.code}});
@@ -90,6 +90,67 @@ test('native client tools forward arguments untouched and preserve replacement I
     assert.equal(value.slide_id_update[args.slide_id],'257#replacement');
   }
   assert.equal(calls.length,passthrough.length);
+});
+
+function duplicateDeck(t, duplicate, {readbackError}={}) {
+  const events=[], ids=['255','256'];
+  const PowerPoint={run:fn=>fn({presentation:{slides:{
+    load(fields){
+      assert.equal(fields,'items/id');
+      events.push('read IDs');
+      if(readbackError && events.length>1) throw readbackError;
+    },
+    get items(){return ids.map(id=>({id}));},
+  }},sync:async()=>{}})};
+  const OfficeClientRuntime={execute(name,args){
+    assert.equal(name,'duplicate_slide');
+    assert.equal(args.slide_id,'255');
+    events.push('duplicate');
+    return duplicate(ids);
+  }};
+  transport(t,code=>Function('PowerPoint','globalThis','return '+code)(PowerPoint,{OfficeClientRuntime}),['duplicate_slide']);
+  const f=register(t,config({autoHide:false}));
+  return {events,call:()=>f.call('powerpoint_duplicate_slide',{slide_id:'255'})};
+}
+
+test('duplicate_slide returns the single new ID and serializes concurrent copies',async t=>{
+  const copyIds=['270','271'];
+  let done=0;
+  const deck=duplicateDeck(t,async ids=>{
+    await settled();
+    ids.splice(1,0,copyIds[done++]);
+    return {success:true};
+  });
+  const outputs=await Promise.all([deck.call(),deck.call()]);
+  assert.deepEqual(outputs,copyIds.map(new_slide_id=>({success:true,new_slide_id})));
+  assert.deepEqual(deck.events,['read IDs','duplicate','read IDs','read IDs','duplicate','read IDs']);
+});
+
+test('duplicate_slide preserves success without an ID when the readback is ambiguous',async t=>{
+  const value={success:true};
+  const deck=duplicateDeck(t,ids=>{ids.splice(1,0,'270','271');return value;});
+  assert.deepEqual(await deck.call(),value);
+  assert.deepEqual(deck.events,['read IDs','duplicate','read IDs']);
+});
+
+test('duplicate_slide preserves success without an ID when the copy disappears before readback',async t=>{
+  const value={success:true};
+  const deck=duplicateDeck(t,()=>value);
+  assert.deepEqual(await deck.call(),value);
+  assert.deepEqual(deck.events,['read IDs','duplicate','read IDs']);
+});
+
+test('duplicate_slide propagates the duplicate error and does not read again',async t=>{
+  const deck=duplicateDeck(t,()=>{throw new Error('duplicate denied');},{readbackError:new Error('cannot read IDs again')});
+  await assert.rejects(deck.call(),/duplicate denied/);
+  assert.deepEqual(deck.events,['read IDs','duplicate']);
+});
+
+test('duplicate_slide does not turn a successful copy into an error if readback fails',async t=>{
+  const value={success:true};
+  const deck=duplicateDeck(t,ids=>{ids.splice(1,0,'270');return value;},{readbackError:new Error('cannot read IDs again')});
+  assert.deepEqual(await deck.call(),value);
+  assert.deepEqual(deck.events,['read IDs','duplicate','read IDs']);
 });
 
 test('Office.js rendering reads the bound slide and preserves returned image bytes',async t=>{

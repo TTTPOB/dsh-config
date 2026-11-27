@@ -65,7 +65,9 @@ export const catalogOutputSchemas: Readonly<Partial<Record<string, Schema>>> = {
     slide_master_layouts: array(record({ id: string, name: string })),
   }),
   edit_slide_xml: record({ success: trueValue }, callbackOutput),
-  duplicate_slide: record({ success: trueValue }),
+  duplicate_slide: record({ success: trueValue }, {
+    new_slide_id: { type: 'string', description: 'ID of the new copy; absent when it could not be determined, in which case read powerpoint_deck_info.' },
+  }),
   verify_slides: success(record({
     slides: array(verifiedSlide), total_slides: integer, from_slide: integer, to_slide: integer,
   }, { dimensions_assumed_warning: string })),

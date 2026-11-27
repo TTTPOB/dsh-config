@@ -192,6 +192,10 @@ async function rows(ctx, slide) {
 }
 `;
 var office = (body) => "(async () => {" + helpers + "; return await PowerPoint.run(async ctx => {" + body + "});})()";
+/** Read only the current slide IDs, in presentation order. */
+function slideIdsExpression() {
+	return "PowerPoint.run(async ctx=>{const slides=ctx.presentation.slides;slides.load(\"items/id\");await ctx.sync();return slides.items.map(slide=>slide.id);})";
+}
 /** Read deck metadata without COM or local file paths. */
 function infoExpression() {
 	return office(`const items = await slides(ctx);
@@ -602,7 +606,10 @@ var catalogOutputSchemas = {
 		}))
 	}),
 	edit_slide_xml: record({ success: trueValue }, callbackOutput),
-	duplicate_slide: record({ success: trueValue }),
+	duplicate_slide: record({ success: trueValue }, { new_slide_id: {
+		type: "string",
+		description: "ID of the new copy; absent when it could not be determined, in which case read powerpoint_deck_info."
+	} }),
 	verify_slides: success(record({
 		slides: array(verifiedSlide),
 		total_slides: integer,
@@ -807,7 +814,18 @@ function apply(ctx, config) {
 	startCatalog(ctx, "PowerPoint", config, (signal) => helperRequest(config, "/catalog", void 0, signal), (tools) => catalogDefinitions(tools.filter((tool) => tool.clientName !== "execute_office_js")).map((tool) => {
 		if (staticNames.has(tool.clientName)) throw new Error("PowerPoint catalog conflicts with a DSH-owned tool: " + tool.clientName);
 		const outputSchema = Object.hasOwn(catalogOutputSchemas, tool.clientName) ? catalogOutputSchemas[tool.clientName] : jsonSchema;
-		return makeTool("powerpoint_" + tool.clientName, tool.description, tool.inputSchema, outputSchema, (args, exec) => evaluateNow(clientCallExpression(tool.clientName, args), exec));
+		return makeTool("powerpoint_" + tool.clientName, tool.description, tool.inputSchema, outputSchema, async (args, exec) => {
+			const call = clientCallExpression(tool.clientName, args);
+			if (tool.clientName !== "duplicate_slide") return evaluateNow(call, exec);
+			const readIds = () => evaluateNow(slideIdsExpression(), exec);
+			const before = new Set(await readIds());
+			const result = await evaluateNow(call, exec);
+			const added = (await readIds().catch(() => void 0))?.filter((id) => !before.has(id));
+			return added?.length === 1 ? {
+				...result,
+				new_slide_id: added[0]
+			} : result;
+		});
 	}));
 	add("powerpoint_pane_visibility", "Hide or show the Office taskpane. Hiding keeps the document runtime available.", { visible: { type: "boolean" } }, ["visible"], objectSchema, async (a, e) => {
 		const key = await paneKey(e);

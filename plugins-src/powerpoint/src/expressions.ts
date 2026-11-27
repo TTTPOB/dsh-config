@@ -22,6 +22,11 @@ async function rows(ctx, slide) {
 
 export const office = (body: string) => '(async () => {' + helpers + '; return await PowerPoint.run(async ctx => {' + body + '});})()';
 
+/** Read only the current slide IDs, in presentation order. */
+export function slideIdsExpression() {
+  return 'PowerPoint.run(async ctx=>{const slides=ctx.presentation.slides;slides.load("items/id");await ctx.sync();return slides.items.map(slide=>slide.id);})';
+}
+
 /** Read deck metadata without COM or local file paths. */
 export function infoExpression() {
   return office(`const items = await slides(ctx);

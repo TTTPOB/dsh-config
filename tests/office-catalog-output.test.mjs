@@ -26,7 +26,7 @@ const pptExamples = {
   {success:true,no_changes_warning:'markDirty() was not called'}],
   edit_slide_xml:[ok(['ppt/slides/slide1.xml']),ok(null),{success:true,no_changes_warning:'markDirty() was not called'},
     {success:true,...renamed},ok({count:4},renamed)],
-  duplicate_slide:[{success:true}],
+  duplicate_slide:[{success:true},{success:true,new_slide_id:'270'}],
   verify_slides:[ok({total_slides:0,from_slide:0,to_slide:-1,slides:[],dimensions_assumed_warning:warning}),ok({
     total_slides:2,from_slide:0,to_slide:1,slides:[
       {slideId:'255',shapes:[box,overlappingBox],overflows:[{shape:overlappingBox,bottom:545,slideH:540,overflowBy:5}],

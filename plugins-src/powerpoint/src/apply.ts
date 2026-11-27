@@ -2,7 +2,7 @@ import { officeCode } from '../../shared/office-files.ts';
 import { readImageBase64 } from '../../shared/office-images.ts';
 import { name, type Config } from './config.ts';
 import { evaluate, helperRequest, paneError } from './transport.ts';
-import { infoExpression, outlineExpression, deckSizeExpression, imageExpression, clientCallExpression } from './expressions.ts';
+import { infoExpression, slideIdsExpression, outlineExpression, deckSizeExpression, imageExpression, clientCallExpression } from './expressions.ts';
 import { renderSlide } from './render.ts';
 import { startCatalog } from '../../shared/catalog.ts';
 import { catalogDefinitions } from './catalog-overrides.ts';
@@ -97,7 +97,17 @@ export function apply(ctx: Context, config: Config) {
       if (staticNames.has(tool.clientName)) throw new Error('PowerPoint catalog conflicts with a DSH-owned tool: ' + tool.clientName);
       const outputSchema = Object.hasOwn(catalogOutputSchemas, tool.clientName) ? catalogOutputSchemas[tool.clientName]! : jsonSchema;
       return makeTool<Schema, unknown>('powerpoint_' + tool.clientName, tool.description, tool.inputSchema, outputSchema,
-        (args, exec) => evaluateNow(clientCallExpression(tool.clientName, args), exec));
+        async (args, exec) => {
+          const call = clientCallExpression(tool.clientName, args);
+          if (tool.clientName !== 'duplicate_slide') return evaluateNow(call, exec);
+          const readIds = () => evaluateNow(slideIdsExpression(), exec) as Promise<string[]>;
+          const before = new Set(await readIds());
+          const result = await evaluateNow(call, exec) as { success: true };
+          // A failed readback does not undo the duplicate; keep the successful result.
+          const after = await readIds().catch(() => undefined);
+          const added = after?.filter(id => !before.has(id));
+          return added?.length === 1 ? { ...result, new_slide_id: added[0] } : result;
+        });
     }));
   add('powerpoint_pane_visibility', 'Hide or show the Office taskpane. Hiding keeps the document runtime available.', { visible: { type: 'boolean' } }, ['visible'], objectSchema, async (a, e) => {
     const key = await paneKey(e);
