@@ -213,18 +213,22 @@ function catalogDefinitions(tools) {
 //#region plugins-src/word/src/office-tool.ts
 /** DSH-owned execution tool, including local binary file inputs. */
 var officeTool = {
-	description: "Run a trusted asynchronous function against the chosen Word document. Its body executes within Word.run and receives context; call context.sync() to flush edits. Available globals: Word, Office, JSZip, console, DOMParser, XMLSerializer. The result envelope is {success:true,result}. For binary inputs, set files to a map of JavaScript identifiers and absolute DSH-side filenames; files.<identifier> then contains base64 bytes, not a data URL. Never paste encoded binary content into code. This execution environment has no Claude application services, uploaded-file storage, model orchestration, attachImage, Conductor, or SES isolation.",
+	description: "Run a trusted asynchronous function against the chosen Word document. Its body executes within Word.run and receives context; call context.sync() to flush edits. Available globals: Word, Office, JSZip, console, DOMParser, XMLSerializer. The tool returns your code's return value directly. For binary inputs, set files to a map of JavaScript identifiers and absolute DSH-side filenames; files.<identifier> then contains base64 bytes, not a data URL. Never paste encoded binary content into code. This execution environment has no Claude application services, uploaded-file storage, model orchestration, attachImage, Conductor, or SES isolation.",
 	parameters: {
 		type: "object",
 		properties: {
-			code: { type: "string" },
+			code: {
+				type: "string",
+				description: "Body of an async JavaScript function that runs inside Word.run with `context` in scope. Call await context.sync() after edits and return a JSON-compatible value."
+			},
 			files: {
 				type: "object",
-				description: "Local binary inputs keyed by JavaScript identifier. Give an absolute DSH-side filename for each entry; your code reads its encoded contents as files.<identifier>.",
-				additionalProperties: { type: "string" }
+				additionalProperties: true,
+				description: "Optional. Keys are JavaScript identifiers; each value is an absolute file path on the DSH machine. Your code reads that file's raw base64 bytes as files.<identifier>."
 			}
 		},
-		required: ["code"]
+		required: ["code"],
+		additionalProperties: false
 	}
 };
 //#endregion
@@ -773,7 +777,9 @@ function apply(ctx, config) {
 			selectedTarget: args.target
 		};
 	});
-	register("word_execute_office_js", officeTool.description, officeTool.parameters, jsonSchema, async (args, exec) => evaluateNow(clientCallExpression("execute_office_js", args.files === void 0 ? args : { code: await officeCode(args, exec.signal) }), exec));
+	register("word_execute_office_js", officeTool.description, officeTool.parameters, jsonSchema, async (args, exec) => {
+		return (await evaluateNow(clientCallExpression("execute_office_js", args.files === void 0 ? args : { code: await officeCode(args, exec.signal) }), exec)).result ?? null;
+	});
 	const staticNames = new Set([
 		"execute_office_js",
 		"list_documents",

@@ -10,7 +10,6 @@ import { registerFigureTools } from './figures.ts';
 import { name, type Config } from './config.ts';
 import type { Tool, AddTool, Args, Context, Execution, ObjectSchema, Render, Schema } from '../../shared/types.ts';
 import type { PaneList } from './transport.ts';
-import type { OfficeArgs } from './files.ts';
 
 export const inject = ['tools', 'skills', 'attachments'];
 
@@ -112,8 +111,11 @@ export function apply(ctx: Context, config: Config) {
     },
   );
   register('word_execute_office_js', officeTool.description, officeTool.parameters, jsonSchema,
-    async (args, exec) => evaluateNow(clientCallExpression('execute_office_js',
-      args.files === undefined ? args : { code: await officeCode(args as OfficeArgs, exec.signal) }), exec));
+    async (args, exec) => {
+      const response = await evaluateNow(clientCallExpression('execute_office_js',
+        args.files === undefined ? args : { code: await officeCode(args, exec.signal) }), exec) as { result?: unknown };
+      return response.result ?? null;
+    });
   const staticNames = new Set([
     'execute_office_js', 'list_documents', 'select_document', 'pane_visibility', 'insert_image', 'render_page', 'insert_figure', 'insert_cross_reference', 'list_figures',
     'zotero_insert_citation', 'zotero_insert_bibliography', 'zotero_refresh', 'zotero_inspect', 'zotero_set_style',

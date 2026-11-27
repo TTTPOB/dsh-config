@@ -85,7 +85,7 @@ test('list creation discovers current host style names before dispatch, without 
 
 test('one queue serializes operations and recovers after a rejected write',async t=>{
   let entered;const ready=new Promise(resolve=>{entered=resolve;});let release;const wait=new Promise(resolve=>{release=resolve;});
-  const requests=transport(t,async request=>{if(request.body.code.includes('first')){entered();await wait;return {error:{code:'write-failed',message:'partial write'}};}return 'second';});
+  const requests=transport(t,async request=>{if(request.body.code.includes('first')){entered();await wait;return {error:{code:'write-failed',message:'partial write'}};}return {success:true,result:'second'};});
   const f=register(t,config({autoHide:false}));
   const first=f.call('word_execute_office_js',{code:'return "first";'});const rejected=assert.rejects(first,/write-failed.*partial write/);await ready;
   const second=f.call('word_execute_office_js',{code:'return "second";'});assert.equal(requests.length,1);
@@ -109,7 +109,7 @@ test('Office code receives binary files without changing logged path-only argume
   const before=JSON.stringify(args),captured=[];
   transport(t,request=>Function('globalThis','return '+request.body.code)({WordClientRuntime:{call:async(name,input)=>{
     captured.push({name,input});
-    return new (Object.getPrototypeOf(async function(){}).constructor)(input.code)();
+    return {success:true,result:await new (Object.getPrototypeOf(async function(){}).constructor)(input.code)()};
   }}}));
   const f=register(t,config({autoHide:false}));
   const result=await f.call('word_execute_office_js',args);
@@ -119,6 +119,7 @@ test('Office code receives binary files without changing logged path-only argume
   assert.equal(captured[0].name,'execute_office_js');
   assert.ok(!JSON.stringify(args).includes(fixture.bytes.toString('base64')));
   assert.deepEqual(await f.call('word_execute_office_js',{code:'return files;',files:{}}),{});
+  assert.equal(await f.call('word_execute_office_js',{code:'return;'}),null);
 });
 
 test('Office binary inputs reject invalid identifiers, relative paths and missing files before transport',async t=>{

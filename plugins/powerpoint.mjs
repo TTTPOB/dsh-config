@@ -391,15 +391,18 @@ var officeTool = {
 	parameters: {
 		type: "object",
 		properties: {
-			code: { type: "string" },
+			code: {
+				type: "string",
+				description: "Body of an async JavaScript function. Open document work with PowerPoint.run and return a JSON-compatible value."
+			},
 			files: {
 				type: "object",
-				description: "Local binary inputs keyed by a JavaScript identifier. Each value is an absolute DSH-side filename; files.<identifier> exposes its encoded bytes to your code.",
-				propertyNames: { pattern: "^[A-Za-z_$][A-Za-z0-9_$]*$" },
-				additionalProperties: { type: "string" }
+				additionalProperties: true,
+				description: "Optional. Keys are JavaScript identifiers; each value is an absolute file path on the DSH machine. Your code reads that file's raw base64 bytes as files.<identifier>."
 			}
 		},
-		required: ["code"]
+		required: ["code"],
+		additionalProperties: false
 	}
 };
 //#endregion
