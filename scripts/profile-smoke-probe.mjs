@@ -133,6 +133,7 @@ async function inspect(ctx, config) {
     assert.equal(selected?.version, expected.version, `${expected.name}: resolver selected an unexpected package version`);
     return { name: expected.name, scope: expected.scope, version: selected.version };
   });
+  if (!(await ctx.skills.list()).some(skill => skill.name === 'session-stream')) throw new Error('Missing profile plugin skill session-stream');
   const roster = await ctx.agentPresets.list();
   const results = [];
   const handles = [];
@@ -158,7 +159,7 @@ async function inspect(ctx, config) {
           const context = { ...assembleContextFor(agent, signal), modelSelection, toolSet };
           const assembly = await ctx.systemPrompt.assemble(context);
           const schemas = ctx.tools.schemas(context.scope, toolSet);
-          for (const name of ['session_list', 'session_event_list', 'session_event_read', 'search_tools', 'describe_tools']) {
+          for (const name of ['search_tools', 'describe_tools']) {
             if (!schemas.some(tool => tool.name === name)) throw new Error(`${id}: missing profile plugin tool ${name}`);
           }
           const note = assembly.sections.some(section => section.name === 'team:collaboration-notes' && section.text.trim());
